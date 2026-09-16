@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import crypto from "node:crypto";
 import {
+    ACCESS_TOKEN_TTL_SECONDS,
     storeToken,
     storeAuthCode,
     consumeAuthCode,
@@ -528,7 +529,7 @@ export function createOAuthRouter() {
             return c.json({
                 access_token: newAccessToken,
                 token_type: "Bearer",
-                expires_in: 365 * 24 * 60 * 60,
+                expires_in: ACCESS_TOKEN_TTL_SECONDS,
                 refresh_token: newRefreshToken,
             });
         }
@@ -590,7 +591,7 @@ export function createOAuthRouter() {
         return c.json({
             access_token: accessToken,
             token_type: "Bearer",
-            expires_in: 365 * 24 * 60 * 60,
+            expires_in: ACCESS_TOKEN_TTL_SECONDS,
             refresh_token: refreshToken,
         });
     });

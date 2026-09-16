@@ -1429,13 +1429,20 @@ function hashToken(token: string): string {
     return new Bun.CryptoHasher("sha256").update(token).digest("hex");
 }
 
+// 30 days, not the year this used to carry. A leaked access token is a bearer
+// credential with no revocation path, so its lifetime is the whole blast
+// radius. Clients renew silently through the rotating refresh token below, so
+// shortening this is invisible in normal use.
+//
+// Exported because /token reports it to the client as `expires_in`. The two
+// MUST agree: advertise longer than the row actually lives and the client
+// trusts a token the database has already dropped, turning a silent refresh
+// into a surprise 401.
+export const ACCESS_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
+
 export async function storeToken(token: string, userId: string): Promise<void> {
-    // 30 days, not the year this used to carry. A leaked access token is a
-    // bearer credential with no revocation path, so its lifetime is the whole
-    // blast radius. Clients renew silently through the rotating refresh token
-    // below, so shortening this is invisible in normal use.
     const expiresAt = new Date(
-        Date.now() + 30 * 24 * 60 * 60 * 1000,
+        Date.now() + ACCESS_TOKEN_TTL_SECONDS * 1000,
     ).toISOString();
 
     const { error } = await getSupabase()
