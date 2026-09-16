@@ -50,7 +50,14 @@ type Rule = {
 const ANALYTICS_RULES: Rule[] = [
     {
         name: "GA loader <script>",
-        find: /[ \t]*<script\b[\s\S]*?googletagmanager[\s\S]*?<\/script>\n/,
+        // The inner segments must not cross a </script>, or the match starts at
+        // an EARLIER <script> on the page and swallows everything up to the GA
+        // tag with it. On the landing page that meant deleting the three
+        // stylesheet <link>s that sit in between -- Google Fonts, FontAwesome
+        // and /styles.css -- leaving a completely unstyled site that still
+        // served a valid 200 for every asset, so nothing looked wrong until you
+        // opened it in a browser.
+        find: /[ \t]*<script\b(?:(?!<\/script>)[\s\S])*?googletagmanager(?:(?!<\/script>)[\s\S])*?<\/script>\n/,
     },
     {
         name: "GA inline config <script>",
