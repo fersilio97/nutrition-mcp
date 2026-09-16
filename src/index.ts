@@ -64,7 +64,7 @@ app.use("*", async (c, next) => {
     if (!c.res.headers.get("Content-Security-Policy")) {
         c.header(
             "Content-Security-Policy",
-            "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com; connect-src 'self' https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://analytics.google.com https://www.google.com https://*.googletagmanager.com https://api.github.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' https://www.googletagmanager.com; frame-ancestors 'none'",
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self'; frame-ancestors 'none'",
         );
     }
     c.header("Referrer-Policy", "no-referrer");
@@ -177,15 +177,6 @@ app.use("*", async (c, next) => {
 // authorization-server documents, served at the root and at the path-folded
 // variants clients derive from the /mcp endpoint. See src/discovery.ts.
 registerDiscoveryRoutes(app);
-
-// Glama connector ownership verification. Glama polls this file and matches the
-// maintainer email against the Glama account email to claim the listing.
-app.get("/.well-known/glama.json", (c) => {
-    return c.json({
-        $schema: "https://glama.ai/mcp/schemas/connector.json",
-        maintainers: [{ email: "akutishevsky@gmail.com" }],
-    });
-});
 
 // OAuth routes
 app.route("/", createOAuthRouter());

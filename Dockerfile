@@ -3,7 +3,12 @@ WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY . .
-RUN bun run gen:all
+# gen:all regenerates public/ from the generators in scripts/ and src/copy/,
+# which still carry upstream's Google Analytics tag and nutrition-mcp.com
+# domain -- depersonalize only rewrites the OUTPUT. Running it locally is
+# therefore not enough: this build step would put the tracking straight back.
+# Chained here so the image can never serve upstream's analytics.
+RUN bun run gen:all && bun run depersonalize
 USER bun
 EXPOSE 8080
 # --smol runs Bun's GC more aggressively and grows the heap more slowly,

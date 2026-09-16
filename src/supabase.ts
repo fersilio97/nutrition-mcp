@@ -1412,19 +1412,42 @@ export async function deleteAllUserData(userId: string): Promise<void> {
 
 // ---------- OAuth tokens ----------
 
+// Bearer credentials are stored as a SHA-256 digest, never in the clear. The
+// column then holds something useless on its own: an attacker who walks off
+// with a database dump cannot replay what they find, they would have to invert
+// the digest first.
+//
+// These are v4 UUIDs (crypto.randomUUID in src/oauth.ts) carrying 122 bits of
+// entropy, not passwords, so a plain digest is the right primitive — there is no
+// guessable keyspace for a salt or a KDF to defend, and lookup has to stay a
+// single indexed equality match on the hot auth path.
+//
+// Tokens are opaque to the client either way: the raw value goes to the client
+// exactly once at mint time and is never read back out of the database, so
+// hashing costs nothing at the API boundary.
+function hashToken(token: string): string {
+    return new Bun.CryptoHasher("sha256").update(token).digest("hex");
+}
+
 export async function storeToken(token: string, userId: string): Promise<void> {
+    // 30 days, not the year this used to carry. A leaked access token is a
+    // bearer credential with no revocation path, so its lifetime is the whole
+    // blast radius. Clients renew silently through the rotating refresh token
+    // below, so shortening this is invisible in normal use.
     const expiresAt = new Date(
-        Date.now() + 365 * 24 * 60 * 60 * 1000,
+        Date.now() + 30 * 24 * 60 * 60 * 1000,
     ).toISOString();
 
-    const { error } = await getSupabase().from("oauth_tokens").upsert(
-        {
-            token,
-            user_id: userId,
-            expires_at: expiresAt,
-        },
-        { onConflict: "token" },
-    );
+    const { error } = await getSupabase()
+        .from("oauth_tokens")
+        .upsert(
+            {
+                token: hashToken(token),
+                user_id: userId,
+                expires_at: expiresAt,
+            },
+            { onConflict: "token" },
+        );
 
     if (error) throw new Error(`Failed to store token: ${error.message}`);
 }
@@ -1448,7 +1471,7 @@ export async function getUserIdByToken(token: string): Promise<TokenLookup> {
         const { data, error } = await getSupabase()
             .from("oauth_tokens")
             .select("user_id")
-            .eq("token", token)
+            .eq("token", hashToken(token))
             .gt("expires_at", new Date().toISOString())
             .single();
 
@@ -1607,11 +1630,13 @@ export async function storeRefreshToken(
         Date.now() + 365 * 24 * 60 * 60 * 1000,
     ).toISOString();
 
-    const { error } = await getSupabase().from("refresh_tokens").insert({
-        token,
-        user_id: userId,
-        expires_at: expiresAt,
-    });
+    const { error } = await getSupabase()
+        .from("refresh_tokens")
+        .insert({
+            token: hashToken(token),
+            user_id: userId,
+            expires_at: expiresAt,
+        });
 
     if (error)
         throw new Error(`Failed to store refresh token: ${error.message}`);
@@ -1623,7 +1648,7 @@ export async function consumeRefreshToken(
     const { data, error } = await getSupabase()
         .from("refresh_tokens")
         .delete()
-        .eq("token", token)
+        .eq("token", hashToken(token))
         .gt("expires_at", new Date().toISOString())
         .select("user_id")
         .single();
