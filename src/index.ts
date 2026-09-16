@@ -405,6 +405,13 @@ app.onError((_err, c) => {
 
 const port = parseInt(process.env.PORT || "8080");
 
+// Bind address. Defaults to 0.0.0.0 because a container needs to accept
+// traffic from outside its own namespace. A local-only instance should set
+// HOST=127.0.0.1: on a laptop, 0.0.0.0 publishes the whole food and weight
+// log to every other device on the coffee-shop wifi, guarded by nothing but
+// an access token the client has yet to obtain.
+const hostname = process.env.HOST || "0.0.0.0";
+
 // Boot side effects run only when this file IS the entrypoint. src/index.test.ts
 // imports `app` to pin the shutdown gate's position in the middleware chain, and
 // an import must not start the export-sweep interval (which would hit Supabase
@@ -412,7 +419,7 @@ const port = parseInt(process.env.PORT || "8080");
 // `bun run src/index.ts` still takes this branch — verified: import.meta.main is
 // true for the entrypoint and false under `bun test`.
 if (import.meta.main) {
-    console.log(`Nutrition MCP server listening on 0.0.0.0:${port}`);
+    console.log(`Nutrition MCP server listening on ${hostname}:${port}`);
 
     // Assemble every MCP Apps widget from its source partials up front, so a
     // broken @include/partial fails fast at boot rather than on a client's
@@ -469,7 +476,7 @@ export { app };
 
 export default {
     port,
-    hostname: "0.0.0.0",
+    hostname,
     // Long-lived MCP streams (StreamableHTTP GET/SSE) can idle between events;
     // Bun's 10s default closes them and logs "request timed out after 10
     // seconds". Raise it so legitimate streaming connections aren't severed.

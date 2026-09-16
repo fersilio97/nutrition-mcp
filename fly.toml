@@ -1,0 +1,29 @@
+app = "nutrition-mcp-fersilio"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_start_machines = true
+  # Scale-to-zero is wrong for an MCP connector: a cold start lands on the
+  # protocol handshake, which times out rather than waiting. Keep one machine
+  # warm so the first tool call of the day behaves like every other one.
+  auto_stop_machines = false
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+[[vm]]
+  # The Dockerfile runs bun with --smol specifically to hold RSS under 512MB.
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
