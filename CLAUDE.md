@@ -153,6 +153,48 @@ Invariants worth keeping:
 
 ---
 
+## Personal dashboard (`/dashboard`)
+
+A browser view of the signed-in user's own logs — stat tiles, calories per day
+against the goal, stacked macros, a weight line, and the recent-meals table.
+It exists because the MCP Apps widgets only render in a host that implements
+MCP Apps UI: a terminal client gets text, so a **local-only instance otherwise
+has no visual view of its own data at all**.
+
+`src/dashboard.ts` holds the routes, `public/dashboard.html` the page (one
+self-contained file, inline CSS/JS, hand-built SVG, **zero network requests** —
+no Google Fonts, unlike the public site, so opening it reaches nothing).
+
+- **Off unless `DASHBOARD_ENABLED=true`**, and mounted conditionally in
+  `src/index.ts`, so the routes do not exist at all when off — nothing to probe.
+  The reason is `POST /api/dashboard/login`: it checks an email and password for
+  an anonymous caller, which **nothing else in this server does** (every other
+  authenticated path takes an OAuth bearer the client already holds). On
+  loopback that is fine; internet-reachable it is a brute-force target, so
+  enabling it has to be deliberate rather than inherited from a deploy. It is
+  `rateLimitAuth`-gated and deliberately does not sign anyone up — an account is
+  created through the OAuth flow, and a second, weaker door onto the same data
+  is not worth the convenience.
+- **`/api/dashboard/data` buckets through `buildDailyBuckets`** (`src/insights.ts`),
+  the same function the MCP trend tools use, so a figure on the page and a
+  figure the assistant quotes cannot disagree. `?days=` is clamped to 1–365.
+- **`mealTypes` is dropped from the JSON.** It is a `Set`, which
+  `JSON.stringify` renders as `{}` — shipping it would look like data.
+- **The page parses `YYYY-MM-DD` by hand** (`parseDay`) rather than
+  `new Date(iso)`, which parses as UTC and renders the previous day anywhere
+  west of Greenwich.
+- **Colours come from the validated categorical palette** (slots 1–3, stepped
+  per mode) and are referenced by CSS role, declared for light, for
+  `prefers-color-scheme: dark`, and again under `[data-theme="dark"]` so the
+  in-page toggle wins both ways. The aqua slot is under 3:1 on the light
+  surface, which is why fat is always legend-labelled and every plotted figure
+  also appears in the meals table.
+- **`depersonalize` leaves this file alone** (no analytics, no maintainer
+  links), and `gen:all` does not generate it — verified, since the Dockerfile
+  runs both. It is tracked in git, unlike the generated pages.
+
+---
+
 ## Public site (`public/*.html`)
 
 One design system, "Nutrition Facts": the FDA label's grammar — a heavy 3px `var(--rule)` above every section head, hairline rules between rows, bold label left / figure right, ruled 1px-gap grids instead of floating cards — is the structural motif on every page, and the stats section on the landing page is literally a Nutrition Facts panel (`.facts`). Type is Bricolage Grotesque (display, `.section-title` / `.display`), Instrument Sans (body) and Geist Mono (eyebrows, URLs, tool names), all from Google Fonts; the CSP already allows them. Light is paper white on green-black ink; dark is forest-tinted, not grey.

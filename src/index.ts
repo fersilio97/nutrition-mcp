@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
 import { createOAuthRouter } from "./oauth.js";
+import { createDashboardRouter, dashboardEnabled } from "./dashboard.js";
 import {
     authenticateBearer,
     rateLimit,
@@ -180,6 +181,18 @@ registerDiscoveryRoutes(app);
 
 // OAuth routes
 app.route("/", createOAuthRouter());
+
+// Personal dashboard, off unless DASHBOARD_ENABLED=true — see src/dashboard.ts
+// for why it is opt-in. Mounting it conditionally means the routes simply do
+// not exist when it is off, rather than existing and answering 403: nothing to
+// probe, and no password endpoint on an instance that never asked for one.
+if (dashboardEnabled()) {
+    app.route("/", createDashboardRouter());
+
+    app.get("/dashboard", async (c) => {
+        return c.html(await Bun.file("./public/dashboard.html").text());
+    });
+}
 
 // MCP endpoint (protected). banRepeatAuthFailures runs first so a client stuck
 // in a failed-auth retry loop is rejected before any token verification.

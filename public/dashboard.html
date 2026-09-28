@@ -1,0 +1,1423 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
+        <meta name="robots" content="noindex, nofollow" />
+        <title>Your nutrition dashboard</title>
+        <style>
+            /* Palette roles. Values come from the validated categorical set:
+               slots 1-3 (blue / orange / aqua), stepped per mode. Series are
+               referenced by role below so the two modes swap in one place.
+
+               Light mode note: the aqua slot sits at 2.74:1 on the light
+               surface, under the 3:1 bar. That obligates relief rather than
+               forbidding the colour, so fat is always direct-labelled in the
+               legend and every figure also exists in the meals table. */
+            :root {
+                color-scheme: light;
+                --surface-0: #f4f3f0;
+                --surface-1: #fcfcfb;
+                --text-primary: #0b0b0b;
+                --text-secondary: #52514e;
+                --text-muted: #77756f;
+                --border: #e2e0da;
+                --grid: #eceae4;
+                --series-1: #2a78d6;
+                --series-2: #eb6834;
+                --series-3: #1baf7a;
+                --accent: #2a78d6;
+                --over: #e34948;
+            }
+            @media (prefers-color-scheme: dark) {
+                :root:not([data-theme="light"]) {
+                    color-scheme: dark;
+                    --surface-0: #121211;
+                    --surface-1: #1a1a19;
+                    --text-primary: #ffffff;
+                    --text-secondary: #c3c2b7;
+                    --text-muted: #8f8e85;
+                    --border: #2e2e2b;
+                    --grid: #272724;
+                    --series-1: #3987e5;
+                    --series-2: #d95926;
+                    --series-3: #199e70;
+                    --accent: #3987e5;
+                    --over: #e66767;
+                }
+            }
+            :root[data-theme="dark"] {
+                color-scheme: dark;
+                --surface-0: #121211;
+                --surface-1: #1a1a19;
+                --text-primary: #ffffff;
+                --text-secondary: #c3c2b7;
+                --text-muted: #8f8e85;
+                --border: #2e2e2b;
+                --grid: #272724;
+                --series-1: #3987e5;
+                --series-2: #d95926;
+                --series-3: #199e70;
+                --accent: #3987e5;
+                --over: #e66767;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+            html,
+            body {
+                margin: 0;
+                padding: 0;
+            }
+            body {
+                background: var(--surface-0);
+                color: var(--text-primary);
+                font:
+                    15px/1.5 system-ui,
+                    -apple-system,
+                    "Segoe UI",
+                    Roboto,
+                    sans-serif;
+                padding: env(safe-area-inset-top, 0px) 0
+                    env(safe-area-inset-bottom, 0px);
+            }
+            [hidden] {
+                display: none !important;
+            }
+            .wrap {
+                max-width: 1080px;
+                margin: 0 auto;
+                padding-block: 28px 64px;
+                padding-inline: 16px;
+            }
+
+            /* ---------- header ---------- */
+            header.top {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: baseline;
+                gap: 12px;
+                margin-bottom: 4px;
+            }
+            h1 {
+                font-size: 22px;
+                font-weight: 650;
+                letter-spacing: -0.01em;
+                margin: 0;
+                flex: 1 1 auto;
+            }
+            .sub {
+                color: var(--text-secondary);
+                font-size: 13px;
+                margin: 0 0 22px;
+            }
+            .ghost {
+                background: none;
+                border: 1px solid var(--border);
+                color: var(--text-secondary);
+                border-radius: 8px;
+                padding: 5px 11px;
+                font: inherit;
+                font-size: 13px;
+                cursor: pointer;
+            }
+            .ghost:hover {
+                color: var(--text-primary);
+            }
+
+            /* ---------- filters: one row, above every chart ---------- */
+            .filters {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                align-items: center;
+                margin-bottom: 20px;
+            }
+            .seg {
+                display: inline-flex;
+                border: 1px solid var(--border);
+                border-radius: 9px;
+                overflow: hidden;
+            }
+            .seg button {
+                background: none;
+                border: 0;
+                color: var(--text-secondary);
+                padding: 6px 13px;
+                font: inherit;
+                font-size: 13px;
+                cursor: pointer;
+            }
+            .seg button + button {
+                border-left: 1px solid var(--border);
+            }
+            .seg button[aria-pressed="true"] {
+                background: var(--surface-1);
+                color: var(--text-primary);
+                font-weight: 600;
+            }
+
+            /* ---------- stat tiles ---------- */
+            .tiles {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+                gap: 12px;
+                margin-bottom: 26px;
+            }
+            .tile {
+                background: var(--surface-1);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 15px 16px 16px;
+            }
+            .tile .label {
+                font-size: 12px;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                margin-bottom: 7px;
+            }
+            /* No tabular-nums here: on a large figure equal-width digits make
+               the number read as a counter rather than a value. */
+            .tile .figure {
+                font-size: 30px;
+                font-weight: 640;
+                letter-spacing: -0.02em;
+                line-height: 1.05;
+            }
+            .tile .figure .unit {
+                font-size: 14px;
+                font-weight: 500;
+                color: var(--text-secondary);
+                margin-left: 3px;
+            }
+            .tile .foot {
+                font-size: 12.5px;
+                color: var(--text-secondary);
+                margin-top: 7px;
+            }
+            .tile .foot.over {
+                color: var(--over);
+                font-weight: 600;
+            }
+            .meter {
+                height: 6px;
+                border-radius: 3px;
+                background: var(--grid);
+                margin-top: 11px;
+                overflow: hidden;
+            }
+            .meter > i {
+                display: block;
+                height: 100%;
+                border-radius: 3px;
+                background: var(--accent);
+            }
+            .meter > i.over {
+                background: var(--over);
+            }
+
+            /* ---------- chart cards ---------- */
+            .card {
+                background: var(--surface-1);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 17px 18px 12px;
+                margin-bottom: 18px;
+            }
+            .card h2 {
+                font-size: 14.5px;
+                font-weight: 620;
+                margin: 0 0 2px;
+            }
+            .card .note {
+                font-size: 12.5px;
+                color: var(--text-secondary);
+                margin: 0 0 14px;
+            }
+            .card-head {
+                display: flex;
+                align-items: flex-start;
+                gap: 12px;
+                flex-wrap: wrap;
+            }
+            .card-head > div:first-child {
+                flex: 1 1 200px;
+            }
+            .legend {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 13px;
+                margin: 0 0 12px;
+                font-size: 12.5px;
+                color: var(--text-secondary);
+            }
+            .legend span {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .legend i {
+                width: 10px;
+                height: 10px;
+                border-radius: 3px;
+                display: inline-block;
+            }
+            .plot {
+                width: 100%;
+                overflow-x: auto;
+            }
+            svg {
+                display: block;
+                width: 100%;
+                height: auto;
+            }
+            .empty {
+                color: var(--text-muted);
+                font-size: 13px;
+                padding: 26px 0 30px;
+                text-align: center;
+            }
+
+            /* ---------- table ---------- */
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 13px;
+            }
+            .scroll-x {
+                overflow-x: auto;
+            }
+            th,
+            td {
+                text-align: left;
+                padding: 8px 10px;
+                border-bottom: 1px solid var(--border);
+                white-space: nowrap;
+            }
+            th {
+                color: var(--text-secondary);
+                font-weight: 600;
+                font-size: 12px;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+            td.num,
+            th.num {
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+            }
+            td.desc {
+                white-space: normal;
+                min-width: 220px;
+                color: var(--text-secondary);
+            }
+
+            /* ---------- tooltip ---------- */
+            #tip {
+                position: fixed;
+                z-index: 40;
+                pointer-events: none;
+                background: var(--surface-1);
+                border: 1px solid var(--border);
+                border-radius: 9px;
+                padding: 9px 11px;
+                font-size: 12.5px;
+                line-height: 1.45;
+                box-shadow: 0 6px 22px rgb(0 0 0 / 0.16);
+                max-width: 240px;
+            }
+            #tip .t-date {
+                font-weight: 650;
+                margin-bottom: 4px;
+            }
+            #tip .row {
+                display: flex;
+                align-items: center;
+                gap: 7px;
+                white-space: nowrap;
+            }
+            #tip .row i {
+                width: 9px;
+                height: 9px;
+                border-radius: 2px;
+                flex: none;
+            }
+            #tip .row b {
+                margin-left: auto;
+                font-variant-numeric: tabular-nums;
+                font-weight: 600;
+            }
+
+            /* ---------- login ---------- */
+            .login-wrap {
+                min-height: 72vh;
+                display: grid;
+                place-items: center;
+                padding: 24px 16px;
+            }
+            .login {
+                width: 100%;
+                max-width: 340px;
+                background: var(--surface-1);
+                border: 1px solid var(--border);
+                border-radius: 14px;
+                padding: 26px 24px 24px;
+            }
+            .login h1 {
+                font-size: 18px;
+                margin: 0 0 6px;
+            }
+            .login p {
+                color: var(--text-secondary);
+                font-size: 13px;
+                margin: 0 0 18px;
+            }
+            .login label {
+                display: block;
+                font-size: 12.5px;
+                color: var(--text-secondary);
+                margin: 12px 0 5px;
+            }
+            .login input {
+                width: 100%;
+                padding: 9px 11px;
+                border-radius: 9px;
+                border: 1px solid var(--border);
+                background: var(--surface-0);
+                color: var(--text-primary);
+                font: inherit;
+                font-size: 14px;
+            }
+            .login button[type="submit"] {
+                width: 100%;
+                margin-top: 18px;
+                padding: 10px;
+                border: 0;
+                border-radius: 9px;
+                background: var(--accent);
+                color: #fff;
+                font: inherit;
+                font-weight: 620;
+                cursor: pointer;
+            }
+            .err {
+                color: var(--over);
+                font-size: 13px;
+                margin-top: 12px;
+                min-height: 18px;
+            }
+        </style>
+    </head>
+    <body>
+        <!-- login -->
+        <div class="login-wrap" id="login">
+            <form class="login" id="login-form">
+                <h1>Your nutrition dashboard</h1>
+                <p>
+                    Sign in with the same email and password you used to connect
+                    your MCP client.
+                </p>
+                <label for="email">Email</label>
+                <input
+                    id="email"
+                    type="email"
+                    autocomplete="username"
+                    required
+                />
+                <label for="password">Password</label>
+                <input
+                    id="password"
+                    type="password"
+                    autocomplete="current-password"
+                    required
+                />
+                <button type="submit">Sign in</button>
+                <div class="err" id="login-err" role="alert"></div>
+            </form>
+        </div>
+
+        <!-- dashboard -->
+        <div class="wrap" id="app" hidden>
+            <header class="top">
+                <h1>Your nutrition</h1>
+                <button class="ghost" id="theme-btn" type="button">
+                    Theme
+                </button>
+                <button class="ghost" id="signout" type="button">
+                    Sign out
+                </button>
+            </header>
+            <p class="sub" id="range-label"></p>
+
+            <div class="filters">
+                <div class="seg" role="group" aria-label="Date range">
+                    <button type="button" data-days="7">7 days</button>
+                    <button type="button" data-days="30" aria-pressed="true">
+                        30 days
+                    </button>
+                    <button type="button" data-days="90">90 days</button>
+                </div>
+            </div>
+
+            <div class="tiles" id="tiles"></div>
+
+            <section class="card">
+                <div class="card-head">
+                    <div>
+                        <h2>Calories per day</h2>
+                        <p class="note" id="cal-note"></p>
+                    </div>
+                </div>
+                <div class="plot" id="cal-plot"></div>
+            </section>
+
+            <section class="card">
+                <div class="card-head">
+                    <div>
+                        <h2>Macros per day</h2>
+                        <p class="note">
+                            Stacked grams of protein, carbs and fat.
+                        </p>
+                    </div>
+                </div>
+                <div class="legend" id="macro-legend"></div>
+                <div class="plot" id="macro-plot"></div>
+            </section>
+
+            <section class="card" id="weight-card" hidden>
+                <div class="card-head">
+                    <div>
+                        <h2>Weight</h2>
+                        <p class="note" id="weight-note"></p>
+                    </div>
+                </div>
+                <div class="plot" id="weight-plot"></div>
+            </section>
+
+            <section class="card">
+                <div class="card-head">
+                    <div>
+                        <h2>Recent meals</h2>
+                        <p class="note">
+                            Every figure plotted above, as numbers.
+                        </p>
+                    </div>
+                </div>
+                <div class="scroll-x">
+                    <table id="meals-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Meal</th>
+                                <th>Description</th>
+                                <th class="num">kcal</th>
+                                <th class="num">P</th>
+                                <th class="num">C</th>
+                                <th class="num">F</th>
+                                <th class="num">Fib</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="empty" id="meals-empty" hidden>
+                    No meals logged in this range.
+                </div>
+            </section>
+        </div>
+
+        <div id="tip" hidden></div>
+
+        <script>
+            (function () {
+                "use strict";
+
+                var KEY = "nutrition-dash-token";
+                var THEME_KEY = "nutrition-dash-theme";
+                var token = null;
+                var days = 30;
+                var data = null;
+
+                // localStorage throws in a private window or with site data
+                // blocked, and the page must still work without it.
+                function store(k, v) {
+                    try {
+                        if (v === null) localStorage.removeItem(k);
+                        else localStorage.setItem(k, v);
+                    } catch (e) {}
+                }
+                function load(k) {
+                    try {
+                        return localStorage.getItem(k);
+                    } catch (e) {
+                        return null;
+                    }
+                }
+
+                var $ = function (id) {
+                    return document.getElementById(id);
+                };
+                var cssVar = function (n) {
+                    return getComputedStyle(document.documentElement)
+                        .getPropertyValue(n)
+                        .trim();
+                };
+
+                /* ---------- theme ---------- */
+                var savedTheme = load(THEME_KEY);
+                if (savedTheme)
+                    document.documentElement.setAttribute(
+                        "data-theme",
+                        savedTheme,
+                    );
+                $("theme-btn").addEventListener("click", function () {
+                    var cur =
+                        document.documentElement.getAttribute("data-theme");
+                    var isDark =
+                        cur === "dark" ||
+                        (!cur &&
+                            matchMedia("(prefers-color-scheme: dark)").matches);
+                    var next = isDark ? "light" : "dark";
+                    document.documentElement.setAttribute("data-theme", next);
+                    store(THEME_KEY, next);
+                    if (data) render();
+                });
+
+                /* ---------- helpers ---------- */
+                function round(n) {
+                    return Math.round(n || 0);
+                }
+                function fmt(n) {
+                    return round(n).toLocaleString();
+                }
+                // Parse YYYY-MM-DD as a local date. new Date("2026-09-16")
+                // parses as UTC and can display as the previous day west of
+                // Greenwich — which is exactly where this user is.
+                function parseDay(iso) {
+                    var p = iso.split("-");
+                    return new Date(+p[0], +p[1] - 1, +p[2]);
+                }
+                function shortDay(iso) {
+                    return parseDay(iso).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                    });
+                }
+                function longDay(iso) {
+                    return parseDay(iso).toLocaleDateString(undefined, {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                    });
+                }
+                function esc(s) {
+                    return String(s == null ? "" : s).replace(
+                        /[&<>"']/g,
+                        function (c) {
+                            return {
+                                "&": "&amp;",
+                                "<": "&lt;",
+                                ">": "&gt;",
+                                '"': "&quot;",
+                                "'": "&#39;",
+                            }[c];
+                        },
+                    );
+                }
+                function svgEl(tag, attrs) {
+                    var e = document.createElementNS(
+                        "http://www.w3.org/2000/svg",
+                        tag,
+                    );
+                    for (var k in attrs)
+                        if (attrs[k] !== null && attrs[k] !== undefined)
+                            e.setAttribute(k, attrs[k]);
+                    return e;
+                }
+                // Bar with only its top corners rounded, so the mark stays
+                // anchored to the baseline instead of floating on a pill.
+                function barPath(x, y, w, h, r) {
+                    if (h <= 0) return "";
+                    r = Math.max(0, Math.min(r, w / 2, h));
+                    return (
+                        "M" +
+                        x +
+                        "," +
+                        (y + h) +
+                        "V" +
+                        (y + r) +
+                        "a" +
+                        r +
+                        "," +
+                        r +
+                        " 0 0 1 " +
+                        r +
+                        ",-" +
+                        r +
+                        "h" +
+                        (w - 2 * r) +
+                        "a" +
+                        r +
+                        "," +
+                        r +
+                        " 0 0 1 " +
+                        r +
+                        "," +
+                        r +
+                        "V" +
+                        (y + h) +
+                        "Z"
+                    );
+                }
+                // Snap up to a whole multiple of the tick count so every
+                // gridline lands on an integer. Without this a max of 10 over
+                // 4 ticks stepped by 2.5 and the labels rounded to 0/3/5/8/10.
+                function snapToTicks(max, ticks) {
+                    return Math.ceil(max / ticks) * ticks;
+                }
+                function niceMax(v) {
+                    if (v <= 0) return 10;
+                    var mag = Math.pow(10, Math.floor(Math.log10(v)));
+                    var steps = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10];
+                    for (var i = 0; i < steps.length; i++) {
+                        if (steps[i] * mag >= v) return steps[i] * mag;
+                    }
+                    return 10 * mag;
+                }
+
+                /* ---------- tooltip ---------- */
+                var tip = $("tip");
+                function showTip(html, ev) {
+                    tip.innerHTML = html;
+                    tip.hidden = false;
+                    var r = tip.getBoundingClientRect();
+                    var x = ev.clientX + 14;
+                    var y = ev.clientY - r.height - 12;
+                    if (x + r.width > innerWidth - 8)
+                        x = ev.clientX - r.width - 14;
+                    if (y < 8) y = ev.clientY + 16;
+                    tip.style.left = Math.max(8, x) + "px";
+                    tip.style.top = y + "px";
+                }
+                function hideTip() {
+                    tip.hidden = true;
+                }
+                document.addEventListener("scroll", hideTip, true);
+
+                /* ---------- charts ---------- */
+                var W = 860,
+                    H = 260,
+                    PAD = { t: 14, r: 12, b: 26, l: 46 };
+
+                function axes(svg, maxY, plotW, plotH, ticks) {
+                    var grid = cssVar("--grid"),
+                        ink = cssVar("--text-secondary");
+                    for (var i = 0; i <= ticks; i++) {
+                        var v = (maxY / ticks) * i;
+                        var y = PAD.t + plotH - (v / maxY) * plotH;
+                        // Solid, recessive. Dashed gridlines read as data.
+                        svg.appendChild(
+                            svgEl("line", {
+                                x1: PAD.l,
+                                x2: PAD.l + plotW,
+                                y1: y,
+                                y2: y,
+                                stroke: grid,
+                                "stroke-width": 1,
+                            }),
+                        );
+                        var t = svgEl("text", {
+                            x: PAD.l - 8,
+                            y: y + 4,
+                            "text-anchor": "end",
+                            "font-size": 11,
+                            fill: ink,
+                        });
+                        t.textContent = fmt(v);
+                        svg.appendChild(t);
+                    }
+                }
+
+                // Label roughly every Nth day, and always the last one so the
+                // range's end is readable. The last label is dropped when it
+                // would land on top of the previous one — at 30 days the
+                // stride lands on Sep 26 and the forced final tick printed
+                // Sep 27 straight through it.
+                var MIN_LABEL_GAP = 52;
+                function xLabels(svg, rows, plotW, plotH, step) {
+                    var ink = cssVar("--text-secondary");
+                    var bw = plotW / rows.length;
+                    var lastX = -Infinity;
+                    for (var i = 0; i < rows.length; i++) {
+                        var isLast = i === rows.length - 1;
+                        if (i % step !== 0 && !isLast) continue;
+                        var cx = PAD.l + bw * (i + 0.5);
+                        if (cx - lastX < MIN_LABEL_GAP) {
+                            // Keep the endpoint in preference to the tick that
+                            // merely fell on the stride.
+                            if (!isLast) continue;
+                            var prev = svg.querySelector(
+                                "text[data-xtick='1']:last-of-type",
+                            );
+                            if (prev) prev.remove();
+                        }
+                        lastX = cx;
+                        var t = svgEl("text", {
+                            x: cx,
+                            y: PAD.t + plotH + 17,
+                            "text-anchor": "middle",
+                            "font-size": 11,
+                            fill: ink,
+                            "data-xtick": "1",
+                        });
+                        t.textContent = shortDay(rows[i].date);
+                        svg.appendChild(t);
+                    }
+                }
+
+                function emptyState(host, msg) {
+                    var d = document.createElement("div");
+                    d.className = "empty";
+                    d.textContent = msg;
+                    host.appendChild(d);
+                }
+                function anyLogged(rows) {
+                    return rows.some(function (r) {
+                        return r.mealCount > 0;
+                    });
+                }
+
+                function caloriesChart(rows, goal) {
+                    var host = $("cal-plot");
+                    host.textContent = "";
+                    if (!rows.length) return;
+                    if (!anyLogged(rows)) {
+                        emptyState(host, "Nothing logged in this range.");
+                        return;
+                    }
+
+                    var plotW = W - PAD.l - PAD.r,
+                        plotH = H - PAD.t - PAD.b;
+                    var peak = Math.max.apply(
+                        null,
+                        rows.map(function (r) {
+                            return r.calories;
+                        }),
+                    );
+                    var maxY = snapToTicks(
+                        niceMax(Math.max(peak, goal || 0) * 1.08),
+                        4,
+                    );
+                    var svg = svgEl("svg", {
+                        viewBox: "0 0 " + W + " " + H,
+                        role: "img",
+                        "aria-label":
+                            "Calories per day for the selected range.",
+                    });
+                    axes(svg, maxY, plotW, plotH, 4);
+
+                    var bw = plotW / rows.length;
+                    var gap = Math.min(2, bw * 0.18); // 2px surface gap
+                    var fill = cssVar("--series-1");
+                    var overFill = cssVar("--over");
+
+                    rows.forEach(function (r, i) {
+                        var h = (r.calories / maxY) * plotH;
+                        var x = PAD.l + bw * i + gap / 2;
+                        var w = Math.max(1, bw - gap);
+                        var y = PAD.t + plotH - h;
+                        var over = goal && r.calories > goal;
+                        if (h > 0) {
+                            var p = svgEl("path", {
+                                d: barPath(x, y, w, h, Math.min(4, w / 2)),
+                                fill: over ? overFill : fill,
+                            });
+                            svg.appendChild(p);
+                        }
+                        // Hit target spans the full column and full height,
+                        // so a short bar is still easy to hover.
+                        var hit = svgEl("rect", {
+                            x: PAD.l + bw * i,
+                            y: PAD.t,
+                            width: bw,
+                            height: plotH,
+                            fill: "transparent",
+                        });
+                        hit.addEventListener("mousemove", function (ev) {
+                            showTip(
+                                '<div class="t-date">' +
+                                    longDay(r.date) +
+                                    "</div>" +
+                                    '<div class="row"><i style="background:' +
+                                    (over ? overFill : fill) +
+                                    '"></i>Calories<b>' +
+                                    fmt(r.calories) +
+                                    "</b></div>" +
+                                    (goal
+                                        ? '<div class="row" style="color:var(--text-secondary)">Goal<b>' +
+                                          fmt(goal) +
+                                          "</b></div>"
+                                        : "") +
+                                    '<div class="row" style="color:var(--text-secondary)">Meals<b>' +
+                                    r.mealCount +
+                                    "</b></div>",
+                                ev,
+                            );
+                        });
+                        hit.addEventListener("mouseleave", hideTip);
+                        svg.appendChild(hit);
+                    });
+
+                    if (goal) {
+                        var gy = PAD.t + plotH - (goal / maxY) * plotH;
+                        svg.appendChild(
+                            svgEl("line", {
+                                x1: PAD.l,
+                                x2: PAD.l + plotW,
+                                y1: gy,
+                                y2: gy,
+                                stroke: cssVar("--text-secondary"),
+                                "stroke-width": 2,
+                            }),
+                        );
+                        var gl = svgEl("text", {
+                            x: PAD.l + plotW,
+                            y: gy - 6,
+                            "text-anchor": "end",
+                            "font-size": 11,
+                            fill: cssVar("--text-secondary"),
+                        });
+                        gl.textContent = "Goal " + fmt(goal);
+                        svg.appendChild(gl);
+                    }
+
+                    xLabels(
+                        svg,
+                        rows,
+                        plotW,
+                        plotH,
+                        Math.max(1, Math.ceil(rows.length / 8)),
+                    );
+                    host.appendChild(svg);
+                }
+
+                var MACROS = [
+                    { key: "protein_g", name: "Protein", v: "--series-1" },
+                    { key: "carbs_g", name: "Carbs", v: "--series-2" },
+                    { key: "fat_g", name: "Fat", v: "--series-3" },
+                ];
+
+                function macroChart(rows) {
+                    var host = $("macro-plot");
+                    host.textContent = "";
+                    $("macro-legend").innerHTML = MACROS.map(function (m) {
+                        return (
+                            '<span><i style="background:' +
+                            cssVar(m.v) +
+                            '"></i>' +
+                            m.name +
+                            "</span>"
+                        );
+                    }).join("");
+                    if (!rows.length) return;
+                    if (!anyLogged(rows)) {
+                        emptyState(host, "Nothing logged in this range.");
+                        return;
+                    }
+
+                    var plotW = W - PAD.l - PAD.r,
+                        plotH = H - PAD.t - PAD.b;
+                    var peak = Math.max.apply(
+                        null,
+                        rows.map(function (r) {
+                            return r.protein_g + r.carbs_g + r.fat_g;
+                        }),
+                    );
+                    var maxY = snapToTicks(niceMax(peak * 1.08), 4);
+                    var svg = svgEl("svg", {
+                        viewBox: "0 0 " + W + " " + H,
+                        role: "img",
+                        "aria-label":
+                            "Protein, carbs and fat in grams per day.",
+                    });
+                    axes(svg, maxY, plotW, plotH, 4);
+
+                    var bw = plotW / rows.length;
+                    var gap = Math.min(2, bw * 0.18);
+
+                    rows.forEach(function (r, i) {
+                        var x = PAD.l + bw * i + gap / 2;
+                        var w = Math.max(1, bw - gap);
+                        var acc = 0;
+                        // Draw from the top of the stack down so the 2px
+                        // separator between segments is cut out of the
+                        // segment below rather than painted over it.
+                        for (var s = MACROS.length - 1; s >= 0; s--) {
+                            var val = r[MACROS[s].key] || 0;
+                            if (val <= 0) continue;
+                            var h = (val / maxY) * plotH;
+                            var yTop =
+                                PAD.t + plotH - ((acc + val) / maxY) * plotH;
+                            var segH = Math.max(0, h - (acc > 0 ? 2 : 0));
+                            // Only the segment that finishes the stack is
+                            // rounded. Testing the slot index instead rounded
+                            // the BOTTOM segment (fat is drawn first), putting
+                            // a curve in the middle of the bar.
+                            var isTop =
+                                acc + val >=
+                                r.protein_g + r.carbs_g + r.fat_g - 0.001;
+                            svg.appendChild(
+                                svgEl("path", {
+                                    d: isTop
+                                        ? barPath(
+                                              x,
+                                              yTop,
+                                              w,
+                                              segH,
+                                              Math.min(4, w / 2),
+                                          )
+                                        : "M" +
+                                          x +
+                                          "," +
+                                          yTop +
+                                          "h" +
+                                          w +
+                                          "v" +
+                                          segH +
+                                          "h" +
+                                          -w +
+                                          "Z",
+                                    fill: cssVar(MACROS[s].v),
+                                }),
+                            );
+                            acc += val;
+                        }
+                        var hit = svgEl("rect", {
+                            x: PAD.l + bw * i,
+                            y: PAD.t,
+                            width: bw,
+                            height: plotH,
+                            fill: "transparent",
+                        });
+                        hit.addEventListener("mousemove", function (ev) {
+                            showTip(
+                                '<div class="t-date">' +
+                                    longDay(r.date) +
+                                    "</div>" +
+                                    MACROS.map(function (m) {
+                                        return (
+                                            '<div class="row"><i style="background:' +
+                                            cssVar(m.v) +
+                                            '"></i>' +
+                                            m.name +
+                                            "<b>" +
+                                            fmt(r[m.key]) +
+                                            " g</b></div>"
+                                        );
+                                    }).join(""),
+                                ev,
+                            );
+                        });
+                        hit.addEventListener("mouseleave", hideTip);
+                        svg.appendChild(hit);
+                    });
+
+                    xLabels(
+                        svg,
+                        rows,
+                        plotW,
+                        plotH,
+                        Math.max(1, Math.ceil(rows.length / 8)),
+                    );
+                    host.appendChild(svg);
+                }
+
+                function weightChart(points, unit) {
+                    var card = $("weight-card"),
+                        host = $("weight-plot");
+                    host.textContent = "";
+                    if (points.length < 2) {
+                        card.hidden = true;
+                        return;
+                    }
+                    card.hidden = false;
+                    $("weight-note").textContent =
+                        points.length + " weigh-ins, in " + unit + ".";
+
+                    var plotW = W - PAD.l - PAD.r,
+                        plotH = H - PAD.t - PAD.b;
+                    var vals = points.map(function (p) {
+                        return p.v;
+                    });
+                    var lo = Math.min.apply(null, vals),
+                        hi = Math.max.apply(null, vals);
+                    var padY = (hi - lo) * 0.25 || 1;
+                    lo -= padY;
+                    hi += padY;
+
+                    var svg = svgEl("svg", {
+                        viewBox: "0 0 " + W + " " + H,
+                        role: "img",
+                        "aria-label": "Body weight over the selected range.",
+                    });
+                    var grid = cssVar("--grid"),
+                        ink = cssVar("--text-secondary");
+                    for (var i = 0; i <= 3; i++) {
+                        var v = lo + ((hi - lo) / 3) * i;
+                        var y = PAD.t + plotH - ((v - lo) / (hi - lo)) * plotH;
+                        svg.appendChild(
+                            svgEl("line", {
+                                x1: PAD.l,
+                                x2: PAD.l + plotW,
+                                y1: y,
+                                y2: y,
+                                stroke: grid,
+                                "stroke-width": 1,
+                            }),
+                        );
+                        var t = svgEl("text", {
+                            x: PAD.l - 8,
+                            y: y + 4,
+                            "text-anchor": "end",
+                            "font-size": 11,
+                            fill: ink,
+                        });
+                        t.textContent = v.toFixed(1);
+                        svg.appendChild(t);
+                    }
+
+                    var xAt = function (i) {
+                        return (
+                            PAD.l +
+                            (points.length === 1
+                                ? plotW / 2
+                                : (plotW * i) / (points.length - 1))
+                        );
+                    };
+                    var yAt = function (v) {
+                        return PAD.t + plotH - ((v - lo) / (hi - lo)) * plotH;
+                    };
+                    var d = points
+                        .map(function (p, i) {
+                            return (i ? "L" : "M") + xAt(i) + "," + yAt(p.v);
+                        })
+                        .join(" ");
+                    svg.appendChild(
+                        svgEl("path", {
+                            d: d,
+                            fill: "none",
+                            stroke: cssVar("--series-1"),
+                            "stroke-width": 2,
+                            "stroke-linejoin": "round",
+                            "stroke-linecap": "round",
+                        }),
+                    );
+                    points.forEach(function (p, i) {
+                        svg.appendChild(
+                            svgEl("circle", {
+                                cx: xAt(i),
+                                cy: yAt(p.v),
+                                r: 4,
+                                fill: cssVar("--series-1"),
+                                stroke: cssVar("--surface-1"),
+                                "stroke-width": 2,
+                            }),
+                        );
+                        var hit = svgEl("circle", {
+                            cx: xAt(i),
+                            cy: yAt(p.v),
+                            r: 14,
+                            fill: "transparent",
+                        });
+                        hit.addEventListener("mousemove", function (ev) {
+                            showTip(
+                                '<div class="t-date">' +
+                                    longDay(p.date) +
+                                    "</div>" +
+                                    '<div class="row"><i style="background:' +
+                                    cssVar("--series-1") +
+                                    '"></i>Weight<b>' +
+                                    p.v.toFixed(1) +
+                                    " " +
+                                    unit +
+                                    "</b></div>",
+                                ev,
+                            );
+                        });
+                        hit.addEventListener("mouseleave", hideTip);
+                        svg.appendChild(hit);
+                    });
+                    host.appendChild(svg);
+                }
+
+                /* ---------- tiles ---------- */
+                function tile(label, value, unit, foot, pct, over) {
+                    var meter =
+                        pct === null || pct === undefined
+                            ? ""
+                            : '<div class="meter"><i class="' +
+                              (over ? "over" : "") +
+                              '" style="width:' +
+                              Math.max(0, Math.min(100, pct)) +
+                              '%"></i></div>';
+                    return (
+                        '<div class="tile"><div class="label">' +
+                        esc(label) +
+                        '</div><div class="figure">' +
+                        value +
+                        (unit ? '<span class="unit">' + unit + "</span>" : "") +
+                        "</div>" +
+                        meter +
+                        (foot
+                            ? '<div class="foot' +
+                              (over ? " over" : "") +
+                              '">' +
+                              foot +
+                              "</div>"
+                            : "") +
+                        "</div>"
+                    );
+                }
+
+                function renderTiles(today, goals, rows) {
+                    var g = goals || {};
+                    var html = "";
+                    var kcal = today ? today.calories : 0;
+
+                    if (g.calories) {
+                        var left = g.calories - kcal;
+                        html += tile(
+                            "Today",
+                            fmt(kcal),
+                            "kcal",
+                            left >= 0
+                                ? fmt(left) + " kcal left of " + fmt(g.calories)
+                                : fmt(-left) + " kcal over goal",
+                            (kcal / g.calories) * 100,
+                            left < 0,
+                        );
+                    } else {
+                        html += tile(
+                            "Today",
+                            fmt(kcal),
+                            "kcal",
+                            "No calorie goal set",
+                            null,
+                        );
+                    }
+
+                    html += tile(
+                        "Protein today",
+                        fmt(today ? today.protein_g : 0),
+                        "g",
+                        g.protein_g ? "of " + fmt(g.protein_g) + " g" : null,
+                        g.protein_g
+                            ? ((today ? today.protein_g : 0) / g.protein_g) *
+                                  100
+                            : null,
+                    );
+                    html += tile(
+                        "Fiber today",
+                        fmt(today ? today.fiber_g : 0),
+                        "g",
+                        g.fiber_g ? "of " + fmt(g.fiber_g) + " g" : null,
+                        g.fiber_g
+                            ? ((today ? today.fiber_g : 0) / g.fiber_g) * 100
+                            : null,
+                    );
+
+                    var logged = rows.filter(function (r) {
+                        return r.mealCount > 0;
+                    });
+                    var avg = logged.length
+                        ? logged.reduce(function (a, r) {
+                              return a + r.calories;
+                          }, 0) / logged.length
+                        : 0;
+                    html += tile(
+                        "Daily average",
+                        fmt(avg),
+                        "kcal",
+                        logged.length + " of " + rows.length + " days logged",
+                        null,
+                    );
+
+                    $("tiles").innerHTML = html;
+                }
+
+                function renderTable(meals) {
+                    var tb = document.querySelector("#meals-table tbody");
+                    tb.textContent = "";
+                    $("meals-empty").hidden = meals.length > 0;
+                    document.querySelector("#meals-table").hidden =
+                        meals.length === 0;
+                    meals.forEach(function (m) {
+                        var tr = document.createElement("tr");
+                        tr.innerHTML =
+                            "<td>" +
+                            esc(
+                                new Date(m.logged_at).toLocaleDateString(
+                                    undefined,
+                                    { month: "short", day: "numeric" },
+                                ),
+                            ) +
+                            "</td><td>" +
+                            esc(m.meal_type || "-") +
+                            '</td><td class="desc">' +
+                            esc(m.description) +
+                            '</td><td class="num">' +
+                            fmt(m.calories) +
+                            '</td><td class="num">' +
+                            fmt(m.protein_g) +
+                            '</td><td class="num">' +
+                            fmt(m.carbs_g) +
+                            '</td><td class="num">' +
+                            fmt(m.fat_g) +
+                            '</td><td class="num">' +
+                            fmt(m.fiber_g) +
+                            "</td>";
+                        tb.appendChild(tr);
+                    });
+                }
+
+                function render() {
+                    var rows = data.daily;
+                    var goals = data.goals;
+                    var today = rows[rows.length - 1];
+
+                    $("range-label").textContent =
+                        longDay(data.startDate) +
+                        " to " +
+                        longDay(data.endDate) +
+                        " · " +
+                        data.timezone;
+                    $("cal-note").textContent =
+                        goals && goals.calories
+                            ? "Bars above the goal line are shown in red."
+                            : "No calorie goal set.";
+
+                    renderTiles(today, goals, rows);
+                    caloriesChart(rows, goals ? goals.calories : null);
+                    macroChart(rows);
+
+                    var unit = data.weightUnit;
+                    var pts = data.weights.map(function (w) {
+                        return {
+                            date: w.logged_at.slice(0, 10),
+                            v:
+                                unit === "lb"
+                                    ? w.weight_g / 453.59237
+                                    : w.weight_g / 1000,
+                        };
+                    });
+                    weightChart(pts, unit);
+                    renderTable(data.meals);
+                }
+
+                /* ---------- data ---------- */
+                function fetchData() {
+                    return fetch("/api/dashboard/data?days=" + days, {
+                        headers: { Authorization: "Bearer " + token },
+                    }).then(function (r) {
+                        if (r.status === 401) {
+                            signOut();
+                            throw new Error("unauthorized");
+                        }
+                        if (!r.ok) throw new Error("http " + r.status);
+                        return r.json();
+                    });
+                }
+
+                function refresh() {
+                    return fetchData()
+                        .then(function (d) {
+                            data = d;
+                            render();
+                        })
+                        .catch(function (e) {
+                            if (e && e.message === "unauthorized") return;
+                            $("range-label").textContent =
+                                "Could not load data. Is the server running?";
+                        });
+                }
+
+                function signOut() {
+                    token = null;
+                    store(KEY, null);
+                    $("app").hidden = true;
+                    $("login").hidden = false;
+                }
+                $("signout").addEventListener("click", signOut);
+
+                Array.prototype.forEach.call(
+                    document.querySelectorAll(".seg button"),
+                    function (b) {
+                        b.addEventListener("click", function () {
+                            days = +b.dataset.days;
+                            Array.prototype.forEach.call(
+                                document.querySelectorAll(".seg button"),
+                                function (o) {
+                                    o.setAttribute(
+                                        "aria-pressed",
+                                        o === b ? "true" : "false",
+                                    );
+                                },
+                            );
+                            refresh();
+                        });
+                    },
+                );
+
+                $("login-form").addEventListener("submit", function (ev) {
+                    ev.preventDefault();
+                    $("login-err").textContent = "";
+                    fetch("/api/dashboard/login", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            email: $("email").value,
+                            password: $("password").value,
+                        }),
+                    })
+                        .then(function (r) {
+                            return r.json().then(function (b) {
+                                return { ok: r.ok, status: r.status, body: b };
+                            });
+                        })
+                        .then(function (res) {
+                            if (!res.ok) {
+                                $("login-err").textContent =
+                                    res.status === 429
+                                        ? "Too many attempts. Wait a minute and try again."
+                                        : "Email or password is incorrect.";
+                                return;
+                            }
+                            token = res.body.access_token;
+                            store(KEY, token);
+                            $("password").value = "";
+                            $("login").hidden = true;
+                            $("app").hidden = false;
+                            refresh();
+                        })
+                        .catch(function () {
+                            $("login-err").textContent =
+                                "Could not reach the server.";
+                        });
+                });
+
+                /* ---------- boot ---------- */
+                token = load(KEY);
+                if (token) {
+                    $("login").hidden = true;
+                    $("app").hidden = false;
+                    refresh();
+                }
+            })();
+        </script>
+    </body>
+</html>
