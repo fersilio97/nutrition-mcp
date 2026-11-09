@@ -71,6 +71,8 @@ Read the story behind it: [How I Replaced MyFitnessPal and Other Apps with a Sin
 | `set_nutrition_goals`      | Set daily calorie, macro, fiber and water targets to reach, sugar/alcohol/caffeine limits to stay under, plus an optional target weight          |
 | `get_nutrition_goals`      | Get the current daily targets and limits                                                                                                         |
 | `get_goal_progress`        | Get intake vs. targets and limits for a given day (default: today), plus latest weight vs. target                                                |
+| `log_active_calories`      | Record a day's active (exercise) kcal from a watch; adds it to that day's calorie goal and scales protein/carbs/fat proportionally               |
+| `setup_activity_sync`      | Issue a sync token + iOS Shortcuts recipe that POSTs Apple Health Active Energy (Garmin included) to `/api/activity`                             |
 | `log_water`                | Log a hydration entry in milliliters                                                                                                             |
 | `get_water_today`          | Get today's water intake total and entries                                                                                                       |
 | `get_water_by_date`        | Get water intake for a specific date                                                                                                             |
@@ -85,7 +87,7 @@ Read the story behind it: [How I Replaced MyFitnessPal and Other Apps with a Sin
 | `set_weight_unit`          | Set the preferred weight unit (`kg` or `lb`; null to clear)                                                                                      |
 | `get_trends`               | 7/14/30-day averages, std dev, streaks, day-of-week, best/worst day                                                                              |
 | `get_meal_patterns`        | Pre-aggregated behavioural patterns (breakfast effect, late dinner, weekend vs weekday, outliers)                                                |
-| `export_all_data`          | Export every table — meals, water, weight, goals, profile — as one ZIP of CSVs plus a README, and return a 60-minute download link               |
+| `export_all_data`          | Export every table — meals, water, weight, activity, goals, profile — as one ZIP of CSVs plus a README, and return a 60-minute download link     |
 | `get_profile`              | Get timezone (+ local date/time), widget language, weight unit, widget display and alcohol tracking in one call                                  |
 | `set_timezone`             | Set the user's IANA timezone (e.g. `America/Los_Angeles`)                                                                                        |
 | `set_language`             | Set the UI language for in-chat widgets (dashboards, charts) — not the language the AI replies in                                                |

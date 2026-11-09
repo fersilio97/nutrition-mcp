@@ -24,6 +24,7 @@ export const WIDGET_STRINGS_JA: WidgetStrings = {
         noneLogged: "記録なし",
         caloriesToday: "本日のカロリー",
         caloriesOn: "{date}のカロリー",
+        activeBonus: "目標 +{n} アクティブ",
         tapHint: "数値をタップすると内訳の食事が表示されます",
         showMealsContributed: "内訳となった食事を表示します。",
         byMealTitle: "{label}の内訳",

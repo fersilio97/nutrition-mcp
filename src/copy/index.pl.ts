@@ -647,7 +647,7 @@ export const INDEX_PL: IndexDoc = {
         note: "Wszystko tutaj jest opcjonalne. Możesz to zrobić teraz, później albo wcale — po prostu zacznij zapisywać, a to ustaw, kiedy tylko zechcesz.",
         toolsCta: {
             heading: "Ciekawi Cię, co naprawdę potrafi?",
-            body: "Przejrzyj wszystkie 36 narzędzi — zapisywanie, kody kreskowe, woda, waga, cele i trendy — z opisem i przykładowym poleceniem dla każdego.",
+            body: "Przejrzyj wszystkie 38 narzędzi — zapisywanie, kody kreskowe, woda, waga, cele i trendy — z opisem i przykładowym poleceniem dla każdego.",
             arrow: "Zobacz narzędzia",
         },
     },
@@ -741,7 +741,7 @@ export const INDEX_PL: IndexDoc = {
             {
                 icon: "fa-solid fa-file-csv",
                 title: "Eksport i własność Twoich danych",
-                body: "Zabierz wszystko, co tu masz — posiłki, wodę, wagę, cele i profil — jako jeden ZIP z plikami CSV. Na razie tylko posiłki można zaimportować z powrotem. Usuń swoje konto i dane, kiedy tylko zechcesz.",
+                body: "Zabierz wszystko, co tu masz — posiłki, wodę, wagę, aktywność, cele i profil — jako jeden ZIP z plikami CSV. Na razie tylko posiłki można zaimportować z powrotem. Usuń swoje konto i dane, kiedy tylko zechcesz.",
             },
         ],
     },

@@ -6,6 +6,7 @@ import {
     buildProfileCsv,
     buildWaterCsv,
     buildWeightCsv,
+    buildActivityCsv,
     EXPORT_ARCHIVE_FILES,
 } from "./export.js";
 import type {
@@ -630,7 +631,7 @@ const README_OPTS = {
     tz: "Europe/Berlin",
     tzConfigured: true,
     weightUnit: "kg" as const,
-    counts: { meals: 120, water: 45, weight: 12 },
+    counts: { meals: 120, water: 45, weight: 12, activity: 9 },
 };
 
 test("the README names every file in the archive", () => {
@@ -731,6 +732,7 @@ test("EXPORT_ARCHIVE_FILES is the archive's real, ordered file list", () => {
         "meals.csv",
         "water.csv",
         "weight.csv",
+        "activity.csv",
         "goals.csv",
         "profile.csv",
         "README.txt",
@@ -746,6 +748,15 @@ test("an archive assembled from the builders reads back file for file", () => {
         "meals.csv": buildMealsCsv([meal()], tz),
         "water.csv": buildWaterCsv([water()], tz),
         "weight.csv": buildWeightCsv([weight()], tz, "kg"),
+        "activity.csv": buildActivityCsv([
+            {
+                user_id: "u1",
+                date: "2026-06-20",
+                active_kcal: 312,
+                source: "apple_health",
+                updated_at: "2026-06-20T20:00:00Z",
+            },
+        ]),
         "goals.csv": buildGoalsCsv(goals(), tz),
         "profile.csv": buildProfileCsv(profile(), tz),
         "README.txt": buildExportReadme(README_OPTS),
@@ -768,7 +779,12 @@ test("an archive assembled from the builders reads back file for file", () => {
     // the one file in here that is re-importable quietly stops being so.
     expect(entries[0]!.content).toBe(buildMealsCsv([meal()], tz));
     // Every CSV in the archive carries its header even when its table is empty.
-    for (const csv of ["meals.csv", "water.csv", "weight.csv"] as const) {
+    for (const csv of [
+        "meals.csv",
+        "water.csv",
+        "weight.csv",
+        "activity.csv",
+    ] as const) {
         expect(contents[csv]!.split("\n")[0]).not.toBe("");
     }
 });

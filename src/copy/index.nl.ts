@@ -2330,7 +2330,7 @@ export const INDEX_NL: IndexDoc = {
         note: "Dit alles is optioneel. Je kunt het nu doen, later, of nooit — begin gewoon met loggen en stel dit in wanneer je wilt.",
         toolsCta: {
             heading: "Benieuwd wat het écht allemaal kan?",
-            body: "Bekijk alle 36 tools — loggen, barcodes, water, gewicht, doelen en trends — met een beschrijving en een voorbeeldzin voor elk.",
+            body: "Bekijk alle 38 tools — loggen, barcodes, water, gewicht, doelen en trends — met een beschrijving en een voorbeeldzin voor elk.",
             arrow: "Bekijk de tools",
         },
     },
@@ -2427,7 +2427,7 @@ export const INDEX_NL: IndexDoc = {
             {
                 icon: "fa-solid fa-file-csv",
                 title: "Exporteer & bezit je gegevens",
-                body: "Neem alles wat je hier hebt — maaltijden, water, gewicht, doelen en profiel — mee als één ZIP met CSV-bestanden. Maaltijden zijn voorlopig het enige onderdeel dat je weer kunt importeren. Verwijder je account en gegevens wanneer je maar wilt.",
+                body: "Neem alles wat je hier hebt — maaltijden, water, gewicht, activiteit, doelen en profiel — mee als één ZIP met CSV-bestanden. Maaltijden zijn voorlopig het enige onderdeel dat je weer kunt importeren. Verwijder je account en gegevens wanneer je maar wilt.",
             },
         ],
     },

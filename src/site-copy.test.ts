@@ -137,12 +137,20 @@ const ARCHIVE_FILES = [
     "meals.csv",
     "water.csv",
     "weight.csv",
+    "activity.csv",
     "goals.csv",
     "profile.csv",
     "README.txt",
 ];
 // The tables behind those CSVs, as the prose names them.
-const ARCHIVE_TABLES = ["meals", "water", "weight", "goals", "profile"];
+const ARCHIVE_TABLES = [
+    "meals",
+    "water",
+    "weight",
+    "activity",
+    "goals",
+    "profile",
+];
 
 // The list above is a mirror, and mirrors drift. src/export.ts owns the real
 // archive, so whenever it names its members, the two must agree exactly — a
@@ -231,7 +239,7 @@ test("llms.txt names the export tool and the archive members", async () => {
     for (const file of ARCHIVE_FILES) {
         expect(llms, `llms.txt omits ${file}`).toContain(file);
     }
-    // Water, weight, goals and profile leave but do not return, and an LLM
+    // Water, weight, activity, goals and profile leave but do not return, and an LLM
     // reading this file is exactly who would otherwise promise a round trip.
     expect(llms).toContain("export-only");
 });
@@ -260,7 +268,7 @@ test("the comparison-page card names every table it promises back", async () => 
             html,
             `${slug}.html was not regenerated from alt-ui.ts`,
         ).toContain(
-            "one ZIP with your meals, water, weight, goals and profile",
+            "one ZIP with your meals, water, weight, activity, goals and profile",
         );
     }
 });

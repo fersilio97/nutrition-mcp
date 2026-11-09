@@ -20,17 +20,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_JA: ToolsDoc = {
     meta: {
-        title: "ツールリファレンス：36個の全ツール",
+        title: "ツールリファレンス：38個の全ツール",
         description:
-            "Nutrition MCPサーバーがあなたのAIに提供する36個すべてのツール — 食事の記録、バーコードのスキャン、他のアプリからの履歴インポート、水分と体重の記録、目標の設定、トレンドの確認。説明と例文つきの完全なリファレンスです。",
+            "Nutrition MCPサーバーがあなたのAIに提供する38個すべてのツール — 食事の記録、バーコードのスキャン、他のアプリからの履歴インポート、水分と体重の記録、目標の設定、トレンドの確認。説明と例文つきの完全なリファレンスです。",
         ogDescription:
-            "Nutrition MCPサーバーがあなたのAIに提供する36個のツール。他のアプリからの履歴用CSVインポーターを含み、説明と例文つき。",
+            "Nutrition MCPサーバーがあなたのAIに提供する38個のツール。他のアプリからの履歴用CSVインポーターを含み、説明と例文つき。",
     },
     hero: {
         eyebrow: "リファレンス",
         title: "あなたのAIができること、すべて",
         lead: "これらのツールを直接呼び出すことはありません — ただ話しかけるだけで、アシスタントが適切なツールを選びます。Nutrition MCPサーバーが公開する全ツールと、それぞれの機能、呼び出すきっかけとなるフレーズをまとめました。",
-        countBold: "36個のツール",
+        countBold: "38個のツール",
         countTail: "7つの分野にわたる",
     },
     categories: {
@@ -210,7 +210,7 @@ export const TOOLS_JA: ToolsDoc = {
         },
         export_all_data: {
             description:
-                "記録したすべてのデータを1つのZIPとしてエクスポートします — meals.csv、water.csv、weight.csv、goals.csv、profile.csv、そして列と単位を説明するREADME.txt — 有効期限60分の同じプライベートリンクで提供されます。現時点で再インポートできるのは食事データのみです。",
+                "記録したすべてのデータを1つのZIPとしてエクスポートします — meals.csv、water.csv、weight.csv、activity.csv、goals.csv、profile.csv、そして列と単位を説明するREADME.txt — 有効期限60分の同じプライベートリンクで提供されます。現時点で再インポートできるのは食事データのみです。",
             params: {},
             example:
                 "食事、水分、体重、目標など、すべてのデータをエクスポートして",
@@ -337,6 +337,22 @@ export const TOOLS_JA: ToolsDoc = {
                 "今日の摂取量が目標に対してどうなっているかを確認します — 摂取量対目標のリングと体重の進捗です。マクロのリングをタップすると、どの食事が寄与したかがわかります。",
             params: {},
             example: "今日の目標に対する達成状況は？",
+        },
+        log_active_calories: {
+            description:
+                "ウォッチが記録した1日のアクティブ(運動)カロリーを記録します — Garmin、Apple Watch、ヘルスケアに入るものなら何でも。その日のカロリー目標に加算され、たんぱく質・炭水化物・脂質も同じ比率で増えます:1,800 + アクティブ300 → 2,100 kcal。",
+            params: {
+                active_kcal:
+                    "その日のアクティブエネルギー合計(kcal)。同じ日をもう一度記録すると置き換わり、0で消去されます。",
+                date: "ローカル日付 YYYY-MM-DD(既定は今日)。",
+            },
+            example: "Garminによると今日はアクティブカロリーを320消費した",
+        },
+        setup_activity_sync: {
+            description:
+                "iPhoneからアクティブカロリーを自動同期します。個人用の同期リンクとトークン、そしてヘルスケアのアクティブエネルギー(Garminの分も含む)を送信するiOSショートカットの手順を返すので、毎日の目標が自動で更新されます。もう一度実行すると古いトークンは無効になります。",
+            params: {},
+            example: "Appleヘルスケアからのカロリー自動同期を設定して",
         },
         get_nutrition_summary: {
             description:

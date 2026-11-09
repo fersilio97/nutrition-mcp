@@ -89,6 +89,10 @@ export interface WidgetStrings {
          * showing a date other than the viewer's today. Placeholder: {date}
          * (pre-formatted via shared/date.js's shortDate). */
         caloriesOn: string;
+        /** Appended to the calorie label when the day's goal includes
+         * active (exercise) kcal from a wearable. Placeholder: {n}
+         * (pre-formatted number). */
+        activeBonus: string;
         /** Hint line under an interactive strip. */
         tapHint: string;
         /** Appended sentence in an interactive tile's aria-label, e.g.
@@ -407,6 +411,7 @@ export const WIDGET_STRINGS_EN: WidgetStrings = {
         noneLogged: "none logged",
         caloriesToday: "Calories today",
         caloriesOn: "Calories · {date}",
+        activeBonus: "goal +{n} active",
         tapHint: "Tap a metric for the meals behind it",
         showMealsContributed: "Show the meals that contributed.",
         byMealTitle: "{label} by meal",

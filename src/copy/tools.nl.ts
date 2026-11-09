@@ -8,17 +8,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_NL: ToolsDoc = {
     meta: {
-        title: "Toolreferentie: alle 36 tools",
+        title: "Toolreferentie: alle 38 tools",
         description:
-            "Alle 36 tools die de Nutrition MCP-server aan je AI geeft — maaltijden loggen, barcodes scannen, je geschiedenis uit een andere app importeren, water en gewicht bijhouden, doelen instellen en trends bekijken. Volledige referentie met beschrijvingen en voorbeeldzinnen.",
+            "Alle 38 tools die de Nutrition MCP-server aan je AI geeft — maaltijden loggen, barcodes scannen, je geschiedenis uit een andere app importeren, water en gewicht bijhouden, doelen instellen en trends bekijken. Volledige referentie met beschrijvingen en voorbeeldzinnen.",
         ogDescription:
-            "Alle 36 tools die de Nutrition MCP-server aan je AI geeft, inclusief een CSV-importer voor je geschiedenis uit een andere app — met beschrijvingen en voorbeeldzinnen.",
+            "Alle 38 tools die de Nutrition MCP-server aan je AI geeft, inclusief een CSV-importer voor je geschiedenis uit een andere app — met beschrijvingen en voorbeeldzinnen.",
     },
     hero: {
         eyebrow: "Referentie",
         title: "Alles wat je AI kan doen",
         lead: "Je roept deze tools nooit rechtstreeks aan — je praat gewoon, en de assistent kiest de juiste tool. Hier is de volledige set die de Nutrition MCP-server aanbiedt, met wat elke tool doet en een zin die hem activeert.",
-        countBold: "36 tools",
+        countBold: "38 tools",
         countTail: "verdeeld over 7 categorieën",
     },
     categories: {
@@ -204,7 +204,7 @@ export const TOOLS_NL: ToolsDoc = {
         },
         export_all_data: {
             description:
-                "Exporteer alles wat je hebt bijgehouden als één ZIP-bestand — meals.csv, water.csv, weight.csv, goals.csv, profile.csv en een README.txt die de kolommen en eenheden uitlegt — met dezelfde privélink, 60 minuten geldig. Maaltijden zijn voorlopig het enige onderdeel dat je weer kunt importeren.",
+                "Exporteer alles wat je hebt bijgehouden als één ZIP-bestand — meals.csv, water.csv, weight.csv, activity.csv, goals.csv, profile.csv en een README.txt die de kolommen en eenheden uitlegt — met dezelfde privélink, 60 minuten geldig. Maaltijden zijn voorlopig het enige onderdeel dat je weer kunt importeren.",
             params: {},
             example:
                 "Exporteer al mijn gegevens — maaltijden, water, gewicht en doelen",
@@ -337,6 +337,24 @@ export const TOOLS_NL: ToolsDoc = {
                 "Bekijk hoe je inname van vandaag zich verhoudt tot je doelen — ringen met inname versus doel plus voortgang van je lichaamsgewicht. Tik op een macroring om te zien welke maaltijden eraan hebben bijgedragen.",
             params: {},
             example: "Hoe doe ik het vandaag ten opzichte van mijn doelen?",
+        },
+        log_active_calories: {
+            description:
+                "Leg de actieve (sport)calorieën vast die je horloge voor een dag meldt — Garmin, Apple Watch, alles in Apple Gezondheid. Ze komen bij het caloriedoel van die dag, en eiwit, koolhydraten en vet groeien naar verhouding mee: 1.800 + 300 actief → 2.100 kcal.",
+            params: {
+                active_kcal:
+                    "De totale actieve energie van de dag in kcal. Dezelfde dag opnieuw loggen vervangt hem; 0 wist hem.",
+                date: "Lokale datum JJJJ-MM-DD (standaard vandaag).",
+            },
+            example:
+                "Mijn Garmin zegt dat ik vandaag 320 actieve calorieën heb verbrand",
+        },
+        setup_activity_sync: {
+            description:
+                "Synchroniseer actieve calorieën automatisch vanaf je iPhone. Geeft een persoonlijke synclink en token, plus stapsgewijze instructies voor iOS Opdrachten die de actieve energie uit Apple Gezondheid versturen — ook van een Garmin — zodat de doelen van elke dag vanzelf bijwerken. Opnieuw uitvoeren trekt de oude token in.",
+            params: {},
+            example:
+                "Stel automatische caloriesynchronisatie met Apple Gezondheid in",
         },
         get_nutrition_summary: {
             description:

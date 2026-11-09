@@ -24,6 +24,7 @@ export const WIDGET_STRINGS_IT: WidgetStrings = {
         noneLogged: "nessuno registrato",
         caloriesToday: "Calorie di oggi",
         caloriesOn: "Calorie · {date}",
+        activeBonus: "obiettivo +{n} attive",
         tapHint: "Tocca un valore per vedere i pasti che lo compongono",
         showMealsContributed: "Mostra i pasti che hanno contribuito.",
         byMealTitle: "{label} per pasto",

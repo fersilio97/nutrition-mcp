@@ -38,6 +38,7 @@ export const PRIVACY_PL: LegalDoc = {
                     "<strong>Wpisy wody</strong> — ilość, notatki i znaczniki czasu.",
                     "<strong>Wpisy masy ciała</strong> — waga, notatki i znaczniki czasu. To dane dotyczące zdrowia i są traktowane dokładnie tak samo jak reszta Twoich wpisów.",
                     "<strong>Cele</strong> — Twoje dzienne cele dotyczące kalorii, białka, węglowodanów, tłuszczu, błonnika, cukru, alkoholu, kofeiny i wody, a także docelowa waga.",
+                    "<strong>Aktywność</strong> — aktywne kalorie (z ćwiczeń) na dzień, jeśli je zapisujesz lub połączysz synchronizację z Apple Zdrowie, oraz zahashowany token synchronizacji. Służą wyłącznie do podniesienia celów kalorycznych i makro na dany dzień i są traktowane dokładnie tak jak reszta Twoich wpisów.",
                     "<strong>Ustawienia profilu</strong> — Twoja strefa czasowa IANA, preferowana jednostka wagi, informacja, czy śledzenie alkoholu jest włączone i w jakim standardowym drinku jest pokazywane, oraz czy widżety w czacie są włączone.",
                     "<strong>Telemetria korzystania z narzędzi</strong> — dla każdego wywołania narzędzia MCP: które narzędzie zostało uruchomione, czy zakończyło się sukcesem, ile trwało, ogólna kategoria błędu w razie niepowodzenia, długość w dniach każdego zapytanego zakresu dat oraz identyfikator sesji MCP. Jest powiązana z Twoim identyfikatorem konta. Nigdy nie zawiera treści Twoich wpisów.",
                 ]),

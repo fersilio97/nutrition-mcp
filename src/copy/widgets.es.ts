@@ -24,6 +24,7 @@ export const WIDGET_STRINGS_ES: WidgetStrings = {
         noneLogged: "nada registrado",
         caloriesToday: "Calorías de hoy",
         caloriesOn: "Calorías · {date}",
+        activeBonus: "objetivo +{n} activas",
         tapHint: "Toca una métrica para ver las comidas detrás de ella",
         showMealsContributed: "Mostrar las comidas que contribuyeron.",
         byMealTitle: "{label} por comida",

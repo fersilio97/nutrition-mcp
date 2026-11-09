@@ -13,17 +13,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_IT: ToolsDoc = {
     meta: {
-        title: "Guida agli strumenti: tutti i 36 strumenti",
+        title: "Guida agli strumenti: tutti i 38 strumenti",
         description:
-            "Tutti i 36 strumenti che il server Nutrition MCP mette a disposizione della tua IA — registra i pasti, scansiona codici a barre, importa il tuo storico da un'altra app, monitora acqua e peso, imposta obiettivi e rivedi gli andamenti. Guida completa con descrizioni ed esempi di richieste.",
+            "Tutti i 38 strumenti che il server Nutrition MCP mette a disposizione della tua IA — registra i pasti, scansiona codici a barre, importa il tuo storico da un'altra app, monitora acqua e peso, imposta obiettivi e rivedi gli andamenti. Guida completa con descrizioni ed esempi di richieste.",
         ogDescription:
-            "Tutti i 36 strumenti che il server Nutrition MCP mette a disposizione della tua IA, incluso un importatore CSV per il tuo storico da un'altra app — con descrizioni ed esempi di richieste.",
+            "Tutti i 38 strumenti che il server Nutrition MCP mette a disposizione della tua IA, incluso un importatore CSV per il tuo storico da un'altra app — con descrizioni ed esempi di richieste.",
     },
     hero: {
         eyebrow: "Guida di riferimento",
         title: "Tutto quello che la tua IA può fare",
         lead: "Non li chiami mai direttamente — parli e basta, e l'assistente sceglie lo strumento giusto. Ecco l'elenco completo che il server Nutrition MCP mette a disposizione, con cosa fa ciascuno e una frase che lo attiva.",
-        countBold: "36 strumenti",
+        countBold: "38 strumenti",
         countTail: "in 7 aree",
     },
     categories: {
@@ -208,7 +208,7 @@ export const TOOLS_IT: ToolsDoc = {
         },
         export_all_data: {
             description:
-                "Esporta tutto ciò che hai tracciato come un unico file ZIP — meals.csv, water.csv, weight.csv, goals.csv, profile.csv e un README.txt che spiega colonne e unità di misura — con lo stesso link privato, valido per 60 minuti. Per ora i pasti sono l'unica parte che può essere reimportata.",
+                "Esporta tutto ciò che hai tracciato come un unico file ZIP — meals.csv, water.csv, weight.csv, activity.csv, goals.csv, profile.csv e un README.txt che spiega colonne e unità di misura — con lo stesso link privato, valido per 60 minuti. Per ora i pasti sono l'unica parte che può essere reimportata.",
             params: {},
             example:
                 "Esporta tutti i miei dati — pasti, acqua, peso e obiettivi",
@@ -340,6 +340,24 @@ export const TOOLS_IT: ToolsDoc = {
                 "Vedi come si posiziona l'assunzione di oggi rispetto ai tuoi obiettivi — anelli di assunzione-contro-obiettivo più i progressi sul peso corporeo. Tocca un anello di una macro per vedere quali pasti hanno contribuito.",
             params: {},
             example: "Come sto andando rispetto ai miei obiettivi oggi?",
+        },
+        log_active_calories: {
+            description:
+                "Registra le calorie attive (di allenamento) che il tuo orologio segna per un giorno — Garmin, Apple Watch, qualsiasi cosa in Salute. Si sommano all'obiettivo calorico di quel giorno, e proteine, carboidrati e grassi crescono in proporzione: 1.800 + 300 attive → 2.100 kcal.",
+            params: {
+                active_kcal:
+                    "L'energia attiva totale del giorno in kcal. Registrare di nuovo lo stesso giorno la sostituisce; 0 la cancella.",
+                date: "Data locale AAAA-MM-GG (predefinita: oggi).",
+            },
+            example:
+                "Il mio Garmin dice che oggi ho bruciato 320 calorie attive",
+        },
+        setup_activity_sync: {
+            description:
+                "Sincronizza automaticamente le calorie attive dal tuo iPhone. Restituisce un link e un token di sincronizzazione personali, più istruzioni passo passo per Comandi Rapidi di iOS che inviano l'energia attiva di Salute — anche da un Garmin — così gli obiettivi di ogni giorno si aggiornano da soli. Rieseguirlo revoca il vecchio token.",
+            params: {},
+            example:
+                "Configura la sincronizzazione automatica delle calorie da Apple Salute",
         },
         get_nutrition_summary: {
             description:

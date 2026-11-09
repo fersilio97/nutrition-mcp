@@ -2233,7 +2233,7 @@ export const INDEX_ES: IndexDoc = {
         note: "Todo esto es opcional. Puedes hacerlo ahora, más tarde o nunca: simplemente empieza a registrar y ajusta esto cuando quieras.",
         toolsCta: {
             heading: "¿Curiosidad por saber qué puede hacer de verdad?",
-            body: "Explora las 36 herramientas (registro, códigos de barras, agua, peso, objetivos y tendencias) con una descripción y una frase de ejemplo para cada una.",
+            body: "Explora las 38 herramientas (registro, códigos de barras, agua, peso, objetivos y tendencias) con una descripción y una frase de ejemplo para cada una.",
             arrow: "Explorar las herramientas",
         },
     },
@@ -2327,7 +2327,7 @@ export const INDEX_ES: IndexDoc = {
             {
                 icon: "fa-solid fa-file-csv",
                 title: "Exporta y sé dueño de tus datos",
-                body: "Llévate todo lo que tienes aquí (comidas, agua, peso, objetivos y perfil) como un único ZIP de archivos CSV. Por ahora, las comidas son la única parte que se puede volver a importar. O elimina tu cuenta y tus datos, con la misma facilidad.",
+                body: "Llévate todo lo que tienes aquí (comidas, agua, peso, actividad, objetivos y perfil) como un único ZIP de archivos CSV. Por ahora, las comidas son la única parte que se puede volver a importar. O elimina tu cuenta y tus datos, con la misma facilidad.",
             },
         ],
     },

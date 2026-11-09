@@ -4,9 +4,11 @@ import {
     getAllMeals,
     getAllWater,
     getAllWeight,
+    getAllActivity,
     getNutritionGoals,
     getProfile,
     timezoneFromProfile,
+    type ActivityDay,
     type Meal,
     type NutritionGoals,
     type Profile,
@@ -284,6 +286,29 @@ export function buildProfileCsv(profile: Profile | null, tz: string): string {
     return rows.join("\n");
 }
 
+/** Column order for activity.csv. */
+export const ACTIVITY_CSV_COLUMNS = ["date", "active_kcal", "source"] as const;
+
+/**
+ * One row per local day with recorded active energy. `date` is already a
+ * local calendar date (the column is a `date`, bucketed in the profile zone at
+ * write time), not an instant, so there is no wall clock here to pair with a
+ * timezone column. Header always emitted, like every other builder.
+ */
+export function buildActivityCsv(rows: ActivityDay[]): string {
+    const out = [ACTIVITY_CSV_COLUMNS.join(",")];
+    for (const r of rows) {
+        out.push(
+            [
+                csvEscape(r.date),
+                csvEscape(r.active_kcal),
+                csvEscape(r.source),
+            ].join(","),
+        );
+    }
+    return out.join("\n");
+}
+
 /**
  * The archive's contents, in order. Exported so callers that describe the
  * export to a human — the tool's response text, the site copy and its test —
@@ -293,6 +318,7 @@ export const EXPORT_ARCHIVE_FILES = [
     "meals.csv",
     "water.csv",
     "weight.csv",
+    "activity.csv",
     "goals.csv",
     "profile.csv",
     "README.txt",
@@ -311,7 +337,7 @@ export function buildExportReadme(opts: {
     tz: string;
     tzConfigured: boolean;
     weightUnit: WeightUnit;
-    counts: { meals: number; water: number; weight: number };
+    counts: { meals: number; water: number; weight: number; activity: number };
 }): string {
     const { generatedAt, tz, tzConfigured, weightUnit, counts } = opts;
     const rows = (n: number) => `${n} row${n === 1 ? "" : "s"}`;
@@ -337,6 +363,7 @@ export function buildExportReadme(opts: {
         `meals.csv    ${rows(counts.meals)} — every meal you have logged: time, description, calories and macros.`,
         `water.csv    ${rows(counts.water)} — every water entry, in millilitres.`,
         `weight.csv   ${rows(counts.weight)} — every weigh-in, as stored grams and as ${weightUnit}.`,
+        `activity.csv ${rows(counts.activity)} — active (exercise) kcal per local day, from a wearable sync or logged by hand; each one raised that day's calorie goal.`,
         "goals.csv    your current daily targets — one row, or a header alone if you have never set goals.",
         "profile.csv  your settings: timezone, preferred units, and display toggles — one row, or a header alone if you have no profile yet.",
         "README.txt   this file.",
@@ -354,13 +381,13 @@ export function buildExportReadme(opts: {
         "Re-importing",
         "------------",
         "Only meals.csv can be read back in. Hand it to start_meal_import (which parses it in your browser) or to bulk_import_meals; its column names are exactly the ones the importer expects, and re-importing the same file twice is a no-op rather than a set of duplicates.",
-        "water.csv, weight.csv, goals.csv and profile.csv are export-only for now — there is no import path for them, so keep this archive if you want that history back.",
+        "water.csv, weight.csv, activity.csv, goals.csv and profile.csv are export-only for now — there is no import path for them, so keep this archive if you want that history back.",
         "",
     ].join("\n");
 }
 
 export interface FullExportResult {
-    counts: { meals: number; water: number; weight: number };
+    counts: { meals: number; water: number; weight: number; activity: number };
     goals: boolean;
     profile: boolean;
     /** Absent only when the account has nothing at all to export. */
@@ -380,10 +407,11 @@ export async function exportAllData(userId: string): Promise<FullExportResult> {
     // an account with years of history pages through meals, water and weight,
     // and serialising those pushes the tool past the point where a host gives
     // up on it.
-    const [meals, water, weight, goals, profile] = await Promise.all([
+    const [meals, water, weight, activity, goals, profile] = await Promise.all([
         getAllMeals(userId),
         getAllWater(userId),
         getAllWeight(userId),
+        getAllActivity(userId),
         getNutritionGoals(userId),
         getProfile(userId),
     ]);
@@ -392,6 +420,7 @@ export async function exportAllData(userId: string): Promise<FullExportResult> {
         meals: meals.length,
         water: water.length,
         weight: weight.length,
+        activity: activity.length,
     };
 
     // Both preferences come off the profile row already in hand. The
@@ -415,6 +444,7 @@ export async function exportAllData(userId: string): Promise<FullExportResult> {
         counts.meals === 0 &&
         counts.water === 0 &&
         counts.weight === 0 &&
+        counts.activity === 0 &&
         !goals &&
         !profile
     ) {
@@ -433,6 +463,7 @@ export async function exportAllData(userId: string): Promise<FullExportResult> {
         "meals.csv": buildMealsCsv(meals, tz),
         "water.csv": buildWaterCsv(water, tz),
         "weight.csv": buildWeightCsv(weight, tz, weightUnit),
+        "activity.csv": buildActivityCsv(activity),
         "goals.csv": buildGoalsCsv(goals, tz),
         "profile.csv": buildProfileCsv(profile, tz),
         "README.txt": buildExportReadme({

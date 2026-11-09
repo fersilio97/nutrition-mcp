@@ -24,6 +24,7 @@ export const WIDGET_STRINGS_PL: WidgetStrings = {
         noneLogged: "brak wpisów",
         caloriesToday: "Kalorie dzisiaj",
         caloriesOn: "Kalorie · {date}",
+        activeBonus: "cel +{n} aktywnych",
         tapHint: "Dotknij wskaźnik, aby zobaczyć posiłki",
         showMealsContributed: "Pokaż posiłki, które się na to złożyły.",
         byMealTitle: "{label} według posiłków",

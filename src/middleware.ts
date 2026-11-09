@@ -1,5 +1,5 @@
 import type { Context, Next } from "hono";
-import { getUserIdByToken } from "./supabase.js";
+import { getUserIdByToken, getUserIdByIngestToken } from "./supabase.js";
 import { maskIp } from "./net.js";
 import { resourceMetadataUrl } from "./discovery.js";
 import { getBaseUrl } from "./url.js";
@@ -114,6 +114,45 @@ export const authenticateBearer = async (c: Context, next: Next) => {
     clearAuthFailures(getClientIp(c));
 
     c.set("accessToken", token);
+    c.set("userId", lookup.userId);
+    await next();
+};
+
+// Bearer auth for POST /api/activity, which takes the long-lived ingest token
+// setup_activity_sync mints — not an OAuth token, so no WWW-Authenticate
+// resource-metadata pointer (a phone Shortcut cannot run an OAuth flow, and
+// pointing it at one would only mislead). Failures still count strikes, so a
+// guessing client is shed by banRepeatAuthFailures exactly as on /mcp.
+export const authenticateIngestToken = async (c: Context, next: Next) => {
+    const authHeader = c.req.header("Authorization");
+    const token = authHeader?.startsWith("Bearer ")
+        ? authHeader.substring(7).trim()
+        : "";
+    const lookup = token
+        ? await getUserIdByIngestToken(token)
+        : ({ status: "invalid" } as const);
+
+    if (lookup.status === "unavailable") {
+        return c.json(
+            {
+                error: "unavailable",
+                error_description: "Unable to verify token, try again",
+            },
+            503,
+        );
+    }
+    if (lookup.status === "invalid") {
+        noteAuthFailure(getClientIp(c));
+        return c.json(
+            {
+                error: "invalid_token",
+                error_description:
+                    "Sync token missing or revoked. Ask your assistant to run setup_activity_sync for a new one.",
+            },
+            401,
+        );
+    }
+    clearAuthFailures(getClientIp(c));
     c.set("userId", lookup.userId);
     await next();
 };

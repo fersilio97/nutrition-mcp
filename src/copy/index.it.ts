@@ -2240,7 +2240,7 @@ export const INDEX_IT: IndexDoc = {
         note: "Tutto questo è facoltativo. Puoi farlo ora, più tardi o mai — inizia semplicemente a registrare e imposta queste opzioni quando vuoi.",
         toolsCta: {
             heading: "Curioso di scoprire cosa può fare davvero?",
-            body: "Sfoglia tutti i 36 strumenti — registrazione, codici a barre, acqua, peso, obiettivi e andamenti — con una descrizione e un esempio di richiesta per ciascuno.",
+            body: "Sfoglia tutti i 38 strumenti — registrazione, codici a barre, acqua, peso, obiettivi e andamenti — con una descrizione e un esempio di richiesta per ciascuno.",
             arrow: "Esplora gli strumenti",
         },
     },
@@ -2334,7 +2334,7 @@ export const INDEX_IT: IndexDoc = {
             {
                 icon: "fa-solid fa-file-csv",
                 title: "Esporta e possiedi i tuoi dati",
-                body: "Porta via tutto ciò che hai qui — pasti, acqua, peso, obiettivi e profilo — come un unico ZIP di file CSV. Per ora, i pasti sono l'unica parte che può essere reimportata. Elimina il tuo account e i tuoi dati quando vuoi.",
+                body: "Porta via tutto ciò che hai qui — pasti, acqua, peso, attività, obiettivi e profilo — come un unico ZIP di file CSV. Per ora, i pasti sono l'unica parte che può essere reimportata. Elimina il tuo account e i tuoi dati quando vuoi.",
             },
         ],
     },

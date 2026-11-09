@@ -2328,7 +2328,7 @@ export const INDEX_FR: IndexDoc = {
         note: "Tout ceci est facultatif. Tu peux le faire maintenant, plus tard, ou jamais — commence simplement à enregistrer et règle ça quand tu veux.",
         toolsCta: {
             heading: "Curieux de voir tout ce que ça peut faire ?",
-            body: "Parcours les 36 outils — enregistrement, codes-barres, eau, poids, objectifs et tendances — avec une description et un exemple de formulation pour chacun.",
+            body: "Parcours les 38 outils — enregistrement, codes-barres, eau, poids, objectifs et tendances — avec une description et un exemple de formulation pour chacun.",
             arrow: "Explorer les outils",
         },
     },
@@ -2425,7 +2425,7 @@ export const INDEX_FR: IndexDoc = {
             {
                 icon: "fa-solid fa-file-csv",
                 title: "Exporte et garde le contrôle de tes données",
-                body: "Récupère tout ce que tu as ici — repas, eau, poids, objectifs et profil — dans un seul ZIP de fichiers CSV. Les repas sont pour l'instant la seule partie qui peut être réimportée. Supprime ton compte et tes données quand tu veux.",
+                body: "Récupère tout ce que tu as ici — repas, eau, poids, activité, objectifs et profil — dans un seul ZIP de fichiers CSV. Les repas sont pour l'instant la seule partie qui peut être réimportée. Supprime ton compte et tes données quand tu veux.",
             },
         ],
     },

@@ -873,6 +873,111 @@ export async function getNutritionGoals(
     return (data as NutritionGoals | null) ?? null;
 }
 
+// ---------- Activity (active energy per local day) ----------
+
+export interface ActivityDay {
+    user_id: string;
+    /** Local calendar date, YYYY-MM-DD, in the user's timezone. */
+    date: string;
+    active_kcal: number;
+    source: string | null;
+    updated_at: string;
+}
+
+/** Overwrites the day's figure: active energy is a cumulative daily total, so
+ *  a re-sync replaces, never adds. */
+export async function upsertActivity(
+    userId: string,
+    date: string,
+    activeKcal: number,
+    source: string | null,
+): Promise<ActivityDay> {
+    const { data, error } = await getSupabase()
+        .from("activity_log")
+        .upsert(
+            {
+                user_id: userId,
+                date,
+                active_kcal: Math.round(activeKcal),
+                source,
+                updated_at: new Date().toISOString(),
+            },
+            { onConflict: "user_id,date" },
+        )
+        .select()
+        .single();
+    if (error) throw new Error(`Failed to save activity: ${error.message}`);
+    return data as ActivityDay;
+}
+
+export async function getActivityByDate(
+    userId: string,
+    date: string,
+): Promise<ActivityDay | null> {
+    const { data, error } = await getSupabase()
+        .from("activity_log")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("date", date)
+        .maybeSingle();
+    if (error) throw new Error(`Failed to get activity: ${error.message}`);
+    return (data as ActivityDay | null) ?? null;
+}
+
+/** Inclusive local-date range. At most one row per day, so a year is 366
+ *  rows — well under PostgREST's 1000-row cap. */
+export async function getActivityInRange(
+    userId: string,
+    startDate: string,
+    endDate: string,
+): Promise<ActivityDay[]> {
+    const { data, error } = await getSupabase()
+        .from("activity_log")
+        .select("*")
+        .eq("user_id", userId)
+        .gte("date", startDate)
+        .lte("date", endDate)
+        .order("date", { ascending: true });
+    if (error) throw new Error(`Failed to get activity: ${error.message}`);
+    return (data as ActivityDay[]) ?? [];
+}
+
+/** Every activity row for the export, oldest first. Paged and reconciled
+ *  against an exact count like getAllWater — `.limit()` cannot raise the
+ *  PostgREST row cap, and a quiet partial backup is what #66 was. */
+export async function getAllActivity(userId: string): Promise<ActivityDay[]> {
+    const { count, error: countErr } = await getSupabase()
+        .from("activity_log")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId);
+    if (countErr)
+        throw new Error(`Failed to count activity: ${countErr.message}`);
+    const expected = count ?? 0;
+    if (expected === 0) return [];
+
+    // (user_id, date) is the primary key, so `date` alone is a stable order.
+    const rows = await fetchAllPages<ActivityDay>(async (from, to) => {
+        const { data, error } = await getSupabase()
+            .from("activity_log")
+            .select("*")
+            .eq("user_id", userId)
+            .order("date", { ascending: true })
+            .range(from, to);
+        if (error) throw new Error(`Failed to get activity: ${error.message}`);
+        return (data as ActivityDay[]) ?? [];
+    });
+    if (rows.length < expected)
+        throw new Error(
+            `getAllActivity: fetched ${rows.length} rows but count reported ${expected} — export would be truncated`,
+        );
+    return rows;
+}
+
+/** Map of date → active kcal, for joining onto per-day views. */
+export function activityByDate(rows: ActivityDay[]): Map<string, number> {
+    return new Map(rows.map((r) => [r.date, r.active_kcal]));
+}
+
 // ---------- Water log ----------
 
 export interface WaterEntry {
@@ -1354,6 +1459,20 @@ export async function deleteAllUserData(userId: string): Promise<void> {
     if (weightErr)
         throw new Error(`Failed to delete weight log: ${weightErr.message}`);
 
+    const { error: activityErr } = await sb
+        .from("activity_log")
+        .delete()
+        .eq("user_id", userId);
+    if (activityErr)
+        throw new Error(`Failed to delete activity: ${activityErr.message}`);
+
+    const { error: ingestErr } = await sb
+        .from("ingest_tokens")
+        .delete()
+        .eq("user_id", userId);
+    if (ingestErr)
+        throw new Error(`Failed to delete sync token: ${ingestErr.message}`);
+
     const { error: goalsErr } = await sb
         .from("nutrition_goals")
         .delete()
@@ -1493,6 +1612,73 @@ export async function getUserIdByToken(token: string): Promise<TokenLookup> {
         // Network-level failure never reaches the `error` field.
         return { status: "unavailable" };
     }
+}
+
+// ---------- Ingest tokens (/api/activity) ----------
+
+export interface IngestTokenStatus {
+    created_at: string;
+    last_used_at: string | null;
+}
+
+/** Mints a fresh ingest token for the user, replacing (and so revoking) any
+ *  previous one. The raw value is returned exactly once. */
+export async function rotateIngestToken(userId: string): Promise<string> {
+    // 256 bits, hex. Same digest-at-rest contract as OAuth tokens above.
+    const raw =
+        "nmi_" +
+        Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) =>
+            b.toString(16).padStart(2, "0"),
+        ).join("");
+    const { error } = await getSupabase()
+        .from("ingest_tokens")
+        .upsert(
+            {
+                user_id: userId,
+                token_hash: hashToken(raw),
+                created_at: new Date().toISOString(),
+                last_used_at: null,
+            },
+            { onConflict: "user_id" },
+        );
+    if (error) throw new Error(`Failed to store sync token: ${error.message}`);
+    return raw;
+}
+
+export async function getUserIdByIngestToken(
+    token: string,
+): Promise<TokenLookup> {
+    try {
+        const { data, error } = await getSupabase()
+            .from("ingest_tokens")
+            .select("user_id")
+            .eq("token_hash", hashToken(token))
+            .maybeSingle();
+        if (error) return { status: "unavailable" };
+        if (!data) return { status: "invalid" };
+        return { status: "valid", userId: data.user_id as string };
+    } catch {
+        return { status: "unavailable" };
+    }
+}
+
+export async function touchIngestToken(userId: string): Promise<void> {
+    await getSupabase()
+        .from("ingest_tokens")
+        .update({ last_used_at: new Date().toISOString() })
+        .eq("user_id", userId);
+}
+
+export async function getIngestTokenStatus(
+    userId: string,
+): Promise<IngestTokenStatus | null> {
+    const { data, error } = await getSupabase()
+        .from("ingest_tokens")
+        .select("created_at, last_used_at")
+        .eq("user_id", userId)
+        .maybeSingle();
+    if (error) throw new Error(`Failed to get sync status: ${error.message}`);
+    return (data as IngestTokenStatus | null) ?? null;
 }
 
 // ---------- Patreon tokens ----------

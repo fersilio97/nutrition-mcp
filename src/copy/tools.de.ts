@@ -6,17 +6,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_DE: ToolsDoc = {
     meta: {
-        title: "Werkzeug-Referenz: Alle 36 Werkzeuge",
+        title: "Werkzeug-Referenz: Alle 38 Werkzeuge",
         description:
-            "Alle 36 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt — Mahlzeiten erfassen, Barcodes scannen, deine Historie aus einer anderen App importieren, Wasser und Gewicht verfolgen, Ziele festlegen und Trends auswerten. Vollständige Referenz mit Beschreibungen und Beispielsätzen.",
+            "Alle 38 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt — Mahlzeiten erfassen, Barcodes scannen, deine Historie aus einer anderen App importieren, Wasser und Gewicht verfolgen, Ziele festlegen und Trends auswerten. Vollständige Referenz mit Beschreibungen und Beispielsätzen.",
         ogDescription:
-            "Alle 36 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt, inklusive eines CSV-Importers für deine Historie aus einer anderen App — mit Beschreibungen und Beispielsätzen.",
+            "Alle 38 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt, inklusive eines CSV-Importers für deine Historie aus einer anderen App — mit Beschreibungen und Beispielsätzen.",
     },
     hero: {
         eyebrow: "Referenz",
         title: "Alles, was deine KI kann",
         lead: "Du rufst diese Werkzeuge nie selbst auf — du sprichst einfach, und der Assistent wählt das richtige Werkzeug. Hier ist die vollständige Liste, die der Nutrition-MCP-Server bereitstellt, mit dem, was jedes tut, und einem Satz, der es auslöst.",
-        countBold: "36 Werkzeuge",
+        countBold: "38 Werkzeuge",
         countTail: "in 7 Bereichen",
     },
     categories: {
@@ -203,7 +203,7 @@ export const TOOLS_DE: ToolsDoc = {
         },
         export_all_data: {
             description:
-                "Exportiere alles, was du erfasst hast, als ein einziges ZIP — meals.csv, water.csv, weight.csv, goals.csv, profile.csv und eine README.txt, die die Spalten und Einheiten erklärt — mit demselben privaten Link, 60 Minuten gültig. Mahlzeiten sind bisher der einzige Teil, der sich zurück importieren lässt.",
+                "Exportiere alles, was du erfasst hast, als ein einziges ZIP — meals.csv, water.csv, weight.csv, activity.csv, goals.csv, profile.csv und eine README.txt, die die Spalten und Einheiten erklärt — mit demselben privaten Link, 60 Minuten gültig. Mahlzeiten sind bisher der einzige Teil, der sich zurück importieren lässt.",
             params: {},
             example:
                 "Exportier alle meine Daten — Mahlzeiten, Wasser, Gewicht und Ziele",
@@ -336,6 +336,24 @@ export const TOOLS_DE: ToolsDoc = {
                 "Sieh, wie die heutige Aufnahme im Vergleich zu deinen Zielen abschneidet — Aufnahme-vs-Ziel-Ringe plus Fortschritt beim Körpergewicht. Tipp auf einen Makro-Ring, um zu sehen, welche Mahlzeiten dazu beigetragen haben.",
             params: {},
             example: "Wie stehe ich heute im Vergleich zu meinen Zielen da?",
+        },
+        log_active_calories: {
+            description:
+                "Erfasse die aktiven (Trainings-)Kalorien, die deine Uhr für einen Tag meldet — Garmin, Apple Watch, alles in Apple Health. Sie kommen auf das Kalorienziel des Tages, und Protein, Kohlenhydrate und Fett wachsen anteilig mit: 1.800 + 300 aktiv → 2.100 kcal.",
+            params: {
+                active_kcal:
+                    "Die gesamte aktive Energie des Tages in kcal. Ein erneuter Eintrag für denselben Tag ersetzt ihn; 0 löscht ihn.",
+                date: "Lokales Datum JJJJ-MM-TT (Standard: heute).",
+            },
+            example:
+                "Meine Garmin sagt, ich habe heute 320 aktive Kalorien verbrannt",
+        },
+        setup_activity_sync: {
+            description:
+                "Synchronisiere aktive Kalorien automatisch von deinem iPhone. Liefert einen persönlichen Sync-Link samt Token und eine Schritt-für-Schritt-Anleitung für iOS-Kurzbefehle, die die aktive Energie aus Apple Health senden — auch von einer Garmin —, damit sich deine Tagesziele von selbst anpassen. Ein erneuter Aufruf widerruft den alten Token.",
+            params: {},
+            example:
+                "Richte die automatische Kalorien-Synchronisierung mit Apple Health ein",
         },
         get_nutrition_summary: {
             description:

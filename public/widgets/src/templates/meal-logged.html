@@ -227,7 +227,11 @@
                     // alcohol, which is also the case in which no alcohol
                     // figure reaches the strip; macroCtxOf falls back to the
                     // server's own default of "us".
-                    { drinkUnit: data.drink_unit, calLabel },
+                    {
+                        drinkUnit: data.drink_unit,
+                        calLabel,
+                        activeKcal: data.active_kcal,
+                    },
                 );
 
                 // The meal that was just logged names itself on the header

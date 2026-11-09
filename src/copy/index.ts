@@ -2546,7 +2546,7 @@ const INDEX_EN: IndexDoc = {
         note: "Everything here is optional. You can do it now, later, or never — just start logging and set these whenever you like.",
         toolsCta: {
             heading: "Curious what it can actually do?",
-            body: "Browse all 36 tools — logging, barcodes, water, weight, goals, and trends — with a description and an example prompt for each.",
+            body: "Browse all 38 tools — logging, barcodes, water, weight, goals, and trends — with a description and an example prompt for each.",
             arrow: "Explore the tools",
         },
     },
@@ -2639,7 +2639,7 @@ const INDEX_EN: IndexDoc = {
             {
                 icon: "fa-solid fa-file-csv",
                 title: "Export & own your data",
-                body: "Take everything you have here — meals, water, weight, goals, and profile — as one ZIP of CSV files. Meals are the only part that can be imported back in for now. Delete your account and data whenever you want.",
+                body: "Take everything you have here — meals, water, weight, activity, goals, and profile — as one ZIP of CSV files. Meals are the only part that can be imported back in for now. Delete your account and data whenever you want.",
             },
         ],
     },

@@ -43,6 +43,12 @@ import {
     countMeals,
     existingIdempotencyKeys,
     existingMealIds,
+    upsertActivity,
+    getActivityByDate,
+    getActivityInRange,
+    activityByDate,
+    rotateIngestToken,
+    getIngestTokenStatus,
     type Meal,
     type NutritionGoals,
     type WaterEntry,
@@ -101,6 +107,13 @@ import {
 import { normalizeBarcode, lookupBarcode, formatFoodResult } from "./foods.js";
 import { formatMealSearchResults } from "./search.js";
 import { getWidgetHtml } from "./widgets.js";
+import {
+    adjustGoalsForActivity,
+    checkActiveKcal,
+    describeCalorieGoal,
+    isLocalDate,
+    type ActivityAdjustment,
+} from "./activity.js";
 
 // MCP Apps UI (https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/):
 // the get_nutrition_summary tool links to an HTML dashboard served as a ui://
@@ -506,6 +519,56 @@ export const TRENDS_DAY_ITEM = TOTALS_ITEM.extend({
 // widget hides the stat line entirely rather than picking a default.
 const DRINK_UNIT_FIELD = z.enum(["us", "uk"]).nullable();
 
+// Activity reads on DISPLAY paths never fail the tool: the adjustment is an
+// enhancement on top of the stored goals, so if activity_log is unreachable
+// (or, during a deploy, not migrated yet) log_meal still logs and progress
+// still renders — against the baseline, which is what it showed before this
+// feature existed. Logged so the gap is visible, not silent.
+async function activityOrNull(userId: string, date: string) {
+    try {
+        return await getActivityByDate(userId, date);
+    } catch (err) {
+        console.error(`[activity] read failed, using baseline goals: ${err}`);
+        return null;
+    }
+}
+
+async function activityRangeOrEmpty(
+    userId: string,
+    start: string,
+    end: string,
+) {
+    try {
+        return await getActivityInRange(userId, start, end);
+    } catch (err) {
+        console.error(`[activity] read failed, using baseline goals: ${err}`);
+        return [];
+    }
+}
+
+// Activity-adjusted goals (src/activity.ts). `goals` on every day-level payload
+// is the EFFECTIVE set — baseline plus that day's active kcal, macros scaled —
+// so a widget that only knows `goals` already renders the right targets.
+// `active_kcal` / `base_goals` say whether and how that happened; both null on a
+// day with no recorded activity (or no calorie goal to scale from).
+const ACTIVITY_FIELDS = {
+    active_kcal: z.number().nullable(),
+    base_goals: GOALS_ITEM.nullable(),
+};
+
+function activityPayloadOf(adj: ActivityAdjustment, alcohol: AlcoholDisplay) {
+    return {
+        active_kcal: adj.activeKcal,
+        base_goals: adj.base ? goalsPayloadOf(adj.base, alcohol) : null,
+    };
+}
+
+/** "\nCalorie goal today: 2,100 kcal (1,800 + 300 active)." — or "". */
+function activityLine(adj: ActivityAdjustment): string {
+    if (!adj.base || !adj.activeKcal) return "";
+    return `\nCalorie goal: ${describeCalorieGoal(adj)} — protein, carbs and fat scaled ×${adj.factor.toFixed(2)}.`;
+}
+
 // log_meal and update_meal share the same MCP Apps widget
 // (public/widgets/meal-logged.html). Both declare this identical output shape
 // and both build their payload via buildMealProgress() below, so the widget can
@@ -534,6 +597,7 @@ const MEAL_PROGRESS_OUTPUT_SCHEMA = z.object({
     }),
     has_goals: z.boolean(),
     goals: GOALS_ITEM.nullable(),
+    ...ACTIVITY_FIELDS,
     totals: TOTALS_ITEM,
     meals: z.array(MEAL_BREAKDOWN_ITEM),
 });
@@ -811,17 +875,20 @@ async function buildMealProgress(
     const tz = timezoneFromProfile(profile) ?? "UTC";
     const locale = localeFromProfile(profile) ?? "en";
     const mealDate = dateInTz(meal.logged_at, tz);
-    const [meals, waterEntries, goals] = await Promise.all([
+    const [meals, waterEntries, storedGoals, activity] = await Promise.all([
         getMealsByDate(userId, mealDate, tz),
         getWaterByDate(userId, mealDate, tz),
         getNutritionGoals(userId),
+        activityOrNull(userId, mealDate),
     ]);
+    const adj = adjustGoalsForActivity(storedGoals, activity?.active_kcal);
+    const goals = adj.goals;
     const totals = sumMeals(meals);
     totals.water_ml = sumWater(waterEntries);
     const present = nutrientPresence(meals);
 
     const progressSection = goals
-        ? `\n\nDaily progress (${mealDate}):\n${formatProgress(totals, goals, alcohol, present)}`
+        ? `\n\nDaily progress (${mealDate}):${activityLine(adj)}\n${formatProgress(totals, goals, alcohol, present)}`
         : "\n\nNo nutrition goals set — use the set_nutrition_goals tool to track progress against daily targets.";
 
     const structuredContent = {
@@ -845,6 +912,7 @@ async function buildMealProgress(
         },
         has_goals: goals != null,
         goals: goalsPayloadOf(goals, alcohol),
+        ...activityPayloadOf(adj, alcohol),
         totals: totalsPayloadOf(totals, alcohol, present.caffeine_mg),
         // Single day → label rows by meal type in the widget, not by date.
         meals: mealBreakdown(meals, null, alcohol),
@@ -1322,8 +1390,11 @@ export function registerTools(
     // exercise tool behaviour, not analytics attribution, and a row with no era
     // is exactly what a non-HTTP embedding should record.
     protocolEra?: "legacy" | "modern",
+    // The public origin the client reached us on, for setup_activity_sync's
+    // endpoint URL. Optional for the same reason as protocolEra.
+    baseUrl: string = "http://localhost",
 ) {
-    // One context for all 36 tools. clientInfo is a getter, not a value: at
+    // One context for all 38 tools. clientInfo is a getter, not a value: at
     // registration time the SDK has not yet resolved who is calling, and on the
     // modern leg it backfills the identity per request before dispatch.
     const analytics = {
@@ -2289,6 +2360,10 @@ export function registerTools(
                     TOTALS_ITEM.extend({
                         date: z.string(),
                         meal_count: z.number(),
+                        // Active kcal recorded for this day, or null. `goals`
+                        // above is the stored baseline; a day's own target is
+                        // that baseline plus this (see src/activity.ts).
+                        active_kcal: z.number().nullable(),
                     }),
                 ),
                 meals: z.array(MEAL_BREAKDOWN_ITEM),
@@ -2311,11 +2386,14 @@ export function registerTools(
                     );
                     const tz = await getUserTimezone(userId);
                     const locale = await getUserLocale(userId);
-                    const [meals, water, goals] = await Promise.all([
-                        getMealsInRange(userId, start_date, end_date, tz),
-                        getWaterInRange(userId, start_date, end_date, tz),
-                        getNutritionGoals(userId),
-                    ]);
+                    const [meals, water, goals, activityRows] =
+                        await Promise.all([
+                            getMealsInRange(userId, start_date, end_date, tz),
+                            getWaterInRange(userId, start_date, end_date, tz),
+                            getNutritionGoals(userId),
+                            activityRangeOrEmpty(userId, start_date, end_date),
+                        ]);
+                    const activeByDate = activityByDate(activityRows);
 
                     const goalsPayload = goalsPayloadOf(goals, alcohol);
 
@@ -2377,6 +2455,7 @@ export function registerTools(
                         ReturnType<typeof totalsPayloadOf> & {
                             date: string;
                             meal_count: number;
+                            active_kcal: number | null;
                         }
                     > = [];
                     const perDay: Array<{
@@ -2393,12 +2472,17 @@ export function registerTools(
                         // the range average down towards zero.
                         const present = nutrientPresence(dateMeals);
                         const header = `## ${date} (${dateMeals.length} meal${dateMeals.length === 1 ? "" : "s"})`;
+                        const dayAdj = adjustGoalsForActivity(
+                            goals,
+                            activeByDate.get(date),
+                        );
                         sections.push(
-                            `${header}\n${formatProgress(totals, goals, alcohol, present)}`,
+                            `${header}${activityLine(dayAdj)}\n${formatProgress(totals, dayAdj.goals, alcohol, present)}`,
                         );
                         days.push({
                             date,
                             meal_count: dateMeals.length,
+                            active_kcal: activeByDate.get(date) ?? null,
                             ...totalsPayloadOf(
                                 totals,
                                 alcohol,
@@ -2747,6 +2831,7 @@ export function registerTools(
                 // z.string() and resolved server-side via getUserLocale.
                 locale: z.string(),
                 goals: GOALS_ITEM.nullable(),
+                ...ACTIVITY_FIELDS,
                 totals: TOTALS_ITEM,
                 weight: z
                     .object({
@@ -2768,20 +2853,26 @@ export function registerTools(
                     const profile = await getProfile(userId);
                     const tz = timezoneFromProfile(profile) ?? "UTC";
                     const targetDate = date ?? todayInTz(tz);
-                    const [meals, water, goals, latestWeight] =
+                    const [meals, water, storedGoals, latestWeight, activity] =
                         await Promise.all([
                             getMealsByDate(userId, targetDate, tz),
                             getWaterByDate(userId, targetDate, tz),
                             getNutritionGoals(userId),
                             getLatestWeight(userId),
+                            activityOrNull(userId, targetDate),
                         ]);
+                    const adj = adjustGoalsForActivity(
+                        storedGoals,
+                        activity?.active_kcal,
+                    );
+                    const goals = adj.goals;
                     const unit =
                         preferredWeightUnitFromProfile(profile) ?? "kg";
                     const locale = localeFromProfile(profile) ?? "en";
                     const totals = sumMeals(meals);
                     totals.water_ml = sumWater(water);
                     const present = nutrientPresence(meals);
-                    const header = `Progress for ${targetDate} (${meals.length} meal${meals.length === 1 ? "" : "s"}, ${water.length} water entr${water.length === 1 ? "y" : "ies"})`;
+                    const header = `Progress for ${targetDate} (${meals.length} meal${meals.length === 1 ? "" : "s"}, ${water.length} water entr${water.length === 1 ? "y" : "ies"})${activityLine(adj)}`;
                     const body = formatProgress(
                         totals,
                         goals,
@@ -2856,6 +2947,7 @@ export function registerTools(
                             meal_count: meals.length,
                             water_entries: water.length,
                             goals: goalsPayload,
+                            ...activityPayloadOf(adj, alcohol),
                             totals: totalsPayload,
                             weight: weightPayload,
                             // Single day → label rows by meal type in the widget.
@@ -2865,6 +2957,127 @@ export function registerTools(
                 },
                 analytics,
                 { date: date ?? "today" },
+            );
+        },
+    );
+
+    server.registerTool(
+        "log_active_calories",
+        {
+            title: "Log Active Calories",
+            description:
+                "Record the active (exercise) calories a watch or fitness app reports for one day — e.g. Garmin Connect, Apple Health's Active Energy, Apple Watch Move. Every active kcal is added to that day's calorie goal, and the protein, carbs and fat goals scale by the same ratio (1,800 + 300 active → 2,100 kcal, macros ×1.17). The figure is the day's running TOTAL, not an increment: calling again for the same date replaces it, so pass the latest total the device shows. Pass 0 to clear a day. Use active calories only — never total/resting energy, which would double count the baseline. If the user would rather sync automatically from their iPhone, use setup_activity_sync instead.",
+            annotations: {
+                readOnlyHint: false,
+                destructiveHint: false,
+                idempotentHint: true,
+                openWorldHint: false,
+            },
+            inputSchema: z.object({
+                // Not z.number(): bounds live in the handler so a bad value
+                // returns a readable message rather than a schema rejection.
+                active_kcal: z
+                    .union([z.number(), z.string()])
+                    .describe(
+                        "The day's total active energy in kilocalories (kcal, not kJ).",
+                    ),
+                date: z
+                    .string()
+                    .optional()
+                    .describe(
+                        "Local date YYYY-MM-DD the burn belongs to. Defaults to today.",
+                    ),
+            }),
+        },
+        async ({ active_kcal, date }) => {
+            return withAnalytics(
+                "log_active_calories",
+                async () => {
+                    const checked = checkActiveKcal(active_kcal);
+                    const profile = await getProfile(userId);
+                    const tz = timezoneFromProfile(profile) ?? "UTC";
+                    const today = todayInTz(tz);
+                    const target = date ?? today;
+                    const problem = !checked.ok
+                        ? checked.error
+                        : !isLocalDate(target)
+                          ? `date must be YYYY-MM-DD, got "${target}".`
+                          : target > today
+                            ? `${target} is in the future (today is ${today} in ${tz}).`
+                            : null;
+                    if (problem || !checked.ok) {
+                        return {
+                            isError: true,
+                            content: [
+                                {
+                                    type: "text",
+                                    text: `Not saved: ${problem}`,
+                                },
+                            ],
+                        };
+                    }
+                    const [, goals] = await Promise.all([
+                        upsertActivity(userId, target, checked.value, "manual"),
+                        getNutritionGoals(userId),
+                    ]);
+                    const adj = adjustGoalsForActivity(goals, checked.value);
+                    const goalText = describeCalorieGoal(adj);
+                    const tail = goalText
+                        ? ` Calorie goal for ${target}: ${goalText}.`
+                        : " No calorie goal is set, so there is nothing to adjust yet — set one with set_nutrition_goals (use the no-exercise baseline).";
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text: `Active calories for ${target}: ${checked.value} kcal.${tail}`,
+                            },
+                        ],
+                    };
+                },
+                analytics,
+                { date: date ?? "today" },
+            );
+        },
+    );
+
+    server.registerTool(
+        "setup_activity_sync",
+        {
+            title: "Set Up Activity Sync",
+            description:
+                "Connect automatic active-calorie sync from the user's iPhone (Apple Health — which also carries Garmin, Apple Watch, Fitbit and most other wearables once their app syncs to Health). Returns a personal sync URL, a secret token and step-by-step iOS Shortcuts instructions; each sync updates that day's activity-adjusted goals. Calling it again issues a new token and immediately revokes the old one, so only call it when the user asks to set up, reconnect or reset the sync. The token is a password: show it to the user once, do not repeat it in later messages.",
+            annotations: {
+                readOnlyHint: false,
+                destructiveHint: false,
+                idempotentHint: false,
+                openWorldHint: false,
+            },
+        },
+        async () => {
+            return withAnalytics(
+                "setup_activity_sync",
+                async () => {
+                    const token = await rotateIngestToken(userId);
+                    const url = `${baseUrl.replace(/\/$/, "")}/api/activity`;
+                    const text = [
+                        "Activity sync is ready. Any previous sync token has been revoked.",
+                        "",
+                        `Endpoint: POST ${url}`,
+                        `Token (secret — treat it like a password): ${token}`,
+                        "",
+                        "Set it up on the iPhone (Shortcuts app):",
+                        "1. Make sure the watch's data reaches Apple Health: for Garmin, enable Apple Health under Connected Apps in Garmin Connect and allow it to write Active Energy; then check Health → Browse → Activity → Active Energy shows today's burn.",
+                        "2. Shortcuts → + (new shortcut) → add 'Find Health Samples': Type = Active Energy, Start Date is Today, Unit = kcal.",
+                        "3. Add 'Calculate Statistics': Sum of the Health Samples, then 'Round Number' (to Ones) on the result — a plain whole number avoids decimal-comma surprises.",
+                        "4. Add 'Get Contents of URL' with the endpoint above. Method POST; Header 'Authorization' = 'Bearer <token>'; Request Body JSON with a Number field 'active_kcal' = the Statistics result, and a Text field 'source' = 'apple_health'.",
+                        "5. Run it once — it replies with the day's adjusted calorie goal. Compare the synced figure with Health → Browse → Activity → Active Energy for today: Find Health Samples returns every source's raw samples, so if another app also writes Active Energy the sum can come out high. If it does, add a filter in step 2 for Source is Garmin Connect.",
+                        "6. Automation tab → + → Time of Day (e.g. every hour, or 20:00 daily) → Run Immediately → this shortcut. A sync replaces the day's figure, so running it often is safe and keeps the goal current.",
+                        "",
+                        "Optional body field 'date' (YYYY-MM-DD) syncs a past day; it defaults to today in the user's timezone.",
+                    ].join("\n");
+                    return { content: [{ type: "text", text }] };
+                },
+                analytics,
             );
         },
     );
@@ -3971,11 +4184,13 @@ export function registerTools(
                         endDate,
                         -(seriesDays - 1),
                     );
-                    const [meals, water, goals] = await Promise.all([
-                        getMealsInRange(userId, startDate, endDate, tz),
-                        getWaterInRange(userId, startDate, endDate, tz),
-                        getNutritionGoals(userId),
-                    ]);
+                    const [meals, water, goals, activityRows] =
+                        await Promise.all([
+                            getMealsInRange(userId, startDate, endDate, tz),
+                            getWaterInRange(userId, startDate, endDate, tz),
+                            getNutritionGoals(userId),
+                            activityRangeOrEmpty(userId, startDate, endDate),
+                        ]);
                     const allBuckets = buildDailyBuckets(
                         meals,
                         water,
@@ -3987,6 +4202,19 @@ export function registerTools(
                     // gets the last 30 days for its 7/14/30 toggle.
                     const textBuckets = allBuckets.slice(-windowDays);
                     const seriesBuckets = allBuckets.slice(-30);
+                    // computeTrends compares window AVERAGES against one goal
+                    // set. The adjusted goal is linear in active kcal
+                    // (base + a, macros × (1 + a/base)), so adjusting by the
+                    // window's mean active kcal gives exactly the mean of the
+                    // per-day adjusted goals — over the same days computeTrends
+                    // averages over.
+                    const activeByDate = activityByDate(activityRows);
+                    const meanActive =
+                        textBuckets.reduce(
+                            (sum, b) => sum + (activeByDate.get(b.date) ?? 0),
+                            0,
+                        ) / Math.max(1, textBuckets.length);
+                    const trendAdj = adjustGoalsForActivity(goals, meanActive);
 
                     const goalsPayload = goalsPayloadOf(goals, alcohol);
 
@@ -3994,10 +4222,14 @@ export function registerTools(
                         content: [
                             {
                                 type: "text",
-                                text: computeTrends(
-                                    gateAlcohol(textBuckets, alcohol),
-                                    goals,
-                                ),
+                                text:
+                                    computeTrends(
+                                        gateAlcohol(textBuckets, alcohol),
+                                        trendAdj.goals,
+                                    ) +
+                                    (trendAdj.activeKcal
+                                        ? `\n\n(Targets include an average of ${trendAdj.activeKcal} active kcal/day recorded in this window, added to the ${goals?.daily_calories} kcal baseline.)`
+                                        : ""),
                             },
                         ],
                         structuredContent: {
@@ -4122,13 +4354,14 @@ export function registerTools(
                         };
                     }
                     // Name every file's row count, zeros included: the archive
-                    // always ships all six files, so "0 weight entries" is what
+                    // always ships all seven files, so "0 weight entries" is what
                     // tells the user weight.csv is headers-only because they
                     // never logged weight — not because the export lost it.
                     const contents = [
                         `${counts.meals} meal${counts.meals === 1 ? "" : "s"}`,
                         `${counts.water} water ${counts.water === 1 ? "entry" : "entries"}`,
                         `${counts.weight} weight ${counts.weight === 1 ? "entry" : "entries"}`,
+                        `${counts.activity} day${counts.activity === 1 ? "" : "s"} of active calories`,
                         goals ? "nutrition goals" : "no nutrition goals set",
                         profile ? "profile settings" : "no profile settings",
                     ].join(", ");
@@ -4212,6 +4445,9 @@ export function registerTools(
                         alcoholTrackingEnabledFromProfile(profile);
                     const drinkUnit =
                         preferredDrinkUnitFromProfile(profile) ?? "us";
+                    const sync = await getIngestTokenStatus(userId).catch(
+                        () => null,
+                    );
 
                     const lines = [
                         tz === null
@@ -4229,6 +4465,9 @@ export function registerTools(
                         alcoholEnabled
                             ? `Alcohol tracking: enabled, displayed in grams alongside ${drinkUnitLabel(drinkUnit)}${preferredDrinkUnitFromProfile(profile) ? "" : " (the default — no preference saved)"}.`
                             : "Alcohol tracking: disabled, so alcohol is hidden from meals, goals and progress. Alcohol already stored is kept, and anything logged with alcohol_g while it is off is still stored. The exception is the file importer, which skips a file's alcohol column while tracking is off and will not backfill it on a later re-import — so enable tracking before importing an export whose alcohol the user wants to keep. Enable it with set_alcohol_tracking.",
+                        sync
+                            ? `Activity sync: connected${sync.last_used_at ? `, last sync ${formatLocalDateTime(sync.last_used_at, tz ?? "UTC")}` : ", no sync received yet"}. Active calories raise each day's calorie goal and scale protein/carbs/fat with it.`
+                            : "Activity sync: not connected. Active calories can be logged with log_active_calories, or synced from Apple Health with setup_activity_sync.",
                     ];
 
                     return {
@@ -4441,7 +4680,7 @@ function newMcpServer(baseUrl: string): McpServer {
     return new McpServer(
         {
             name: "nutrition-mcp",
-            version: "1.27.2",
+            version: "1.28.0",
             icons: [
                 {
                     src: `${baseUrl}/favicon.ico`,
@@ -4492,6 +4731,7 @@ async function buildMcpServer(
         widgetsEnabledFromProfile(profile),
         alcoholTrackingEnabledFromProfile(profile) ? (drinkUnit ?? "us") : null,
         protocolEra,
+        baseUrl,
     );
     return server;
 }

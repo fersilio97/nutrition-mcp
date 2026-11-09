@@ -11,17 +11,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_ES: ToolsDoc = {
     meta: {
-        title: "Referencia de herramientas: las 36 herramientas",
+        title: "Referencia de herramientas: las 38 herramientas",
         description:
-            "Las 36 herramientas que el servidor Nutrition MCP le da a tu IA: registra comidas, escanea códigos de barras, importa tu historial desde otra app, controla el agua y el peso, define objetivos y revisa tendencias. Referencia completa con descripciones y frases de ejemplo.",
+            "Las 38 herramientas que el servidor Nutrition MCP le da a tu IA: registra comidas, escanea códigos de barras, importa tu historial desde otra app, controla el agua y el peso, define objetivos y revisa tendencias. Referencia completa con descripciones y frases de ejemplo.",
         ogDescription:
-            "Las 36 herramientas que el servidor Nutrition MCP le da a tu IA, incluido un importador CSV para tu historial desde otra app, con descripciones y frases de ejemplo.",
+            "Las 38 herramientas que el servidor Nutrition MCP le da a tu IA, incluido un importador CSV para tu historial desde otra app, con descripciones y frases de ejemplo.",
     },
     hero: {
         eyebrow: "Referencia",
         title: "Todo lo que tu IA puede hacer",
         lead: "Nunca llamas a estas herramientas directamente: tú solo hablas, y el asistente elige la herramienta correcta. Aquí tienes el conjunto completo que expone el servidor Nutrition MCP, con lo que hace cada una y una frase que la activa.",
-        countBold: "36 herramientas",
+        countBold: "38 herramientas",
         countTail: "en 7 áreas",
     },
     categories: {
@@ -204,7 +204,7 @@ export const TOOLS_ES: ToolsDoc = {
         },
         export_all_data: {
             description:
-                "Exporta todo lo que has registrado en un único ZIP: meals.csv, water.csv, weight.csv, goals.csv, profile.csv, y un README.txt que explica las columnas y unidades, con el mismo enlace privado, válido durante 60 minutos. Por ahora, las comidas son la única parte que se puede volver a importar.",
+                "Exporta todo lo que has registrado en un único ZIP: meals.csv, water.csv, weight.csv, activity.csv, goals.csv, profile.csv, y un README.txt que explica las columnas y unidades, con el mismo enlace privado, válido durante 60 minutos. Por ahora, las comidas son la única parte que se puede volver a importar.",
             params: {},
             example: "Exporta todos mis datos: comidas, agua, peso y objetivos",
         },
@@ -335,6 +335,23 @@ export const TOOLS_ES: ToolsDoc = {
                 "Consulta cómo va la ingesta de hoy frente a tus objetivos: anillos de ingesta frente a meta más el progreso de peso corporal. Toca un anillo de macro para ver qué comidas contribuyeron.",
             params: {},
             example: "¿Cómo voy hoy respecto a mis objetivos?",
+        },
+        log_active_calories: {
+            description:
+                "Registra las calorías activas (de ejercicio) que tu reloj marca en un día: Garmin, Apple Watch, cualquier cosa en Apple Health. Se suman al objetivo de calorías de ese día, y las proteínas, los carbohidratos y las grasas crecen en la misma proporción: 1.800 + 300 activas → 2.100 kcal.",
+            params: {
+                active_kcal:
+                    "La energía activa total del día en kcal. Registrar el mismo día otra vez la reemplaza; 0 la borra.",
+                date: "Fecha local AAAA-MM-DD (por defecto, hoy).",
+            },
+            example: "Mi Garmin dice que hoy quemé 320 calorías activas",
+        },
+        setup_activity_sync: {
+            description:
+                "Sincroniza las calorías activas automáticamente desde tu iPhone. Devuelve un enlace y un token de sincronización personales, más instrucciones paso a paso para Atajos de iOS que envían la energía activa de Apple Health —también la de un Garmin— para que los objetivos de cada día se actualicen solos. Volver a ejecutarlo revoca el token anterior.",
+            params: {},
+            example:
+                "Configura la sincronización automática de calorías desde Apple Health",
         },
         get_nutrition_summary: {
             description:

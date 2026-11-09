@@ -38,6 +38,7 @@ export const PRIVACY_ES: LegalDoc = {
                     "<strong>Registros de agua</strong> — cantidad, notas y marcas de tiempo.",
                     "<strong>Registros de peso corporal</strong> — peso, notas y marcas de tiempo. Estos son datos de salud, y se tratan exactamente igual que el resto de tus registros.",
                     "<strong>Objetivos</strong> — tus metas diarias de calorías, proteína, carbohidratos, grasa, fibra, azúcar, alcohol, cafeína y agua, y tu peso objetivo.",
+                    "<strong>Actividad</strong> — calorías activas (de ejercicio) por día, si las registras o conectas la sincronización con Apple Health, más un token de sincronización cifrado con hash. Solo se usan para aumentar los objetivos de calorías y macros de ese día, y se tratan exactamente igual que el resto de tus registros.",
                     "<strong>Ajustes de perfil</strong> — tu zona horaria IANA, unidad de peso preferida, si el seguimiento de alcohol está activado y en qué bebida estándar se muestra, y si los widgets integrados en el chat están habilitados.",
                     "<strong>Telemetría de uso de herramientas</strong> — para cada llamada a una herramienta MCP, qué herramienta se ejecutó, si tuvo éxito, cuánto tardó, una categoría de error genérica cuando falla, la duración en días de cualquier rango de fechas que hayas pedido, y el id de sesión MCP. Está vinculada al id de tu cuenta. Nunca incluye el contenido de tus registros.",
                 ]),

@@ -378,7 +378,11 @@
                     data.meals,
                     // Nothing sits between the header line and the strip, so no
                     // leading hairline.
-                    { drinkUnit: data.drink_unit, calLabel },
+                    {
+                        drinkUnit: data.drink_unit,
+                        calLabel,
+                        activeKcal: data.active_kcal,
+                    },
                 );
 
                 // The day itself and what was logged on it — the context the

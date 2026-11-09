@@ -1,4 +1,4 @@
-// Typed content for /tools (the "all 36 tools" reference page), rendered
+// Typed content for /tools (the "all 38 tools" reference page), rendered
 // by scripts/gen-tools.ts. Extracted verbatim from the previously
 // hand-authored public/tools.html — see CLAUDE.md's "Public site" section
 // for the generator family this belongs to, and gen-tools.ts's own header
@@ -128,11 +128,11 @@ export interface ToolIdentity {
 }
 
 /**
- * All 36 tools, in the exact document order of public/tools.html (grouped
+ * All 38 tools, in the exact document order of public/tools.html (grouped
  * by category — see CategoryId — for the reader). Cross-checked against
- * the 36 `server.registerTool()` calls in src/mcp.ts: the two orders
+ * the 38 `server.registerTool()` calls in src/mcp.ts: the two orders
  * differ (mcp.ts registers in its own order, unrelated to this page's
- * reader-facing grouping) but the *set* of 36 tool names is identical —
+ * reader-facing grouping) but the *set* of 38 tool names is identical —
  * nothing here was dropped or invented.
  */
 export const TOOLS: ToolIdentity[] = [
@@ -378,6 +378,23 @@ export const TOOLS: ToolIdentity[] = [
         hasPhotoHint: false,
     },
     {
+        name: "log_active_calories",
+        category: "goals-progress",
+        badges: ["log"],
+        params: [
+            { name: "active_kcal", required: true },
+            { name: "date", required: false },
+        ],
+        hasPhotoHint: false,
+    },
+    {
+        name: "setup_activity_sync",
+        category: "goals-progress",
+        badges: ["setting"],
+        params: [],
+        hasPhotoHint: false,
+    },
+    {
         name: "get_nutrition_summary",
         category: "goals-progress",
         badges: ["view", "widget"],
@@ -536,17 +553,17 @@ export interface ToolsDoc {
 
 const TOOLS_EN: ToolsDoc = {
     meta: {
-        title: "Tools Reference: All 36 Tools",
+        title: "Tools Reference: All 38 Tools",
         description:
-            "All 36 tools the Nutrition MCP server gives your AI — log meals, scan barcodes, import your history from another app, track water and weight, set goals, and review trends. Full reference with descriptions and example prompts.",
+            "All 38 tools the Nutrition MCP server gives your AI — log meals, scan barcodes, import your history from another app, track water and weight, set goals, and review trends. Full reference with descriptions and example prompts.",
         ogDescription:
-            "All 36 tools the Nutrition MCP server gives your AI, including a CSV importer for your history from another app — with descriptions and example prompts.",
+            "All 38 tools the Nutrition MCP server gives your AI, including a CSV importer for your history from another app — with descriptions and example prompts.",
     },
     hero: {
         eyebrow: "Reference",
         title: "Everything your AI can do",
         lead: "You never call these directly — you just talk, and the assistant picks the right tool. Here's the full set the Nutrition MCP server exposes, with what each one does and a phrase that triggers it.",
-        countBold: "36 tools",
+        countBold: "38 tools",
         countTail: "across 7 areas",
     },
     categories: {
@@ -726,7 +743,7 @@ const TOOLS_EN: ToolsDoc = {
         },
         export_all_data: {
             description:
-                "Export everything you've tracked as a single ZIP — meals.csv, water.csv, weight.csv, goals.csv, profile.csv, and a README.txt explaining the columns and units — with the same private link, valid for 60 minutes. Meals are the only part that can be imported back in for now.",
+                "Export everything you've tracked as a single ZIP — meals.csv, water.csv, weight.csv, activity.csv, goals.csv, profile.csv, and a README.txt explaining the columns and units — with the same private link, valid for 60 minutes. Meals are the only part that can be imported back in for now.",
             params: {},
             example: "Export all of my data — meals, water, weight, and goals",
         },
@@ -851,6 +868,22 @@ const TOOLS_EN: ToolsDoc = {
                 "See how today's intake stacks up against your goals — intake-vs-goal rings plus body-weight progress. Tap a macro ring to see which meals contributed.",
             params: {},
             example: "How am I doing against my goals today?",
+        },
+        log_active_calories: {
+            description:
+                "Record the active (exercise) calories your watch reports for a day — Garmin, Apple Watch, anything in Apple Health. They're added to that day's calorie goal, and protein, carbs and fat scale with it: 1,800 + 300 active → 2,100 kcal.",
+            params: {
+                active_kcal:
+                    "The day's total active energy in kcal. Logging the same day again replaces it; 0 clears it.",
+                date: "Local date YYYY-MM-DD (default today).",
+            },
+            example: "My Garmin says I burned 320 active calories today",
+        },
+        setup_activity_sync: {
+            description:
+                "Sync active calories automatically from your iPhone. Returns a personal sync link and token, plus step-by-step iOS Shortcuts instructions that send Apple Health's Active Energy — Garmin included — so each day's goals update on their own. Running it again revokes the old token.",
+            params: {},
+            example: "Set up automatic calorie sync from Apple Health",
         },
         get_nutrition_summary: {
             description:

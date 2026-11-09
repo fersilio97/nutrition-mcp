@@ -339,7 +339,7 @@ function macroCal(m, ctx, interactive) {
     return `
       <div class="cal${interactive ? " interactive" : ""}"${interactiveAttrs(m, b, interactive)}>${ringMarkup(m, b)}
         <div class="cal-txt">
-          <div class="cal-lab">${esc(ctx.calLabel)}</div>
+          <div class="cal-lab">${esc(ctx.calLabel)}${ctx.activeKcal ? ` · ${esc(T.macros.activeBonus.replace("{n}", fmt(ctx.activeKcal, 0)))}` : ""}</div>
           <div class="cal-line">
             <div class="cal-val">${fmt(b.val, m.decimals)}${goalPart}</div>
             ${left}
@@ -479,6 +479,12 @@ function macroCtxOf(vals, goal, wording, meals, opts) {
         // nutrition-summary.html and trends.html always pass their own more
         // specific calLabel (day count / range-averaged wording).
         calLabel: (opts && opts.calLabel) || T.macros.caloriesToday,
+        // Active kcal already folded into `goal` server-side (src/activity.ts).
+        // Only named here so the calorie block can say why the target grew.
+        activeKcal:
+            opts && typeof opts.activeKcal === "number" && opts.activeKcal > 0
+                ? opts.activeKcal
+                : 0,
         // Set by a widget that puts something of its own — a chart, a range
         // toggle's chart — between the header line and the strip, so the strip
         // opens with the same hairline that separates its own sections.
@@ -504,7 +510,7 @@ function gridCols(n) {
 // the limits row included, not just calories and the three bars.
 //
 // `opts` is optional: { drinkUnit: "us" | "uk", calLabel: string,
-// divided: boolean }.
+// divided: boolean, activeKcal: number }.
 function macroPanel(vals, goal, wording, meals, opts) {
     const ctx = macroCtxOf(vals, goal, wording, meals, opts);
     // Stash it so the delegated toggle handler can build the breakdown on

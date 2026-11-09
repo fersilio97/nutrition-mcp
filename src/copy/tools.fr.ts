@@ -16,17 +16,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_FR: ToolsDoc = {
     meta: {
-        title: "Référence des outils : les 36 outils",
+        title: "Référence des outils : les 38 outils",
         description:
-            "Les 36 outils que le serveur Nutrition MCP donne à ton IA — enregistrer des repas, scanner des codes-barres, importer ton historique depuis une autre app, suivre l'eau et le poids, définir des objectifs et consulter les tendances. Référence complète avec descriptions et exemples de formulations.",
+            "Les 38 outils que le serveur Nutrition MCP donne à ton IA — enregistrer des repas, scanner des codes-barres, importer ton historique depuis une autre app, suivre l'eau et le poids, définir des objectifs et consulter les tendances. Référence complète avec descriptions et exemples de formulations.",
         ogDescription:
-            "Les 36 outils que le serveur Nutrition MCP donne à ton IA, dont un importateur CSV pour ton historique venu d'une autre app — avec descriptions et exemples de formulations.",
+            "Les 38 outils que le serveur Nutrition MCP donne à ton IA, dont un importateur CSV pour ton historique venu d'une autre app — avec descriptions et exemples de formulations.",
     },
     hero: {
         eyebrow: "Référence",
         title: "Tout ce que ton IA peut faire",
         lead: "Tu n'appelles jamais ces outils directement — tu parles simplement, et l'assistant choisit le bon outil. Voici l'ensemble complet exposé par le serveur Nutrition MCP, avec ce que fait chacun et une phrase qui le déclenche.",
-        countBold: "36 outils",
+        countBold: "38 outils",
         countTail: "répartis en 7 catégories",
     },
     categories: {
@@ -210,7 +210,7 @@ export const TOOLS_FR: ToolsDoc = {
         },
         export_all_data: {
             description:
-                "Exporte tout ce que tu as suivi dans un seul ZIP — meals.csv, water.csv, weight.csv, goals.csv, profile.csv, et un README.txt expliquant les colonnes et les unités — avec le même lien privé, valable 60 minutes. Les repas sont pour l'instant la seule partie qui peut être réimportée.",
+                "Exporte tout ce que tu as suivi dans un seul ZIP — meals.csv, water.csv, weight.csv, activity.csv, goals.csv, profile.csv, et un README.txt expliquant les colonnes et les unités — avec le même lien privé, valable 60 minutes. Les repas sont pour l'instant la seule partie qui peut être réimportée.",
             params: {},
             example:
                 "Exporte toutes mes données — repas, eau, poids et objectifs",
@@ -342,6 +342,24 @@ export const TOOLS_FR: ToolsDoc = {
                 "Affiche comment ta consommation du jour se compare à tes objectifs — anneaux consommation/objectif plus progression du poids corporel. Touche un anneau de macro pour voir quels repas y ont contribué.",
             params: {},
             example: "Où j'en suis par rapport à mes objectifs aujourd'hui ?",
+        },
+        log_active_calories: {
+            description:
+                "Enregistre les calories actives (d'exercice) que ta montre indique pour une journée — Garmin, Apple Watch, tout ce qui passe par Santé. Elles s'ajoutent à l'objectif calorique du jour, et les protéines, glucides et lipides augmentent dans la même proportion : 1 800 + 300 actives → 2 100 kcal.",
+            params: {
+                active_kcal:
+                    "L'énergie active totale de la journée en kcal. Enregistrer à nouveau le même jour la remplace ; 0 l'efface.",
+                date: "Date locale AAAA-MM-JJ (par défaut aujourd'hui).",
+            },
+            example:
+                "Ma Garmin dit que j'ai brûlé 320 calories actives aujourd'hui",
+        },
+        setup_activity_sync: {
+            description:
+                "Synchronise automatiquement les calories actives depuis ton iPhone. Renvoie un lien et un jeton de synchronisation personnels, avec des instructions pas à pas pour Raccourcis iOS qui envoient l'énergie active de Santé — Garmin compris — pour que les objectifs de chaque jour se mettent à jour tout seuls. Le relancer révoque l'ancien jeton.",
+            params: {},
+            example:
+                "Configure la synchronisation automatique des calories depuis Apple Santé",
         },
         get_nutrition_summary: {
             description:

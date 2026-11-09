@@ -2,17 +2,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_PL: ToolsDoc = {
     meta: {
-        title: "Katalog narzędzi: wszystkie 36 narzędzi",
+        title: "Katalog narzędzi: wszystkie 38 narzędzi",
         description:
-            "Wszystkie 36 narzędzi, które serwer Nutrition MCP daje Twojemu AI — zapisuj posiłki, skanuj kody kreskowe, importuj historię z innej aplikacji, śledź wodę i wagę, ustawiaj cele i przeglądaj trendy. Pełny opis wraz z przykładowymi poleceniami.",
+            "Wszystkie 38 narzędzi, które serwer Nutrition MCP daje Twojemu AI — zapisuj posiłki, skanuj kody kreskowe, importuj historię z innej aplikacji, śledź wodę i wagę, ustawiaj cele i przeglądaj trendy. Pełny opis wraz z przykładowymi poleceniami.",
         ogDescription:
-            "Wszystkie 36 narzędzi, które serwer Nutrition MCP daje Twojemu AI, w tym importer CSV do przenoszenia historii z innej aplikacji — z opisami i przykładowymi poleceniami.",
+            "Wszystkie 38 narzędzi, które serwer Nutrition MCP daje Twojemu AI, w tym importer CSV do przenoszenia historii z innej aplikacji — z opisami i przykładowymi poleceniami.",
     },
     hero: {
         eyebrow: "Dokumentacja",
         title: "Wszystko, co potrafi Twój AI",
         lead: "Nigdy nie wywołujesz tych narzędzi bezpośrednio — po prostu mówisz, a asystent sam wybiera właściwe. Oto pełny zestaw udostępniany przez serwer Nutrition MCP, wraz z opisem działania i przykładowym poleceniem, które je uruchamia.",
-        countBold: "36 narzędzi",
+        countBold: "38 narzędzi",
         countTail: "w 7 obszarach",
     },
     categories: {
@@ -194,7 +194,7 @@ export const TOOLS_PL: ToolsDoc = {
         },
         export_all_data: {
             description:
-                "Wyeksportuj wszystko, co śledzisz, jako jeden plik ZIP — meals.csv, water.csv, weight.csv, goals.csv, profile.csv oraz README.txt z wyjaśnieniem kolumn i jednostek — pod tym samym prywatnym linkiem, ważnym przez 60 minut. Na razie tylko posiłki można zaimportować z powrotem.",
+                "Wyeksportuj wszystko, co śledzisz, jako jeden plik ZIP — meals.csv, water.csv, weight.csv, activity.csv, goals.csv, profile.csv oraz README.txt z wyjaśnieniem kolumn i jednostek — pod tym samym prywatnym linkiem, ważnym przez 60 minut. Na razie tylko posiłki można zaimportować z powrotem.",
             params: {},
             example:
                 "Wyeksportuj wszystkie moje dane — posiłki, wodę, wagę i cele",
@@ -326,6 +326,23 @@ export const TOOLS_PL: ToolsDoc = {
                 "Zobacz, jak dzisiejsze spożycie wypada na tle Twoich celów — pierścienie spożycia względem celu oraz postęp wagi ciała. Dotknij pierścienia makroskładnika, żeby zobaczyć, które posiłki się na niego złożyły.",
             params: {},
             example: "Jak mi dzisiaj idzie względem moich celów?",
+        },
+        log_active_calories: {
+            description:
+                "Zapisz aktywne kalorie (z ćwiczeń), które zegarek pokazuje dla danego dnia — Garmin, Apple Watch, wszystko w aplikacji Zdrowie. Dodają się do celu kalorycznego tego dnia, a białko, węglowodany i tłuszcze rosną proporcjonalnie: 1800 + 300 aktywnych → 2100 kcal.",
+            params: {
+                active_kcal:
+                    "Łączna aktywna energia dnia w kcal. Ponowny zapis dla tego samego dnia ją zastępuje; 0 ją usuwa.",
+                date: "Data lokalna RRRR-MM-DD (domyślnie dziś).",
+            },
+            example: "Mój Garmin mówi, że spaliłem dziś 320 aktywnych kalorii",
+        },
+        setup_activity_sync: {
+            description:
+                "Synchronizuj aktywne kalorie automatycznie z iPhone'a. Zwraca osobisty link i token synchronizacji oraz instrukcję krok po kroku dla Skrótów iOS, które wysyłają aktywną energię z aplikacji Zdrowie — także z Garmina — by cele na każdy dzień aktualizowały się same. Ponowne uruchomienie unieważnia stary token.",
+            params: {},
+            example:
+                "Skonfiguruj automatyczną synchronizację kalorii z Apple Zdrowie",
         },
         get_nutrition_summary: {
             description:

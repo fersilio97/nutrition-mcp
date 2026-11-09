@@ -38,6 +38,8 @@ import {
     type VersionNegotiationMode,
 } from "@modelcontextprotocol/client";
 import { Hono } from "hono";
+import { createActivitySyncRouter } from "./activity-sync.js";
+import { todayInTz } from "./tz.js";
 import { McpServer, InMemoryTransport } from "@modelcontextprotocol/server";
 import * as actualSupabase from "./supabase.js";
 
@@ -1436,6 +1438,11 @@ const db = {
     analyticsRows: [] as Record<string, unknown>[],
     accountWipes: 0,
     profileReads: [] as string[],
+    // date → active kcal, the activity_log stand-in.
+    activity: new Map<string, number>(),
+    ingestToken: null as string | null,
+    // Simulates activity_log being unreachable (or not yet migrated).
+    activityThrows: false,
 };
 
 mock.module("./supabase.js", () => ({
@@ -1556,6 +1563,62 @@ mock.module("./supabase.js", () => ({
         db.goals = { ...goals(), ...patch } as NutritionGoals;
         return db.goals;
     },
+    upsertActivity: async (
+        userId: string,
+        date: string,
+        kcal: number,
+        source: string | null,
+    ) => {
+        db.activity.set(date, kcal);
+        return {
+            user_id: userId,
+            date,
+            active_kcal: kcal,
+            source,
+            updated_at: new Date().toISOString(),
+        };
+    },
+    getActivityByDate: async (userId: string, date: string) => {
+        if (db.activityThrows)
+            throw new Error('relation "activity_log" does not exist');
+        return db.activity.has(date)
+            ? {
+                  user_id: userId,
+                  date,
+                  active_kcal: db.activity.get(date)!,
+                  source: "manual",
+                  updated_at: "2026-11-09T00:00:00Z",
+              }
+            : null;
+    },
+    getActivityInRange: async (userId: string, start: string, end: string) =>
+        [...db.activity.entries()]
+            .filter(([d]) => d >= start && d <= end)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([date, active_kcal]) => ({
+                user_id: userId,
+                date,
+                active_kcal,
+                source: "manual",
+                updated_at: "2026-11-09T00:00:00Z",
+            })),
+    rotateIngestToken: async () => {
+        db.ingestToken = `nmi_test_${Math.random().toString(16).slice(2)}`;
+        return db.ingestToken;
+    },
+    getUserIdByIngestToken: async (token: string) =>
+        db.ingestToken && token === db.ingestToken
+            ? { status: "valid" as const, userId: "u1" }
+            : { status: "invalid" as const },
+    touchIngestToken: async () => {},
+    getLatestWeight: async () => null,
+    getIngestTokenStatus: async () => {
+        if (db.activityThrows)
+            throw new Error('relation "ingest_tokens" does not exist');
+        return db.ingestToken
+            ? { created_at: "2026-11-09T00:00:00Z", last_used_at: null }
+            : null;
+    },
     upsertProfile: async (userId: string, patch: Record<string, unknown>) => {
         db.profilePatches.push(patch);
         db.profile = {
@@ -1585,6 +1648,9 @@ beforeEach(() => {
     db.analyticsRows = [];
     db.accountWipes = 0;
     db.profileReads = [];
+    db.activity = new Map();
+    db.ingestToken = null;
+    db.activityThrows = false;
 });
 
 interface ToolResult {
@@ -4468,5 +4534,202 @@ describe("/mcp records the negotiated era for the access log", () => {
         });
         expect(r.status).toBe(415);
         expect(seen).toEqual(["POST:-:-"]);
+    });
+});
+
+// ---------- Activity-adjusted goals ----------
+
+describe("activity-adjusted goals", () => {
+    // The handlers resolve "today" in the profile's zone, so the tests must
+    // too, or they flake around midnight whenever PROFILE_BASE is not UTC.
+    const today = () => todayInTz(PROFILE_BASE.timezone ?? "UTC");
+    const baseGoals = () =>
+        ({
+            ...goals(),
+            daily_calories: 1800,
+            daily_protein_g: 135,
+            daily_carbs_g: 180,
+            daily_fat_g: 60,
+        }) as NutritionGoals;
+
+    test("log_active_calories raises the day's goal and scales macros", async () => {
+        db.goals = baseGoals();
+        await withTools(null, async (call) => {
+            const logged = await call("log_active_calories", {
+                active_kcal: 300,
+            });
+            expect(logged.isError).toBeFalsy();
+            expect(textOf(logged)).toContain("2,100 kcal (1,800 + 300 active)");
+            expect(db.activity.get(today())).toBe(300);
+
+            // Server-side outputSchema validation runs on this call, so a
+            // non-error result is also the schema check for the new fields.
+            const r = await call("get_goal_progress", {});
+            expect(r.isError).toBeFalsy();
+            const sc = r.structuredContent as {
+                goals: Record<string, number | null>;
+                base_goals: Record<string, number | null> | null;
+                active_kcal: number | null;
+            };
+            expect(sc.active_kcal).toBe(300);
+            expect(sc.goals.calories).toBe(2100);
+            expect(sc.goals.protein_g).toBe(157.5);
+            expect(sc.goals.carbs_g).toBe(210);
+            expect(sc.goals.fat_g).toBe(70);
+            expect(sc.base_goals?.calories).toBe(1800);
+            expect(textOf(r)).toContain("1,800 + 300 active");
+        });
+    });
+
+    test("a second log for the same day replaces, not adds", async () => {
+        db.goals = baseGoals();
+        await withTools(null, async (call) => {
+            await call("log_active_calories", { active_kcal: 200 });
+            await call("log_active_calories", { active_kcal: 350 });
+            expect(db.activity.get(today())).toBe(350);
+        });
+    });
+
+    test("no activity leaves goals as stored and the new fields null", async () => {
+        db.goals = baseGoals();
+        await withTools(null, async (call) => {
+            const r = await call("get_goal_progress", {});
+            const sc = r.structuredContent as Record<string, unknown>;
+            expect(sc.active_kcal).toBeNull();
+            expect(sc.base_goals).toBeNull();
+            expect((sc.goals as { calories: number }).calories).toBe(1800);
+        });
+    });
+
+    test("log_meal's progress payload carries the adjusted goal", async () => {
+        db.goals = baseGoals();
+        // A bare date anchors at local noon, so the meal's day is known
+        // regardless of the fixture's default timestamp or the clock.
+        db.activity.set("2026-11-01", 300);
+        await withTools(null, async (call) => {
+            const r = await call("log_meal", {
+                description: "oats",
+                meal_type: "breakfast",
+                logged_at: "2026-11-01",
+                calories: 400,
+                protein_g: 15,
+                carbs_g: 60,
+                fat_g: 8,
+                fiber_g: 8,
+                sugar_g: 2,
+            });
+            expect(r.isError).toBeFalsy();
+            const sc = r.structuredContent as Record<string, unknown>;
+            expect(sc.active_kcal).toBe(300);
+            expect((sc.goals as { calories: number }).calories).toBe(2100);
+        });
+    });
+
+    test("rejects implausible or future input without saving", async () => {
+        db.goals = baseGoals();
+        await withTools(null, async (call) => {
+            const big = await call("log_active_calories", {
+                active_kcal: 9000,
+            });
+            expect(big.isError).toBe(true);
+            expect(textOf(big)).toContain("kilojoules");
+            const future = await call("log_active_calories", {
+                active_kcal: 100,
+                date: "2999-01-01",
+            });
+            expect(future.isError).toBe(true);
+            expect(db.activity.size).toBe(0);
+        });
+    });
+
+    test("setup_activity_sync mints a token and get_profile reports it", async () => {
+        await withTools(null, async (call) => {
+            const before = await call("get_profile", {});
+            expect(textOf(before)).toContain("Activity sync: not connected");
+            const r = await call("setup_activity_sync", {});
+            expect(db.ingestToken).toBeTruthy();
+            expect(textOf(r)).toContain(db.ingestToken!);
+            expect(textOf(r)).toContain("/api/activity");
+            const after = await call("get_profile", {});
+            expect(textOf(after)).toContain("Activity sync: connected");
+        });
+    });
+
+    describe("POST /api/activity", () => {
+        const post = (body: unknown, token?: string) =>
+            createActivitySyncRouter().request("http://x/api/activity", {
+                method: "POST",
+                headers: {
+                    "content-type": "application/json",
+                    ...(token ? { authorization: `Bearer ${token}` } : {}),
+                },
+                body: typeof body === "string" ? body : JSON.stringify(body),
+            });
+
+        test("401 without a valid token, and nothing is written", async () => {
+            db.ingestToken = "nmi_good";
+            expect((await post({ active_kcal: 300 })).status).toBe(401);
+            expect((await post({ active_kcal: 300 }, "nmi_bad")).status).toBe(
+                401,
+            );
+            expect(db.activity.size).toBe(0);
+        });
+
+        test("upserts today's total and echoes the adjusted goal", async () => {
+            db.ingestToken = "nmi_good";
+            db.goals = baseGoals();
+            const r1 = await post({ active_kcal: "120.6" }, "nmi_good");
+            expect(r1.status).toBe(200);
+            const r2 = await post(
+                { active_kcal: 300, source: "apple_health" },
+                "nmi_good",
+            );
+            const j = (await r2.json()) as Record<string, unknown>;
+            expect(j.active_kcal).toBe(300);
+            expect(j.calorie_goal).toBe(2100);
+            expect(db.activity.size).toBe(1);
+            expect(db.activity.get(today())).toBe(300);
+        });
+
+        test("400 on junk bodies and impossible dates", async () => {
+            db.ingestToken = "nmi_good";
+            expect((await post("not json", "nmi_good")).status).toBe(400);
+            expect((await post({ active_kcal: -1 }, "nmi_good")).status).toBe(
+                400,
+            );
+            expect(
+                (await post({ active_kcal: 1, date: "2026-02-30" }, "nmi_good"))
+                    .status,
+            ).toBe(400);
+            expect(
+                (await post({ active_kcal: 1, date: "2999-01-01" }, "nmi_good"))
+                    .status,
+            ).toBe(400);
+            expect(db.activity.size).toBe(0);
+        });
+
+        test("a past date is accepted", async () => {
+            db.ingestToken = "nmi_good";
+            const r = await post(
+                { active_kcal: 410, date: "2026-11-01" },
+                "nmi_good",
+            );
+            expect(r.status).toBe(200);
+            expect(db.activity.get("2026-11-01")).toBe(410);
+        });
+    });
+});
+
+test("an unreachable activity_log degrades to baseline goals, not a failed tool", async () => {
+    db.goals = { ...goals(), daily_calories: 1800 } as NutritionGoals;
+    db.activityThrows = true;
+    await withTools(null, async (call) => {
+        const r = await call("get_goal_progress", {});
+        expect(r.isError).toBeFalsy();
+        const sc = r.structuredContent as Record<string, unknown>;
+        expect(sc.active_kcal).toBeNull();
+        expect((sc.goals as { calories: number }).calories).toBe(1800);
+        const p = await call("get_profile", {});
+        expect(p.isError).toBeFalsy();
     });
 });

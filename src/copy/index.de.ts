@@ -686,7 +686,7 @@ export const INDEX_DE: IndexDoc = {
         note: "Das alles ist optional. Du kannst es jetzt, später oder nie machen — leg einfach mit dem Erfassen los und stell das ein, wann immer du willst.",
         toolsCta: {
             heading: "Neugierig, was es wirklich kann?",
-            body: "Sieh dir alle 36 Werkzeuge an — Erfassen, Barcodes, Wasser, Gewicht, Ziele und Trends — jeweils mit Beschreibung und einem Beispielsatz.",
+            body: "Sieh dir alle 38 Werkzeuge an — Erfassen, Barcodes, Wasser, Gewicht, Ziele und Trends — jeweils mit Beschreibung und einem Beispielsatz.",
             arrow: "Werkzeuge entdecken",
         },
     },
@@ -785,7 +785,7 @@ export const INDEX_DE: IndexDoc = {
             {
                 icon: "fa-solid fa-file-csv",
                 title: "Export & Eigentum an deinen Daten",
-                body: "Nimm alles mit, was du hier hast — Mahlzeiten, Wasser, Gewicht, Ziele und Profil — als ein ZIP mit CSV-Dateien. Mahlzeiten sind bisher der einzige Teil, der wieder importiert werden kann. Lösch dein Konto und deine Daten, wann immer du willst.",
+                body: "Nimm alles mit, was du hier hast — Mahlzeiten, Wasser, Gewicht, Aktivität, Ziele und Profil — als ein ZIP mit CSV-Dateien. Mahlzeiten sind bisher der einzige Teil, der wieder importiert werden kann. Lösch dein Konto und deine Daten, wann immer du willst.",
             },
         ],
     },

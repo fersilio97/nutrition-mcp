@@ -24,6 +24,7 @@ export const WIDGET_STRINGS_NL: WidgetStrings = {
         noneLogged: "niets gelogd",
         caloriesToday: "Calorieën vandaag",
         caloriesOn: "Calorieën · {date}",
+        activeBonus: "doel +{n} actief",
         tapHint: "Tik op een waarde voor de bijbehorende maaltijden",
         showMealsContributed: "Toon de maaltijden die hieraan bijdroegen.",
         byMealTitle: "{label} per maaltijd",
