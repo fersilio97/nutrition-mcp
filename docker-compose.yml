@@ -2,18 +2,18 @@
 # Supabase still holds all the data, so this container is stateless: nothing
 # to back up here, and `docker compose up -d --build` is the whole update.
 services:
-  nutrition-mcp:
-    build: .
-    env_file: .env
-    environment:
-      # Inside the container 0.0.0.0 is required for Docker's port mapping to
-      # reach it; the loopback-only binding below is what keeps it private.
-      # Public access goes through Tailscale Funnel only:
-      #   sudo tailscale funnel --bg --https=8443 http://127.0.0.1:8090
-      # Funnel sends X-Forwarded-Proto/Host, which getBaseUrl (src/url.ts)
-      # uses, so OAuth metadata advertises https://asus.<tailnet>.ts.net:8443.
-      - HOST=0.0.0.0
-      - PORT=8080
-    ports:
-      - "127.0.0.1:8090:8080"
-    restart: unless-stopped
+    nutrition-mcp:
+        build: .
+        env_file: .env
+        environment:
+            # Inside the container 0.0.0.0 is required for Docker's port mapping to
+            # reach it; the loopback-only binding below is what keeps it private.
+            # Public access goes through Tailscale Funnel only:
+            #   sudo tailscale funnel --bg --https=8443 http://127.0.0.1:8090
+            # Funnel sends X-Forwarded-Proto/Host, which getBaseUrl (src/url.ts)
+            # uses, so OAuth metadata advertises https://asus.<tailnet>.ts.net:8443.
+            - HOST=0.0.0.0
+            - PORT=8080
+        ports:
+            - "127.0.0.1:8090:8080"
+        restart: unless-stopped
