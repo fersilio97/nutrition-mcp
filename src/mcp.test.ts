@@ -40,6 +40,7 @@ import {
 import { Hono } from "hono";
 import { createActivitySyncRouter } from "./activity-sync.js";
 import { todayInTz } from "./tz.js";
+import { dashboardPayload, saveBodyDetails } from "./dashboard.js";
 import { McpServer, InMemoryTransport } from "@modelcontextprotocol/server";
 import * as actualSupabase from "./supabase.js";
 
@@ -1443,6 +1444,8 @@ const db = {
     ingestToken: null as string | null,
     // Simulates activity_log being unreachable (or not yet migrated).
     activityThrows: false,
+    // Weigh-ins, oldest first; the last is what getLatestWeight returns.
+    weights: [] as WeightEntry[],
 };
 
 mock.module("./supabase.js", () => ({
@@ -1591,8 +1594,10 @@ mock.module("./supabase.js", () => ({
               }
             : null;
     },
-    getActivityInRange: async (userId: string, start: string, end: string) =>
-        [...db.activity.entries()]
+    getActivityInRange: async (userId: string, start: string, end: string) => {
+        if (db.activityThrows)
+            throw new Error('relation "activity_log" does not exist');
+        return [...db.activity.entries()]
             .filter(([d]) => d >= start && d <= end)
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([date, active_kcal]) => ({
@@ -1601,7 +1606,8 @@ mock.module("./supabase.js", () => ({
                 active_kcal,
                 source: "manual",
                 updated_at: "2026-11-09T00:00:00Z",
-            })),
+            }));
+    },
     rotateIngestToken: async () => {
         db.ingestToken = `nmi_test_${Math.random().toString(16).slice(2)}`;
         return db.ingestToken;
@@ -1611,7 +1617,8 @@ mock.module("./supabase.js", () => ({
             ? { status: "valid" as const, userId: "u1" }
             : { status: "invalid" as const },
     touchIngestToken: async () => {},
-    getLatestWeight: async () => null,
+    getLatestWeight: async () => db.weights.at(-1) ?? null,
+    getWeightInRange: async () => db.weights,
     getIngestTokenStatus: async () => {
         if (db.activityThrows)
             throw new Error('relation "ingest_tokens" does not exist');
@@ -1651,6 +1658,7 @@ beforeEach(() => {
     db.activity = new Map();
     db.ingestToken = null;
     db.activityThrows = false;
+    db.weights = [];
 });
 
 interface ToolResult {
@@ -4731,5 +4739,141 @@ test("an unreachable activity_log degrades to baseline goals, not a failed tool"
         expect((sc.goals as { calories: number }).calories).toBe(1800);
         const p = await call("get_profile", {});
         expect(p.isError).toBeFalsy();
+    });
+});
+
+describe("set_body_profile", () => {
+    test("saves height (inches converted), birth date and sex", async () => {
+        await withTools(null, async (call) => {
+            const r = await call("set_body_profile", {
+                height: 70,
+                height_unit: "in",
+                birth_date: "1996-03-03",
+                sex: "male",
+            });
+            expect(r.isError).toBeFalsy();
+            expect(db.profilePatches.at(-1)).toEqual({
+                height_cm: 177.8,
+                birth_date: "1996-03-03",
+                sex: "male",
+            });
+            expect(textOf(r)).toContain("height 177.8 cm");
+            const p = await call("get_profile", {});
+            expect(textOf(p)).toContain("Body profile: height 177.8 cm");
+        });
+    });
+
+    test("a partial update names what is still missing", async () => {
+        await withTools(null, async (call) => {
+            const r = await call("set_body_profile", { height: 178 });
+            expect(textOf(r)).toContain("missing birth date, sex");
+        });
+    });
+
+    test("rejects a height given in feet without saving", async () => {
+        await withTools(null, async (call) => {
+            const r = await call("set_body_profile", { height: 5.9 });
+            expect(r.isError).toBe(true);
+            expect(textOf(r)).toContain("check the unit");
+            expect(db.profilePatches).toEqual([]);
+        });
+    });
+
+    test("an empty call is refused rather than a silent no-op", async () => {
+        await withTools(null, async (call) => {
+            const r = await call("set_body_profile", {});
+            expect(r.isError).toBe(true);
+        });
+    });
+});
+
+// The real /api/dashboard/* handlers, minus the bearer check (stubbing
+// getUserIdByToken here would collide with middleware.test.ts's own mock).
+describe("dashboard API", () => {
+    const tz = "America/New_York";
+    const stage = () => {
+        db.profile = {
+            ...PROFILE_BASE,
+            timezone: tz,
+            height_cm: 178,
+            birth_date: "1996-01-01",
+            sex: "male",
+        };
+        db.goals = { ...goals(), daily_calories: 1800 } as NutritionGoals;
+        db.activity.set(todayInTz(tz), 5);
+        db.weights = [
+            {
+                id: "w1",
+                user_id: "u1",
+                weight_g: 82_700,
+                // 21:30 in New York on the 8th — the 9th in UTC.
+                logged_at: "2026-11-09T02:30:00Z",
+                notes: null,
+                created_at: "2026-11-09T02:30:00Z",
+                idempotency_key: null,
+            } as WeightEntry,
+        ];
+    };
+
+    test("today's row carries the activity-adjusted goal", async () => {
+        stage();
+        const d = (await dashboardPayload("u1", 1)) as any;
+        expect(d.days).toBe(1);
+        expect(d.daily).toHaveLength(1);
+        expect(d.daily[0].goal_calories).toBe(1805);
+        expect(d.daily[0].active_kcal).toBe(5);
+        expect(d.daily[0].burn_kcal).not.toBeNull();
+        expect(d.goals.calories).toBe(1800);
+        // The bucket's Set must not leak into the JSON.
+        expect(d.daily[0].mealTypes).toBeUndefined();
+    });
+
+    test("weigh-ins are dated in the profile's zone, and stats are filled", async () => {
+        stage();
+        const d = (await dashboardPayload("u1", 7)) as any;
+        expect(d.weights[0].date).toBe("2026-11-08");
+        expect(d.weightStats.latest_g).toBe(82_700);
+        expect(d.weightStats.bmi).toBe(26.1);
+        expect(d.weightStats.missing).toEqual([]);
+        expect(d.body).toEqual({
+            height_cm: 178,
+            birth_date: "1996-01-01",
+            sex: "male",
+        });
+    });
+
+    test("no weigh-ins at all: stats say so instead of failing", async () => {
+        stage();
+        db.weights = [];
+        const d = (await dashboardPayload("u1", 30)) as any;
+        expect(d.weightStats.missing).toEqual(["weight"]);
+        expect(d.daily.every((r: any) => r.burn_kcal === null)).toBe(true);
+    });
+
+    test("an unreachable activity table degrades to baseline goals", async () => {
+        stage();
+        // Today has 5 active kcal staged, but the read throws: the page must
+        // still load, against the baseline.
+        db.activityThrows = true;
+        const d = (await dashboardPayload("u1", 1)) as any;
+        expect(d.daily[0].goal_calories).toBe(1800);
+    });
+
+    test("saveBodyDetails validates, then saves", async () => {
+        stage();
+        const bad = await saveBodyDetails("u1", { height: 5.9 });
+        expect(bad.status).toBe(400);
+        expect(db.profilePatches).toEqual([]);
+        const ok = await saveBodyDetails("u1", {
+            height: 70,
+            height_unit: "in",
+            sex: "male",
+        });
+        expect(ok.status).toBe(200);
+        expect(db.profilePatches.at(-1)).toEqual({
+            height_cm: 177.8,
+            sex: "male",
+        });
+        expect((ok.json.body as { height_cm: number }).height_cm).toBe(177.8);
     });
 });

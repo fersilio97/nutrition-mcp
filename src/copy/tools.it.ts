@@ -13,17 +13,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_IT: ToolsDoc = {
     meta: {
-        title: "Guida agli strumenti: tutti i 38 strumenti",
+        title: "Guida agli strumenti: tutti i 39 strumenti",
         description:
-            "Tutti i 38 strumenti che il server Nutrition MCP mette a disposizione della tua IA — registra i pasti, scansiona codici a barre, importa il tuo storico da un'altra app, monitora acqua e peso, imposta obiettivi e rivedi gli andamenti. Guida completa con descrizioni ed esempi di richieste.",
+            "Tutti i 39 strumenti che il server Nutrition MCP mette a disposizione della tua IA — registra i pasti, scansiona codici a barre, importa il tuo storico da un'altra app, monitora acqua e peso, imposta obiettivi e rivedi gli andamenti. Guida completa con descrizioni ed esempi di richieste.",
         ogDescription:
-            "Tutti i 38 strumenti che il server Nutrition MCP mette a disposizione della tua IA, incluso un importatore CSV per il tuo storico da un'altra app — con descrizioni ed esempi di richieste.",
+            "Tutti i 39 strumenti che il server Nutrition MCP mette a disposizione della tua IA, incluso un importatore CSV per il tuo storico da un'altra app — con descrizioni ed esempi di richieste.",
     },
     hero: {
         eyebrow: "Guida di riferimento",
         title: "Tutto quello che la tua IA può fare",
         lead: "Non li chiami mai direttamente — parli e basta, e l'assistente sceglie lo strumento giusto. Ecco l'elenco completo che il server Nutrition MCP mette a disposizione, con cosa fa ciascuno e una frase che lo attiva.",
-        countBold: "38 strumenti",
+        countBold: "39 strumenti",
         countTail: "in 7 aree",
     },
     categories: {
@@ -302,6 +302,17 @@ export const TOOLS_IT: ToolsDoc = {
                 "Scegli se il peso viene mostrato e inserito in kg o lb. I valori memorizzati non sono influenzati — cambiano solo la visualizzazione e l'interpretazione predefinita.",
             params: {},
             example: "Usa le libbre per il mio peso da ora in poi",
+        },
+        set_body_profile: {
+            description:
+                "Salva altezza, data di nascita e sesso per l'IMC, il tuo intervallo di peso sano e il dispendio giornaliero stimato (Mifflin-St Jeor) nel tracker del peso della dashboard, che trasforma anche ciò che mangi ogni giorno in grammi stimati presi o persi.",
+            params: {
+                height: "Altezza in cm, oppure in pollici con height_unit.",
+                height_unit: "<code>cm</code> (predefinito) o <code>in</code>.",
+                birth_date: "AAAA-MM-GG; la tua età viene calcolata da qui.",
+                sex: "<code>male</code> o <code>female</code> — sceglie solo la costante dell'equazione.",
+            },
+            example: "Sono alto 178 cm, nato il 3 marzo 1996, uomo",
         },
         set_nutrition_goals: {
             description:

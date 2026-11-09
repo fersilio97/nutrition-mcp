@@ -2,17 +2,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_PL: ToolsDoc = {
     meta: {
-        title: "Katalog narzędzi: wszystkie 38 narzędzi",
+        title: "Katalog narzędzi: wszystkie 39 narzędzi",
         description:
-            "Wszystkie 38 narzędzi, które serwer Nutrition MCP daje Twojemu AI — zapisuj posiłki, skanuj kody kreskowe, importuj historię z innej aplikacji, śledź wodę i wagę, ustawiaj cele i przeglądaj trendy. Pełny opis wraz z przykładowymi poleceniami.",
+            "Wszystkie 39 narzędzi, które serwer Nutrition MCP daje Twojemu AI — zapisuj posiłki, skanuj kody kreskowe, importuj historię z innej aplikacji, śledź wodę i wagę, ustawiaj cele i przeglądaj trendy. Pełny opis wraz z przykładowymi poleceniami.",
         ogDescription:
-            "Wszystkie 38 narzędzi, które serwer Nutrition MCP daje Twojemu AI, w tym importer CSV do przenoszenia historii z innej aplikacji — z opisami i przykładowymi poleceniami.",
+            "Wszystkie 39 narzędzi, które serwer Nutrition MCP daje Twojemu AI, w tym importer CSV do przenoszenia historii z innej aplikacji — z opisami i przykładowymi poleceniami.",
     },
     hero: {
         eyebrow: "Dokumentacja",
         title: "Wszystko, co potrafi Twój AI",
         lead: "Nigdy nie wywołujesz tych narzędzi bezpośrednio — po prostu mówisz, a asystent sam wybiera właściwe. Oto pełny zestaw udostępniany przez serwer Nutrition MCP, wraz z opisem działania i przykładowym poleceniem, które je uruchamia.",
-        countBold: "38 narzędzi",
+        countBold: "39 narzędzi",
         countTail: "w 7 obszarach",
     },
     categories: {
@@ -288,6 +288,18 @@ export const TOOLS_PL: ToolsDoc = {
                 "Wybierz, czy waga ma być pokazywana i wprowadzana w kg czy w lb. Zapisane wartości pozostają bez zmian — zmienia się tylko wyświetlanie i domyślne parsowanie.",
             params: {},
             example: "Od teraz pokazuj moją wagę w funtach",
+        },
+        set_body_profile: {
+            description:
+                "Zapisz wzrost, datę urodzenia i płeć, aby zobaczyć BMI, zdrowy zakres wagi i szacowany dzienny wydatek energii (Mifflin-St Jeor) w module wagi na pulpicie — który przelicza też to, co jesz każdego dnia, na szacowane gramy przybrane lub stracone.",
+            params: {
+                height: "Wzrost w cm albo w calach z height_unit.",
+                height_unit: "<code>cm</code> (domyślnie) lub <code>in</code>.",
+                birth_date: "RRRR-MM-DD; wiek jest z niej obliczany.",
+                sex: "<code>male</code> lub <code>female</code> — wybiera tylko stałą we wzorze.",
+            },
+            example:
+                "Mam 178 cm wzrostu, urodziłem się 3 marca 1996, mężczyzna",
         },
         set_nutrition_goals: {
             description:

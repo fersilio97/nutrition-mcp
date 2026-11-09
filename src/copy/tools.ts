@@ -1,4 +1,4 @@
-// Typed content for /tools (the "all 38 tools" reference page), rendered
+// Typed content for /tools (the "all 39 tools" reference page), rendered
 // by scripts/gen-tools.ts. Extracted verbatim from the previously
 // hand-authored public/tools.html — see CLAUDE.md's "Public site" section
 // for the generator family this belongs to, and gen-tools.ts's own header
@@ -128,11 +128,11 @@ export interface ToolIdentity {
 }
 
 /**
- * All 38 tools, in the exact document order of public/tools.html (grouped
+ * All 39 tools, in the exact document order of public/tools.html (grouped
  * by category — see CategoryId — for the reader). Cross-checked against
- * the 38 `server.registerTool()` calls in src/mcp.ts: the two orders
+ * the 39 `server.registerTool()` calls in src/mcp.ts: the two orders
  * differ (mcp.ts registers in its own order, unrelated to this page's
- * reader-facing grouping) but the *set* of 38 tool names is identical —
+ * reader-facing grouping) but the *set* of 39 tool names is identical —
  * nothing here was dropped or invented.
  */
 export const TOOLS: ToolIdentity[] = [
@@ -346,6 +346,18 @@ export const TOOLS: ToolIdentity[] = [
         hasPhotoHint: false,
     },
     {
+        name: "set_body_profile",
+        category: "weight",
+        badges: ["setting"],
+        params: [
+            { name: "height", required: false },
+            { name: "height_unit", required: false },
+            { name: "birth_date", required: false },
+            { name: "sex", required: false },
+        ],
+        hasPhotoHint: false,
+    },
+    {
         name: "set_nutrition_goals",
         category: "goals-progress",
         badges: ["setting"],
@@ -553,17 +565,17 @@ export interface ToolsDoc {
 
 const TOOLS_EN: ToolsDoc = {
     meta: {
-        title: "Tools Reference: All 38 Tools",
+        title: "Tools Reference: All 39 Tools",
         description:
-            "All 38 tools the Nutrition MCP server gives your AI — log meals, scan barcodes, import your history from another app, track water and weight, set goals, and review trends. Full reference with descriptions and example prompts.",
+            "All 39 tools the Nutrition MCP server gives your AI — log meals, scan barcodes, import your history from another app, track water and weight, set goals, and review trends. Full reference with descriptions and example prompts.",
         ogDescription:
-            "All 38 tools the Nutrition MCP server gives your AI, including a CSV importer for your history from another app — with descriptions and example prompts.",
+            "All 39 tools the Nutrition MCP server gives your AI, including a CSV importer for your history from another app — with descriptions and example prompts.",
     },
     hero: {
         eyebrow: "Reference",
         title: "Everything your AI can do",
         lead: "You never call these directly — you just talk, and the assistant picks the right tool. Here's the full set the Nutrition MCP server exposes, with what each one does and a phrase that triggers it.",
-        countBold: "38 tools",
+        countBold: "39 tools",
         countTail: "across 7 areas",
     },
     categories: {
@@ -834,6 +846,17 @@ const TOOLS_EN: ToolsDoc = {
                 "Choose whether weights show and are entered in kg or lb. Stored values are unaffected — only display and default parsing change.",
             params: {},
             example: "Use pounds for my weight from now on",
+        },
+        set_body_profile: {
+            description:
+                "Save your height, birth date and sex for BMI, your healthy weight range and the estimated daily burn (Mifflin-St Jeor) on the dashboard's weight tracker — which also turns each day's eating into an estimated grams gained or lost.",
+            params: {
+                height: "Height in cm, or in inches with height_unit.",
+                height_unit: "<code>cm</code> (default) or <code>in</code>.",
+                birth_date: "YYYY-MM-DD; your age is worked out from it.",
+                sex: "<code>male</code> or <code>female</code> — only picks the equation's constant.",
+            },
+            example: "I'm 178 cm, born 3 March 1996, male",
         },
         set_nutrition_goals: {
             description:

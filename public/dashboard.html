@@ -283,6 +283,131 @@
                 text-align: center;
             }
 
+            /* ---------- estimated body change (under the calorie chart) ----------
+               Gain uses --over and loss --series-3, both already declared for
+               light, prefers-color-scheme dark and [data-theme="dark"]. The
+               sign is also in every label (+/−), so colour is never the only
+               cue. */
+            .sub-head {
+                margin-top: 14px;
+                padding-top: 12px;
+                border-top: 1px solid var(--border);
+            }
+            .sub-head h3 {
+                font-size: 13.5px;
+                font-weight: 620;
+                margin: 0 0 2px;
+            }
+
+            /* ---------- weight tracker ---------- */
+            /* Ruled cells drawn by each cell's own hairline (outline overlaps
+               its neighbour's), so a short last row ends cleanly instead of
+               showing the container's background as a filler block. */
+            .wstats {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 1px;
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                overflow: hidden;
+                margin-bottom: 14px;
+            }
+            .wstat {
+                background: var(--surface-1);
+                outline: 1px solid var(--border);
+                padding: 11px 13px 12px;
+            }
+            .wstat .label {
+                font-size: 11.5px;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+            .wstat .figure {
+                font-size: 20px;
+                font-weight: 640;
+                letter-spacing: -0.01em;
+                margin-top: 3px;
+            }
+            .wstat .figure .unit {
+                font-size: 12.5px;
+                font-weight: 500;
+                color: var(--text-secondary);
+                margin-left: 2px;
+            }
+            .wstat .foot {
+                font-size: 12px;
+                color: var(--text-secondary);
+                margin-top: 2px;
+            }
+            .wstat.missing .figure {
+                color: var(--text-muted);
+                font-size: 15px;
+                font-weight: 500;
+            }
+            .body-box {
+                margin-top: 10px;
+                border-top: 1px solid var(--border);
+                padding-top: 10px;
+            }
+            .body-box summary {
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text-secondary);
+            }
+            .body-form {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px 14px;
+                align-items: flex-end;
+                margin: 4px 0 6px;
+            }
+            .body-form label {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                font-size: 12.5px;
+                color: var(--text-secondary);
+            }
+            .body-form .pair {
+                display: flex;
+                gap: 6px;
+            }
+            .body-form input,
+            .body-form select {
+                padding: 7px 9px;
+                border-radius: 8px;
+                border: 1px solid var(--border);
+                background: var(--surface-0);
+                color: var(--text-primary);
+                font: inherit;
+                font-size: 14px;
+            }
+            .body-form input[type="number"] {
+                width: 90px;
+            }
+            .body-form .save {
+                padding: 8px 16px;
+                border: 0;
+                border-radius: 8px;
+                background: var(--accent);
+                color: #fff;
+                font: inherit;
+                font-weight: 620;
+                cursor: pointer;
+            }
+            .b-status {
+                font-size: 12.5px;
+                color: var(--text-secondary);
+                align-self: center;
+            }
+            .b-status.err {
+                color: var(--over);
+                margin: 0;
+                min-height: 0;
+            }
+
             /* ---------- table ---------- */
             table {
                 width: 100%;
@@ -456,6 +581,7 @@
 
             <div class="filters">
                 <div class="seg" role="group" aria-label="Date range">
+                    <button type="button" data-days="1">Today</button>
                     <button type="button" data-days="7">7 days</button>
                     <button type="button" data-days="30" aria-pressed="true">
                         30 days
@@ -473,7 +599,13 @@
                         <p class="note" id="cal-note"></p>
                     </div>
                 </div>
+                <div class="legend" id="cal-legend"></div>
                 <div class="plot" id="cal-plot"></div>
+                <div class="sub-head">
+                    <h3>Estimated body change</h3>
+                    <p class="note" id="bal-note"></p>
+                </div>
+                <div class="plot" id="bal-plot"></div>
             </section>
 
             <section class="card">
@@ -489,14 +621,62 @@
                 <div class="plot" id="macro-plot"></div>
             </section>
 
-            <section class="card" id="weight-card" hidden>
+            <section class="card" id="weight-card">
                 <div class="card-head">
                     <div>
-                        <h2>Weight</h2>
+                        <h2>Weight tracker</h2>
                         <p class="note" id="weight-note"></p>
                     </div>
                 </div>
+                <div class="wstats" id="wstats"></div>
+                <div class="legend" id="weight-legend"></div>
                 <div class="plot" id="weight-plot"></div>
+
+                <details class="body-box" id="body-box">
+                    <summary>Body details</summary>
+                    <p class="note">
+                        Used only for BMI, your healthy weight range and the
+                        estimated daily burn (Mifflin-St Jeor × 1.2 for a desk
+                        day, plus your workouts' active calories).
+                    </p>
+                    <form id="body-form" class="body-form">
+                        <label
+                            >Height
+                            <span class="pair">
+                                <input
+                                    id="b-height"
+                                    type="number"
+                                    inputmode="decimal"
+                                    step="0.1"
+                                    min="20"
+                                    max="272"
+                                />
+                                <select id="b-unit" aria-label="Height unit">
+                                    <option value="cm">cm</option>
+                                    <option value="in">in</option>
+                                </select>
+                            </span>
+                        </label>
+                        <label
+                            >Birth date
+                            <input id="b-birth" type="date" />
+                        </label>
+                        <label
+                            >Sex
+                            <select id="b-sex">
+                                <option value="">—</option>
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                            </select>
+                        </label>
+                        <button type="submit" class="save">Save</button>
+                        <span
+                            class="b-status"
+                            id="b-status"
+                            role="status"
+                        ></span>
+                    </form>
+                </details>
             </section>
 
             <section class="card">
@@ -792,11 +972,49 @@
                     });
                 }
 
-                function caloriesChart(rows, goal) {
+                function fmtSigned(n) {
+                    var r = round(n);
+                    return (
+                        (r > 0 ? "+" : r < 0 ? "−" : "") +
+                        Math.abs(r).toLocaleString()
+                    );
+                }
+
+                // Calories eaten per day against THAT day's goal — the stored
+                // baseline plus the day's active kcal, so the line steps up on
+                // a training day — with the estimated burn as a dot per day.
+                function caloriesChart(rows) {
                     var host = $("cal-plot");
                     host.textContent = "";
+                    var fill = cssVar("--series-1"),
+                        overFill = cssVar("--over"),
+                        burnInk = cssVar("--series-2"),
+                        goalInk = cssVar("--text-secondary");
+                    var hasGoal = rows.some(function (r) {
+                        return r.goal_calories;
+                    });
+                    var hasBurn = rows.some(function (r) {
+                        return r.burn_kcal;
+                    });
+                    $("cal-legend").innerHTML =
+                        '<span><i style="background:' +
+                        fill +
+                        '"></i>Eaten</span>' +
+                        (hasGoal
+                            ? '<span><i style="background:' +
+                              goalInk +
+                              ';height:3px;border-radius:1px"></i>Goal (incl. active kcal)</span>' +
+                              '<span><i style="background:' +
+                              overFill +
+                              '"></i>Over goal</span>'
+                            : "") +
+                        (hasBurn
+                            ? '<span><i style="background:' +
+                              burnInk +
+                              ';border-radius:50%"></i>Est. burn</span>'
+                            : "");
                     if (!rows.length) return;
-                    if (!anyLogged(rows)) {
+                    if (!anyLogged(rows) && !hasGoal) {
                         emptyState(host, "Nothing logged in this range.");
                         return;
                     }
@@ -806,41 +1024,302 @@
                     var peak = Math.max.apply(
                         null,
                         rows.map(function (r) {
-                            return r.calories;
+                            return Math.max(
+                                r.calories,
+                                r.goal_calories || 0,
+                                r.burn_kcal || 0,
+                            );
                         }),
                     );
-                    var maxY = snapToTicks(
-                        niceMax(Math.max(peak, goal || 0) * 1.08),
-                        4,
-                    );
+                    var maxY = snapToTicks(niceMax(peak * 1.08), 4);
+                    var yAt = function (v) {
+                        return PAD.t + plotH - (v / maxY) * plotH;
+                    };
                     var svg = svgEl("svg", {
                         viewBox: "0 0 " + W + " " + H,
                         role: "img",
                         "aria-label":
-                            "Calories per day for the selected range.",
+                            "Calories eaten per day against each day's goal and estimated burn.",
                     });
                     axes(svg, maxY, plotW, plotH, 4);
 
                     var bw = plotW / rows.length;
-                    var gap = Math.min(2, bw * 0.18); // 2px surface gap
-                    var fill = cssVar("--series-1");
-                    var overFill = cssVar("--over");
+                    var gap = Math.min(2, bw * 0.18);
+                    // A single day would otherwise be one bar the width of the
+                    // whole chart.
+                    var barW = Math.min(bw - gap, 120);
 
                     rows.forEach(function (r, i) {
                         var h = (r.calories / maxY) * plotH;
-                        var x = PAD.l + bw * i + gap / 2;
-                        var w = Math.max(1, bw - gap);
-                        var y = PAD.t + plotH - h;
-                        var over = goal && r.calories > goal;
-                        if (h > 0) {
-                            var p = svgEl("path", {
-                                d: barPath(x, y, w, h, Math.min(4, w / 2)),
-                                fill: over ? overFill : fill,
+                        var x = PAD.l + bw * i + (bw - barW) / 2;
+                        var w = Math.max(1, barW);
+                        var over =
+                            r.goal_calories && r.calories > r.goal_calories;
+                        if (h > 0)
+                            svg.appendChild(
+                                svgEl("path", {
+                                    d: barPath(
+                                        x,
+                                        yAt(r.calories),
+                                        w,
+                                        h,
+                                        Math.min(4, w / 2),
+                                    ),
+                                    fill: over ? overFill : fill,
+                                    opacity: r.in_progress ? 0.75 : 1,
+                                }),
+                            );
+                        var hit = svgEl("rect", {
+                            x: PAD.l + bw * i,
+                            y: PAD.t,
+                            width: bw,
+                            height: plotH,
+                            fill: "transparent",
+                        });
+                        hit.addEventListener("mousemove", function (ev) {
+                            var dim = ' style="color:var(--text-secondary)"';
+                            showTip(
+                                '<div class="t-date">' +
+                                    longDay(r.date) +
+                                    (r.in_progress ? " · so far" : "") +
+                                    "</div>" +
+                                    '<div class="row"><i style="background:' +
+                                    (over ? overFill : fill) +
+                                    '"></i>Eaten<b>' +
+                                    fmt(r.calories) +
+                                    "</b></div>" +
+                                    (r.goal_calories
+                                        ? '<div class="row"' +
+                                          dim +
+                                          ">Goal<b>" +
+                                          fmt(r.goal_calories) +
+                                          "</b></div>"
+                                        : "") +
+                                    (r.active_kcal
+                                        ? '<div class="row"' +
+                                          dim +
+                                          ">incl. active<b>+" +
+                                          fmt(r.active_kcal) +
+                                          "</b></div>"
+                                        : "") +
+                                    (r.burn_kcal
+                                        ? '<div class="row"><i style="background:' +
+                                          burnInk +
+                                          ';border-radius:50%"></i>Est. burn<b>' +
+                                          fmt(r.burn_kcal) +
+                                          "</b></div>"
+                                        : "") +
+                                    (r.balance_g != null
+                                        ? '<div class="row"' +
+                                          dim +
+                                          ">Est. change<b>" +
+                                          fmtSigned(r.balance_g) +
+                                          " g</b></div>"
+                                        : "") +
+                                    '<div class="row"' +
+                                    dim +
+                                    ">Meals<b>" +
+                                    r.mealCount +
+                                    "</b></div>",
+                                ev,
+                            );
+                        });
+                        hit.addEventListener("mouseleave", hideTip);
+                        svg.appendChild(hit);
+                    });
+
+                    // Goal as a step line: each day's own target across its
+                    // column, joined vertically where it changes.
+                    var d = "";
+                    rows.forEach(function (r, i) {
+                        if (!r.goal_calories) return;
+                        var y = yAt(r.goal_calories);
+                        var x0 = PAD.l + bw * i,
+                            x1 = x0 + bw;
+                        var prev = rows[i - 1];
+                        d +=
+                            (prev && prev.goal_calories ? "L" : "M") +
+                            x0 +
+                            "," +
+                            y +
+                            "L" +
+                            x1 +
+                            "," +
+                            y;
+                    });
+                    if (d)
+                        svg.appendChild(
+                            svgEl("path", {
+                                d: d,
+                                fill: "none",
+                                stroke: goalInk,
+                                "stroke-width": 2,
+                                "pointer-events": "none",
+                            }),
+                        );
+                    var lastGoal = rows[rows.length - 1].goal_calories;
+                    if (lastGoal) {
+                        var gl = svgEl("text", {
+                            x: PAD.l + plotW,
+                            y: yAt(lastGoal) - 6,
+                            "text-anchor": "end",
+                            "font-size": 11,
+                            fill: goalInk,
+                        });
+                        gl.textContent = "Goal " + fmt(lastGoal);
+                        svg.appendChild(gl);
+                    }
+
+                    rows.forEach(function (r, i) {
+                        if (!r.burn_kcal) return;
+                        svg.appendChild(
+                            svgEl("circle", {
+                                cx: PAD.l + bw * (i + 0.5),
+                                cy: yAt(r.burn_kcal),
+                                r: rows.length > 45 ? 2.5 : 3.5,
+                                fill: burnInk,
+                                stroke: cssVar("--surface-1"),
+                                "stroke-width": 1.5,
+                                "pointer-events": "none",
+                            }),
+                        );
+                    });
+
+                    xLabels(
+                        svg,
+                        rows,
+                        plotW,
+                        plotH,
+                        Math.max(1, Math.ceil(rows.length / 8)),
+                    );
+                    host.appendChild(svg);
+                }
+
+                // Estimated grams gained (up, --over) or lost (down,
+                // --series-3) per day: (eaten − est. burn) ÷ 7.7 kcal/g.
+                var BH = 150;
+                function balanceChart(rows) {
+                    var host = $("bal-plot");
+                    host.textContent = "";
+                    // A day still running reads as a huge deficit (breakfast
+                    // against a whole day's burn). Over a range it would set
+                    // the scale and dwarf every finished day, so it is only
+                    // plotted in the Today view; the top tile carries it.
+                    var multi = rows.length > 1;
+                    var plotted = function (r) {
+                        return r.balance_g != null && !(multi && r.in_progress);
+                    };
+                    var known = rows.filter(plotted);
+                    if (
+                        !rows.some(function (r) {
+                            return r.burn_kcal;
+                        })
+                    ) {
+                        $("bal-note").textContent = "";
+                        emptyState(
+                            host,
+                            "Add your height, birth date and sex under Weight tracker → Body details to estimate this.",
+                        );
+                        return;
+                    }
+                    var done = known.filter(function (r) {
+                        return !r.in_progress;
+                    });
+                    var net = done.reduce(function (a, r) {
+                        return a + r.balance_g;
+                    }, 0);
+                    $("bal-note").textContent = known.length
+                        ? "(eaten − estimated burn) ÷ 7.7 kcal per gram. An estimate for spotting the trend — daily scale weight swings far more with water and salt." +
+                          (done.length > 1
+                              ? " Net over " +
+                                done.length +
+                                " complete logged days: " +
+                                fmtSigned(net) +
+                                " g."
+                              : "")
+                        : "No logged days in this range.";
+                    if (!known.length) return;
+
+                    var plotW = W - PAD.l - PAD.r,
+                        plotH = BH - PAD.t - PAD.b;
+                    var peak = Math.max.apply(
+                        null,
+                        known.map(function (r) {
+                            return Math.abs(r.balance_g);
+                        }),
+                    );
+                    var maxAbs = niceMax(Math.max(peak, 20) * 1.15);
+                    var zeroY = PAD.t + plotH / 2;
+                    var yAt = function (v) {
+                        return zeroY - (v / maxAbs) * (plotH / 2);
+                    };
+                    var svg = svgEl("svg", {
+                        viewBox: "0 0 " + W + " " + BH,
+                        role: "img",
+                        "aria-label": "Estimated grams gained or lost per day.",
+                    });
+                    var grid = cssVar("--grid"),
+                        ink = cssVar("--text-secondary");
+                    [maxAbs, 0, -maxAbs].forEach(function (v) {
+                        var y = yAt(v);
+                        svg.appendChild(
+                            svgEl("line", {
+                                x1: PAD.l,
+                                x2: PAD.l + plotW,
+                                y1: y,
+                                y2: y,
+                                stroke: v === 0 ? ink : grid,
+                                "stroke-width": 1,
+                            }),
+                        );
+                        var t = svgEl("text", {
+                            x: PAD.l - 8,
+                            y: y + 4,
+                            "text-anchor": "end",
+                            "font-size": 11,
+                            fill: ink,
+                        });
+                        t.textContent = v === 0 ? "0 g" : fmtSigned(v);
+                        svg.appendChild(t);
+                    });
+
+                    var bw = plotW / rows.length;
+                    var barW = Math.min(bw - Math.min(2, bw * 0.18), 120);
+                    var gain = cssVar("--over"),
+                        loss = cssVar("--series-3");
+                    rows.forEach(function (r, i) {
+                        if (!plotted(r)) return;
+                        var v = r.balance_g;
+                        var x = PAD.l + bw * i + (bw - barW) / 2;
+                        var y = v >= 0 ? yAt(v) : zeroY;
+                        var h = Math.max(1, Math.abs(yAt(v) - zeroY));
+                        svg.appendChild(
+                            svgEl("rect", {
+                                x: x,
+                                y: y,
+                                width: Math.max(1, barW),
+                                height: h,
+                                rx: Math.min(3, barW / 2),
+                                fill: v >= 0 ? gain : loss,
+                                opacity: r.in_progress ? 0.6 : 1,
+                            }),
+                        );
+                        // Direct labels while they fit; the tooltip covers
+                        // the rest.
+                        if (rows.length <= 14) {
+                            var t = svgEl("text", {
+                                x: x + barW / 2,
+                                y: v >= 0 ? y - 4 : y + h + 12,
+                                "text-anchor": "middle",
+                                "font-size": 11,
+                                fill: ink,
                             });
-                            svg.appendChild(p);
+                            t.textContent =
+                                fmtSigned(v) +
+                                " g" +
+                                (r.in_progress ? "*" : "");
+                            svg.appendChild(t);
                         }
-                        // Hit target spans the full column and full height,
-                        // so a short bar is still easy to hover.
                         var hit = svgEl("rect", {
                             x: PAD.l + bw * i,
                             y: PAD.t,
@@ -852,50 +1331,22 @@
                             showTip(
                                 '<div class="t-date">' +
                                     longDay(r.date) +
+                                    (r.in_progress ? " · so far" : "") +
                                     "</div>" +
                                     '<div class="row"><i style="background:' +
-                                    (over ? overFill : fill) +
-                                    '"></i>Calories<b>' +
-                                    fmt(r.calories) +
-                                    "</b></div>" +
-                                    (goal
-                                        ? '<div class="row" style="color:var(--text-secondary)">Goal<b>' +
-                                          fmt(goal) +
-                                          "</b></div>"
-                                        : "") +
-                                    '<div class="row" style="color:var(--text-secondary)">Meals<b>' +
-                                    r.mealCount +
-                                    "</b></div>",
+                                    (v >= 0 ? gain : loss) +
+                                    '"></i>Est. change<b>' +
+                                    fmtSigned(v) +
+                                    " g</b></div>" +
+                                    '<div class="row" style="color:var(--text-secondary)">Eaten − burn<b>' +
+                                    fmtSigned(r.calories - r.burn_kcal) +
+                                    " kcal</b></div>",
                                 ev,
                             );
                         });
                         hit.addEventListener("mouseleave", hideTip);
                         svg.appendChild(hit);
                     });
-
-                    if (goal) {
-                        var gy = PAD.t + plotH - (goal / maxY) * plotH;
-                        svg.appendChild(
-                            svgEl("line", {
-                                x1: PAD.l,
-                                x2: PAD.l + plotW,
-                                y1: gy,
-                                y2: gy,
-                                stroke: cssVar("--text-secondary"),
-                                "stroke-width": 2,
-                            }),
-                        );
-                        var gl = svgEl("text", {
-                            x: PAD.l + plotW,
-                            y: gy - 6,
-                            "text-anchor": "end",
-                            "font-size": 11,
-                            fill: cssVar("--text-secondary"),
-                        });
-                        gl.textContent = "Goal " + fmt(goal);
-                        svg.appendChild(gl);
-                    }
-
                     xLabels(
                         svg,
                         rows,
@@ -1037,39 +1488,252 @@
                     host.appendChild(svg);
                 }
 
-                function weightChart(points, unit) {
-                    var card = $("weight-card"),
-                        host = $("weight-plot");
-                    host.textContent = "";
-                    if (points.length < 2) {
-                        card.hidden = true;
-                        return;
+                /* ---------- weight tracker ---------- */
+                function toUnit(g, unit) {
+                    return unit === "lb" ? g / 453.59237 : g / 1000;
+                }
+                function wfmt(g, unit) {
+                    return toUnit(g, unit).toFixed(1);
+                }
+                function wstat(label, value, unit, foot, missing) {
+                    return (
+                        '<div class="wstat' +
+                        (missing ? " missing" : "") +
+                        '"><div class="label">' +
+                        esc(label) +
+                        '</div><div class="figure">' +
+                        value +
+                        (unit
+                            ? '<span class="unit">' + esc(unit) + "</span>"
+                            : "") +
+                        "</div>" +
+                        (foot ? '<div class="foot">' + foot + "</div>" : "") +
+                        "</div>"
+                    );
+                }
+                var BMI_LABEL = {
+                    underweight: "Underweight",
+                    healthy: "Healthy range",
+                    overweight: "Overweight",
+                    obese: "Obese",
+                };
+
+                function renderWeightStats(s, unit) {
+                    var ask = function (what) {
+                        return wstat(
+                            what,
+                            "Add details",
+                            "",
+                            "Body details below",
+                            true,
+                        );
+                    };
+                    var html = "";
+                    html +=
+                        s.latest_g != null
+                            ? wstat(
+                                  "Current",
+                                  wfmt(s.latest_g, unit),
+                                  unit,
+                                  "Logged " + shortDay(s.latest_date),
+                              )
+                            : wstat(
+                                  "Current",
+                                  "No weigh-ins",
+                                  "",
+                                  "Ask Claude to log your weight",
+                                  true,
+                              );
+                    html +=
+                        s.bmi != null
+                            ? wstat(
+                                  "BMI",
+                                  s.bmi.toFixed(1),
+                                  "",
+                                  BMI_LABEL[s.bmi_category],
+                              )
+                            : s.height_cm == null
+                              ? ask("BMI")
+                              : wstat("BMI", "—", "", "Needs a weigh-in", true);
+                    if (s.healthy_min_g != null)
+                        html += wstat(
+                            "Healthy range",
+                            wfmt(s.healthy_min_g, unit) +
+                                "–" +
+                                wfmt(s.healthy_max_g, unit),
+                            unit,
+                            "BMI 18.5–24.9 at " +
+                                Number(s.height_cm).toFixed(0) +
+                                " cm",
+                        );
+                    html +=
+                        s.change_g != null
+                            ? wstat(
+                                  "Change",
+                                  fmtSignedDec(toUnit(s.change_g, unit)),
+                                  unit,
+                                  "over " +
+                                      s.trend_days +
+                                      " days · " +
+                                      fmtSignedDec(
+                                          toUnit(s.weekly_rate_g, unit),
+                                          2,
+                                      ) +
+                                      " " +
+                                      unit +
+                                      "/week",
+                              )
+                            : wstat(
+                                  "Change",
+                                  "—",
+                                  "",
+                                  "Needs 2+ weigh-ins on different days",
+                                  true,
+                              );
+                    if (s.target_g != null) {
+                        var foot;
+                        if (s.to_target_g === 0) foot = "At target";
+                        else if (s.projected_date)
+                            foot = "At this rate: " + longDay(s.projected_date);
+                        else if (s.weekly_rate_g != null)
+                            foot = "Current trend is not heading there";
+                        else
+                            foot =
+                                "Target " + wfmt(s.target_g, unit) + " " + unit;
+                        html += wstat(
+                            "To target",
+                            s.to_target_g != null
+                                ? fmtSignedDec(toUnit(s.to_target_g, unit))
+                                : wfmt(s.target_g, unit),
+                            unit,
+                            foot,
+                        );
                     }
-                    card.hidden = false;
-                    $("weight-note").textContent =
-                        points.length + " weigh-ins, in " + unit + ".";
+                    html +=
+                        s.bmr_kcal != null
+                            ? wstat(
+                                  "Resting burn",
+                                  fmt(s.bmr_kcal),
+                                  "kcal",
+                                  "BMR · Mifflin-St Jeor" +
+                                      (s.age != null ? " · age " + s.age : ""),
+                              )
+                            : ask("Resting burn");
+                    $("wstats").innerHTML = html;
+                }
+                function fmtSignedDec(n, dp) {
+                    var v = Number(n.toFixed(dp == null ? 1 : dp));
+                    return (
+                        (v > 0 ? "+" : v < 0 ? "−" : "") +
+                        Math.abs(v).toFixed(dp == null ? 1 : dp)
+                    );
+                }
+
+                // Time-scaled, not index-scaled: weigh-ins are irregular, and
+                // even spacing would make a two-week gap look like a day.
+                function weightChart(d) {
+                    var host = $("weight-plot");
+                    host.textContent = "";
+                    var unit = d.weightUnit,
+                        s = d.weightStats;
+                    var pts = d.weights
+                        .map(function (w) {
+                            return {
+                                date: w.date,
+                                v: toUnit(w.weight_g, unit),
+                            };
+                        })
+                        .sort(function (a, b) {
+                            return a.date < b.date ? -1 : 1;
+                        });
+                    var line = cssVar("--series-1"),
+                        band = cssVar("--series-3"),
+                        ink = cssVar("--text-secondary");
+                    $("weight-legend").innerHTML = pts.length
+                        ? '<span><i style="background:' +
+                          line +
+                          '"></i>Weight</span>' +
+                          (s.target_g != null
+                              ? '<span><i style="background:' +
+                                ink +
+                                ';height:3px;border-radius:1px"></i>Target</span>'
+                              : "") +
+                          (s.healthy_min_g != null
+                              ? '<span><i style="background:' +
+                                band +
+                                ';opacity:.25"></i>Healthy BMI range</span>'
+                              : "")
+                        : "";
+                    $("weight-note").textContent = pts.length
+                        ? pts.length +
+                          " weigh-in" +
+                          (pts.length === 1 ? "" : "s") +
+                          " since " +
+                          longDay(d.weightWindowStart) +
+                          ", in " +
+                          unit +
+                          "."
+                        : "No weigh-ins in the last " +
+                          Math.round(
+                              (parseDay(d.endDate) -
+                                  parseDay(d.weightWindowStart)) /
+                                  864e5 +
+                                  1,
+                          ) +
+                          " days.";
+                    if (!pts.length) return;
 
                     var plotW = W - PAD.l - PAD.r,
                         plotH = H - PAD.t - PAD.b;
-                    var vals = points.map(function (p) {
+                    var vals = pts.map(function (p) {
                         return p.v;
                     });
+                    if (s.target_g != null) vals.push(toUnit(s.target_g, unit));
                     var lo = Math.min.apply(null, vals),
                         hi = Math.max.apply(null, vals);
-                    var padY = (hi - lo) * 0.25 || 1;
+                    var padY = (hi - lo) * 0.2 || 1;
                     lo -= padY;
                     hi += padY;
-
+                    var t0 = parseDay(d.weightWindowStart).getTime(),
+                        t1 = parseDay(d.endDate).getTime();
+                    var xAt = function (iso) {
+                        return (
+                            PAD.l +
+                            (t1 === t0
+                                ? plotW / 2
+                                : ((parseDay(iso).getTime() - t0) / (t1 - t0)) *
+                                  plotW)
+                        );
+                    };
+                    var yAt = function (v) {
+                        return PAD.t + plotH - ((v - lo) / (hi - lo)) * plotH;
+                    };
                     var svg = svgEl("svg", {
                         viewBox: "0 0 " + W + " " + H,
                         role: "img",
-                        "aria-label": "Body weight over the selected range.",
+                        "aria-label":
+                            "Body weight over time, with target and healthy range.",
                     });
-                    var grid = cssVar("--grid"),
-                        ink = cssVar("--text-secondary");
+
+                    if (s.healthy_min_g != null) {
+                        var a = Math.max(lo, toUnit(s.healthy_min_g, unit)),
+                            b = Math.min(hi, toUnit(s.healthy_max_g, unit));
+                        if (b > a)
+                            svg.appendChild(
+                                svgEl("rect", {
+                                    x: PAD.l,
+                                    y: yAt(b),
+                                    width: plotW,
+                                    height: yAt(a) - yAt(b),
+                                    fill: band,
+                                    opacity: 0.12,
+                                }),
+                            );
+                    }
+                    var grid = cssVar("--grid");
                     for (var i = 0; i <= 3; i++) {
                         var v = lo + ((hi - lo) / 3) * i;
-                        var y = PAD.t + plotH - ((v - lo) / (hi - lo)) * plotH;
+                        var y = yAt(v);
                         svg.appendChild(
                             svgEl("line", {
                                 x1: PAD.l,
@@ -1090,46 +1754,60 @@
                         t.textContent = v.toFixed(1);
                         svg.appendChild(t);
                     }
-
-                    var xAt = function (i) {
-                        return (
-                            PAD.l +
-                            (points.length === 1
-                                ? plotW / 2
-                                : (plotW * i) / (points.length - 1))
+                    if (s.target_g != null) {
+                        var ty = yAt(toUnit(s.target_g, unit));
+                        svg.appendChild(
+                            svgEl("line", {
+                                x1: PAD.l,
+                                x2: PAD.l + plotW,
+                                y1: ty,
+                                y2: ty,
+                                stroke: ink,
+                                "stroke-width": 2,
+                            }),
                         );
-                    };
-                    var yAt = function (v) {
-                        return PAD.t + plotH - ((v - lo) / (hi - lo)) * plotH;
-                    };
-                    var d = points
-                        .map(function (p, i) {
-                            return (i ? "L" : "M") + xAt(i) + "," + yAt(p.v);
-                        })
-                        .join(" ");
+                        var tl = svgEl("text", {
+                            x: PAD.l + plotW,
+                            y: ty - 6,
+                            "text-anchor": "end",
+                            "font-size": 11,
+                            fill: ink,
+                        });
+                        tl.textContent = "Target " + wfmt(s.target_g, unit);
+                        svg.appendChild(tl);
+                    }
                     svg.appendChild(
                         svgEl("path", {
-                            d: d,
+                            d: pts
+                                .map(function (p, i) {
+                                    return (
+                                        (i ? "L" : "M") +
+                                        xAt(p.date) +
+                                        "," +
+                                        yAt(p.v)
+                                    );
+                                })
+                                .join(" "),
                             fill: "none",
-                            stroke: cssVar("--series-1"),
+                            stroke: line,
                             "stroke-width": 2,
                             "stroke-linejoin": "round",
                             "stroke-linecap": "round",
                         }),
                     );
-                    points.forEach(function (p, i) {
+                    pts.forEach(function (p) {
                         svg.appendChild(
                             svgEl("circle", {
-                                cx: xAt(i),
+                                cx: xAt(p.date),
                                 cy: yAt(p.v),
                                 r: 4,
-                                fill: cssVar("--series-1"),
+                                fill: line,
                                 stroke: cssVar("--surface-1"),
                                 "stroke-width": 2,
                             }),
                         );
                         var hit = svgEl("circle", {
-                            cx: xAt(i),
+                            cx: xAt(p.date),
                             cy: yAt(p.v),
                             r: 14,
                             fill: "transparent",
@@ -1140,20 +1818,105 @@
                                     longDay(p.date) +
                                     "</div>" +
                                     '<div class="row"><i style="background:' +
-                                    cssVar("--series-1") +
+                                    line +
                                     '"></i>Weight<b>' +
                                     p.v.toFixed(1) +
                                     " " +
                                     unit +
-                                    "</b></div>",
+                                    "</b></div>" +
+                                    (s.height_cm
+                                        ? '<div class="row" style="color:var(--text-secondary)">BMI<b>' +
+                                          (
+                                              (unit === "lb"
+                                                  ? p.v * 0.45359237
+                                                  : p.v) /
+                                              Math.pow(s.height_cm / 100, 2)
+                                          ).toFixed(1) +
+                                          "</b></div>"
+                                        : ""),
                                 ev,
                             );
                         });
                         hit.addEventListener("mouseleave", hideTip);
                         svg.appendChild(hit);
                     });
+                    // Start and end dates of the window.
+                    [d.weightWindowStart, d.endDate].forEach(function (iso, k) {
+                        var t = svgEl("text", {
+                            x: k ? PAD.l + plotW : PAD.l,
+                            y: PAD.t + plotH + 17,
+                            "text-anchor": k ? "end" : "start",
+                            "font-size": 11,
+                            fill: ink,
+                        });
+                        t.textContent = shortDay(iso);
+                        svg.appendChild(t);
+                    });
                     host.appendChild(svg);
                 }
+
+                /* ---------- body details form ---------- */
+                function fillBodyForm(body) {
+                    var unit = data.weightUnit === "lb" ? "in" : "cm";
+                    $("b-unit").value = unit;
+                    $("b-height").value =
+                        body.height_cm == null
+                            ? ""
+                            : unit === "in"
+                              ? (body.height_cm / 2.54).toFixed(1)
+                              : String(body.height_cm);
+                    $("b-birth").value = body.birth_date || "";
+                    $("b-sex").value = body.sex || "";
+                    var missing =
+                        body.height_cm == null || !body.birth_date || !body.sex;
+                    // Open it when something is missing, so the ask is visible.
+                    if (missing && !$("body-box").dataset.touched)
+                        $("body-box").open = true;
+                }
+                $("body-box").addEventListener("toggle", function () {
+                    $("body-box").dataset.touched = "1";
+                });
+                $("body-form").addEventListener("submit", function (ev) {
+                    ev.preventDefault();
+                    var st = $("b-status");
+                    st.className = "b-status";
+                    st.textContent = "Saving…";
+                    var h = $("b-height").value.trim();
+                    fetch("/api/dashboard/body", {
+                        method: "POST",
+                        headers: {
+                            Authorization: "Bearer " + token,
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            height: h === "" ? null : Number(h),
+                            height_unit: $("b-unit").value,
+                            birth_date: $("b-birth").value || null,
+                            sex: $("b-sex").value || null,
+                        }),
+                    })
+                        .then(function (r) {
+                            return r.json().then(function (b) {
+                                return { ok: r.ok, status: r.status, body: b };
+                            });
+                        })
+                        .then(function (res) {
+                            if (res.status === 401) return signOut();
+                            if (!res.ok) {
+                                st.className = "b-status err";
+                                st.textContent =
+                                    (res.body && res.body.error_description) ||
+                                    "Could not save.";
+                                return;
+                            }
+                            st.textContent = "Saved.";
+                            refresh();
+                        })
+                        .catch(function () {
+                            st.className = "b-status err";
+                            st.textContent = "Could not reach the server.";
+                        });
+                });
 
                 /* ---------- tiles ---------- */
                 function tile(label, value, unit, foot, pct, over) {
@@ -1184,21 +1947,31 @@
                     );
                 }
 
-                function renderTiles(today, goals, rows) {
-                    var g = goals || {};
+                function renderTiles(today, rows) {
                     var html = "";
-                    var kcal = today ? today.calories : 0;
+                    var t = today || {};
+                    var kcal = t.calories || 0;
+                    var goal = t.goal_calories;
 
-                    if (g.calories) {
-                        var left = g.calories - kcal;
+                    if (goal) {
+                        var left = goal - kcal;
+                        // "1,800 + 5 active" — say where the goal came from.
+                        var basis = t.active_kcal
+                            ? " (" +
+                              fmt(goal - t.active_kcal) +
+                              " + " +
+                              fmt(t.active_kcal) +
+                              " active)"
+                            : "";
                         html += tile(
                             "Today",
                             fmt(kcal),
                             "kcal",
-                            left >= 0
-                                ? fmt(left) + " kcal left of " + fmt(g.calories)
-                                : fmt(-left) + " kcal over goal",
-                            (kcal / g.calories) * 100,
+                            (left >= 0
+                                ? fmt(left) + " kcal left of " + fmt(goal)
+                                : fmt(-left) + " kcal over " + fmt(goal)) +
+                                basis,
+                            (kcal / goal) * 100,
                             left < 0,
                         );
                     } else {
@@ -1213,39 +1986,56 @@
 
                     html += tile(
                         "Protein today",
-                        fmt(today ? today.protein_g : 0),
+                        fmt(t.protein_g),
                         "g",
-                        g.protein_g ? "of " + fmt(g.protein_g) + " g" : null,
-                        g.protein_g
-                            ? ((today ? today.protein_g : 0) / g.protein_g) *
-                                  100
+                        t.goal_protein_g
+                            ? "of " + fmt(t.goal_protein_g) + " g"
+                            : null,
+                        t.goal_protein_g
+                            ? ((t.protein_g || 0) / t.goal_protein_g) * 100
                             : null,
                     );
+                    var fiberGoal = data.goals && data.goals.fiber_g;
                     html += tile(
                         "Fiber today",
-                        fmt(today ? today.fiber_g : 0),
+                        fmt(t.fiber_g),
                         "g",
-                        g.fiber_g ? "of " + fmt(g.fiber_g) + " g" : null,
-                        g.fiber_g
-                            ? ((today ? today.fiber_g : 0) / g.fiber_g) * 100
-                            : null,
+                        fiberGoal ? "of " + fmt(fiberGoal) + " g" : null,
+                        fiberGoal ? ((t.fiber_g || 0) / fiberGoal) * 100 : null,
                     );
 
-                    var logged = rows.filter(function (r) {
-                        return r.mealCount > 0;
-                    });
-                    var avg = logged.length
-                        ? logged.reduce(function (a, r) {
-                              return a + r.calories;
-                          }, 0) / logged.length
-                        : 0;
-                    html += tile(
-                        "Daily average",
-                        fmt(avg),
-                        "kcal",
-                        logged.length + " of " + rows.length + " days logged",
-                        null,
-                    );
+                    if (t.burn_kcal) {
+                        html += tile(
+                            "Est. burn today",
+                            fmt(t.burn_kcal),
+                            "kcal",
+                            t.balance_g != null
+                                ? fmtSigned(t.balance_g) + " g so far (est.)"
+                                : "Nothing eaten logged yet",
+                            null,
+                        );
+                    }
+
+                    if (rows.length > 1) {
+                        var logged = rows.filter(function (r) {
+                            return r.mealCount > 0;
+                        });
+                        var avg = logged.length
+                            ? logged.reduce(function (a, r) {
+                                  return a + r.calories;
+                              }, 0) / logged.length
+                            : 0;
+                        html += tile(
+                            "Daily average",
+                            fmt(avg),
+                            "kcal",
+                            logged.length +
+                                " of " +
+                                rows.length +
+                                " days logged",
+                            null,
+                        );
+                    }
 
                     $("tiles").innerHTML = html;
                 }
@@ -1287,35 +2077,31 @@
 
                 function render() {
                     var rows = data.daily;
-                    var goals = data.goals;
                     var today = rows[rows.length - 1];
 
                     $("range-label").textContent =
-                        longDay(data.startDate) +
-                        " to " +
-                        longDay(data.endDate) +
+                        (data.days === 1
+                            ? "Today, " + longDay(data.endDate)
+                            : longDay(data.startDate) +
+                              " to " +
+                              longDay(data.endDate)) +
                         " · " +
                         data.timezone;
-                    $("cal-note").textContent =
-                        goals && goals.calories
-                            ? "Bars above the goal line are shown in red."
-                            : "No calorie goal set.";
+                    $("cal-note").textContent = rows.some(function (r) {
+                        return r.goal_calories;
+                    })
+                        ? "Each day's goal is your " +
+                          fmt(data.goals.calories) +
+                          " kcal baseline plus that day's active calories from your watch; bars above it are red."
+                        : "No calorie goal set.";
 
-                    renderTiles(today, goals, rows);
-                    caloriesChart(rows, goals ? goals.calories : null);
+                    renderTiles(today, rows);
+                    caloriesChart(rows);
+                    balanceChart(rows);
                     macroChart(rows);
-
-                    var unit = data.weightUnit;
-                    var pts = data.weights.map(function (w) {
-                        return {
-                            date: w.logged_at.slice(0, 10),
-                            v:
-                                unit === "lb"
-                                    ? w.weight_g / 453.59237
-                                    : w.weight_g / 1000,
-                        };
-                    });
-                    weightChart(pts, unit);
+                    renderWeightStats(data.weightStats, data.weightUnit);
+                    weightChart(data);
+                    fillBodyForm(data.body);
                     renderTable(data.meals);
                 }
 

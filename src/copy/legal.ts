@@ -77,7 +77,7 @@ const PRIVACY_EN: LegalDoc = {
                     "<strong>Body weight logs</strong> — weight, notes, and timestamps. This is health data, and it is treated exactly like the rest of your logs.",
                     "<strong>Goals</strong> — your daily calorie, protein, carb, fat, fiber, sugar, alcohol, caffeine, and water targets, and your target weight.",
                     "<strong>Activity</strong> — active (exercise) calories per day, if you log them or connect the Apple Health sync, plus a hashed sync token. They are used only to raise that day's calorie and macro goals, and are treated exactly like the rest of your logs.",
-                    "<strong>Profile settings</strong> — your IANA timezone, preferred weight unit, whether alcohol tracking is switched on and which standard drink it is shown in, and whether in-chat widgets are enabled.",
+                    "<strong>Profile settings</strong> — your IANA timezone, preferred weight unit, whether alcohol tracking is switched on and which standard drink it is shown in, and whether in-chat widgets are enabled — and, if you give them, your height, birth date and sex, used only to compute BMI and an estimated daily energy burn.",
                     "<strong>Tool-usage telemetry</strong> — for each MCP tool call, which tool ran, whether it succeeded, how long it took, a coarse error category when it failed, the span in days of any date range you asked for, and the MCP session id. It is linked to your account id. It never includes the content of your logs.",
                 ]),
                 p(
@@ -336,7 +336,7 @@ const PRIVACY_DE: LegalDoc = {
                     "<strong>Körpergewichts-Einträge</strong> — Gewicht, Notizen und Zeitstempel. Das sind Gesundheitsdaten und werden genauso behandelt wie alle anderen Einträge.",
                     "<strong>Ziele</strong> — deine täglichen Ziele für Kalorien, Protein, Kohlenhydrate, Fett, Ballaststoffe, Zucker, Alkohol, Koffein und Wasser sowie dein Zielgewicht.",
                     "<strong>Aktivität</strong> — aktive (Trainings-)Kalorien pro Tag, wenn du sie erfasst oder die Apple-Health-Synchronisierung verbindest, sowie ein gehashter Sync-Token. Sie dienen nur dazu, die Kalorien- und Makroziele des Tages anzuheben, und werden genau wie deine übrigen Einträge behandelt.",
-                    "<strong>Profileinstellungen</strong> — deine IANA-Zeitzone, bevorzugte Gewichtseinheit, ob die Alkohol-Erfassung aktiviert ist und in welchem Standardgetränk sie angezeigt wird, sowie ob In-Chat-Widgets aktiviert sind.",
+                    "<strong>Profileinstellungen</strong> — deine IANA-Zeitzone, bevorzugte Gewichtseinheit, ob die Alkohol-Erfassung aktiviert ist und in welchem Standardgetränk sie angezeigt wird, sowie ob In-Chat-Widgets aktiviert sind — und, falls du sie angibst, deine Größe, dein Geburtsdatum und dein Geschlecht, die nur zur Berechnung von BMI und geschätztem Tagesumsatz dienen.",
                     "<strong>Nutzungs-Telemetrie der Werkzeuge</strong> — für jeden MCP-Tool-Aufruf, welches Werkzeug ausgeführt wurde, ob es erfolgreich war, wie lange es dauerte, eine grobe Fehlerkategorie bei einem Fehlschlag, die Länge in Tagen eines angefragten Datumsbereichs sowie die MCP-Sitzungs-ID. Sie ist mit deiner Konto-ID verknüpft und enthält niemals den Inhalt deiner Einträge.",
                 ]),
                 p(

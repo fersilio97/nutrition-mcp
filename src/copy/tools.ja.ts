@@ -20,17 +20,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_JA: ToolsDoc = {
     meta: {
-        title: "ツールリファレンス：38個の全ツール",
+        title: "ツールリファレンス：39個の全ツール",
         description:
-            "Nutrition MCPサーバーがあなたのAIに提供する38個すべてのツール — 食事の記録、バーコードのスキャン、他のアプリからの履歴インポート、水分と体重の記録、目標の設定、トレンドの確認。説明と例文つきの完全なリファレンスです。",
+            "Nutrition MCPサーバーがあなたのAIに提供する39個すべてのツール — 食事の記録、バーコードのスキャン、他のアプリからの履歴インポート、水分と体重の記録、目標の設定、トレンドの確認。説明と例文つきの完全なリファレンスです。",
         ogDescription:
-            "Nutrition MCPサーバーがあなたのAIに提供する38個のツール。他のアプリからの履歴用CSVインポーターを含み、説明と例文つき。",
+            "Nutrition MCPサーバーがあなたのAIに提供する39個のツール。他のアプリからの履歴用CSVインポーターを含み、説明と例文つき。",
     },
     hero: {
         eyebrow: "リファレンス",
         title: "あなたのAIができること、すべて",
         lead: "これらのツールを直接呼び出すことはありません — ただ話しかけるだけで、アシスタントが適切なツールを選びます。Nutrition MCPサーバーが公開する全ツールと、それぞれの機能、呼び出すきっかけとなるフレーズをまとめました。",
-        countBold: "38個のツール",
+        countBold: "39個のツール",
         countTail: "7つの分野にわたる",
     },
     categories: {
@@ -302,6 +302,17 @@ export const TOOLS_JA: ToolsDoc = {
                 "体重の表示・入力単位をkgとlbのどちらにするか選びます。保存されている値自体は変わりません — 表示とデフォルトの解釈のみが変わります。",
             params: {},
             example: "これから体重はポンドで表示して",
+        },
+        set_body_profile: {
+            description:
+                "身長・生年月日・性別を保存すると、ダッシュボードの体重トラッカーでBMI、健康的な体重の範囲、推定1日消費エネルギー(Mifflin-St Jeor式)が表示され、毎日の食事から推定の増減グラムも計算されます。",
+            params: {
+                height: "身長(cm)。height_unitを指定するとインチ。",
+                height_unit: "<code>cm</code>(既定)または<code>in</code>。",
+                birth_date: "YYYY-MM-DD。年齢はここから計算されます。",
+                sex: "<code>male</code>または<code>female</code> — 式の定数を選ぶためだけに使います。",
+            },
+            example: "身長178cm、1996年3月3日生まれ、男性",
         },
         set_nutrition_goals: {
             description:

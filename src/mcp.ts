@@ -51,6 +51,7 @@ import {
     getIngestTokenStatus,
     type Meal,
     type NutritionGoals,
+    type Profile,
     type WaterEntry,
     type WeightEntry,
 } from "./supabase.js";
@@ -114,6 +115,27 @@ import {
     isLocalDate,
     type ActivityAdjustment,
 } from "./activity.js";
+import { checkBodyPatch, ageOn } from "./body.js";
+
+/** get_profile / set_body_profile's one-line summary of the body details. */
+function bodyProfileLine(profile: Profile | null): string {
+    const h = profile?.height_cm;
+    const parts = [
+        h != null ? `height ${Number(h)} cm` : null,
+        profile?.birth_date
+            ? `born ${profile.birth_date} (age ${ageOn(profile.birth_date, todayInTz(profile.timezone ?? "UTC"))})`
+            : null,
+        profile?.sex ? `sex ${profile.sex}` : null,
+    ].filter((p): p is string => p !== null);
+    if (parts.length === 3)
+        return `Body profile: ${parts.join(", ")}. BMI and the estimated daily burn are available on the dashboard.`;
+    const missing = [
+        h == null ? "height" : null,
+        profile?.birth_date ? null : "birth date",
+        profile?.sex ? null : "sex",
+    ].filter(Boolean);
+    return `Body profile: ${parts.length ? parts.join(", ") + "; " : ""}missing ${missing.join(", ")}. BMI needs height; the estimated burn needs all three — set them with set_body_profile.`;
+}
 
 // MCP Apps UI (https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/):
 // the get_nutrition_summary tool links to an HTML dashboard served as a ui://
@@ -1394,7 +1416,7 @@ export function registerTools(
     // endpoint URL. Optional for the same reason as protocolEra.
     baseUrl: string = "http://localhost",
 ) {
-    // One context for all 38 tools. clientInfo is a getter, not a value: at
+    // One context for all 39 tools. clientInfo is a getter, not a value: at
     // registration time the SDK has not yet resolved who is calling, and on the
     // modern leg it backfills the identity per request before dispatch.
     const analytics = {
@@ -3968,6 +3990,88 @@ export function registerTools(
     );
 
     server.registerTool(
+        "set_body_profile",
+        {
+            title: "Set Body Profile",
+            description:
+                "Save the user's height, birth date and sex — used only for body-mass index (BMI), the healthy weight range, and the estimated resting/daily energy burn (Mifflin-St Jeor) shown on the dashboard's weight tracker and in its estimated gain/loss per day. Partial updates: omitted fields are kept, null clears one. Height is stored in cm; pass height_unit 'in' to give inches (convert feet+inches to total inches first, e.g. 5'10\" = 70). Sex only selects the equation's constant. Ask the user for these rather than guessing; if they decline one, leave it out.",
+            annotations: {
+                readOnlyHint: false,
+                destructiveHint: false,
+                idempotentHint: true,
+                openWorldHint: false,
+            },
+            inputSchema: z.object({
+                // Unions and plain strings, not tight Zod types: bounds live in
+                // the handler (checkBodyPatch) so a bad value comes back as a
+                // readable sentence rather than a schema rejection.
+                height: z
+                    .union([z.number(), z.string()])
+                    .nullable()
+                    .optional()
+                    .describe("Height, in cm unless height_unit is 'in'."),
+                height_unit: z
+                    .enum(["cm", "in"])
+                    .optional()
+                    .describe("Unit of `height` (default 'cm')."),
+                birth_date: z
+                    .string()
+                    .nullable()
+                    .optional()
+                    .describe(
+                        "Birth date YYYY-MM-DD (age is derived from it).",
+                    ),
+                sex: z
+                    .enum(["male", "female"])
+                    .nullable()
+                    .optional()
+                    .describe(
+                        "'male' or 'female' — the BMR equation's constant.",
+                    ),
+            }),
+        },
+        async (args) => {
+            return withAnalytics(
+                "set_body_profile",
+                async () => {
+                    const tz = (await getUserTimezone(userId)) ?? "UTC";
+                    const checked = checkBodyPatch(args, todayInTz(tz));
+                    if (!checked.ok)
+                        return {
+                            isError: true,
+                            content: [
+                                {
+                                    type: "text",
+                                    text: `Not saved: ${checked.error}`,
+                                },
+                            ],
+                        };
+                    if (Object.keys(checked.patch).length === 0)
+                        return {
+                            isError: true,
+                            content: [
+                                {
+                                    type: "text",
+                                    text: "Nothing to save — pass height, birth_date and/or sex.",
+                                },
+                            ],
+                        };
+                    const profile = await upsertProfile(userId, checked.patch);
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text: `Saved. ${bodyProfileLine(profile)}`,
+                            },
+                        ],
+                    };
+                },
+                analytics,
+            );
+        },
+    );
+
+    server.registerTool(
         "set_weight_unit",
         {
             title: "Set Weight Unit",
@@ -4468,6 +4572,7 @@ export function registerTools(
                         sync
                             ? `Activity sync: connected${sync.last_used_at ? `, last sync ${formatLocalDateTime(sync.last_used_at, tz ?? "UTC")}` : ", no sync received yet"}. Active calories raise each day's calorie goal and scale protein/carbs/fat with it.`
                             : "Activity sync: not connected. Active calories can be logged with log_active_calories, or synced from Apple Health with setup_activity_sync.",
+                        bodyProfileLine(profile),
                     ];
 
                     return {
@@ -4680,7 +4785,7 @@ function newMcpServer(baseUrl: string): McpServer {
     return new McpServer(
         {
             name: "nutrition-mcp",
-            version: "1.28.0",
+            version: "1.29.0",
             icons: [
                 {
                     src: `${baseUrl}/favicon.ico`,

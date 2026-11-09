@@ -620,9 +620,17 @@ export interface Profile {
     // contract as timezone above. Always coalesce through localeFromProfile /
     // getUserLocale, never read this directly.
     locale: string | null;
+    // Body details (src/body.ts). null = never given; every stat that needs
+    // one is skipped rather than guessed. Optional because rows read before
+    // the migration lands carry no such keys at all.
+    height_cm?: number | null;
+    birth_date?: string | null;
+    sex?: BodySex | null;
     created_at: string;
     updated_at: string;
 }
+
+export type BodySex = "male" | "female";
 
 export async function getProfile(userId: string): Promise<Profile | null> {
     const { data, error } = await getSupabase()
@@ -757,6 +765,9 @@ export async function upsertProfile(
         alcohol_tracking_enabled?: boolean;
         preferred_drink_unit?: DrinkUnit | null;
         locale?: string;
+        height_cm?: number | null;
+        birth_date?: string | null;
+        sex?: BodySex | null;
     },
 ): Promise<Profile> {
     const payload: Record<string, unknown> = {
@@ -775,6 +786,10 @@ export async function upsertProfile(
     if (patch.preferred_drink_unit !== undefined)
         payload.preferred_drink_unit = patch.preferred_drink_unit;
     if (patch.locale !== undefined) payload.locale = patch.locale;
+    // null clears each body field, like the preferences above.
+    if (patch.height_cm !== undefined) payload.height_cm = patch.height_cm;
+    if (patch.birth_date !== undefined) payload.birth_date = patch.birth_date;
+    if (patch.sex !== undefined) payload.sex = patch.sex;
 
     const { data, error } = await getSupabase()
         .from("profiles")

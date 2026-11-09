@@ -15,6 +15,13 @@ create table if not exists public.activity_log (
 
 alter table public.activity_log enable row level security;
 
+-- Re-runnable: this migration was first applied by hand (SQL editor) on the
+-- production project, so `supabase db push` later met an existing policy.
+-- Postgres has no `create policy if not exists`; drop-then-create is the
+-- idempotent form, and it runs inside the migration's transaction, so the
+-- table is never left without its policy.
+drop policy if exists "Users manage their own activity_log"
+    on public.activity_log;
 create policy "Users manage their own activity_log"
     on public.activity_log
     for all

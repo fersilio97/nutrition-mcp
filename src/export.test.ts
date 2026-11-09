@@ -363,7 +363,7 @@ const WEIGHT_HEADER =
 const GOALS_HEADER =
     "daily_calories,daily_protein_g,daily_carbs_g,daily_fat_g,daily_fiber_g,daily_sugar_g,daily_alcohol_g,daily_caffeine_mg,daily_water_ml,target_weight_g,updated_at,timezone";
 const PROFILE_HEADER =
-    "timezone,preferred_weight_unit,preferred_drink_unit,alcohol_tracking_enabled,widgets_enabled,created_at,updated_at";
+    "timezone,preferred_weight_unit,preferred_drink_unit,alcohol_tracking_enabled,widgets_enabled,height_cm,birth_date,sex,created_at,updated_at";
 
 test("water.csv header names carry the unit and the zone", () => {
     expect(parseCsv(buildWaterCsv([], "UTC"))[0]).toEqual([
@@ -597,9 +597,25 @@ test("every profile value lands under its own header name", () => {
         // unset preference looks like, and the two are different facts.
         alcohol_tracking_enabled: "false",
         widgets_enabled: "true",
+        // Never given: blank, not a guessed height.
+        height_cm: "",
+        birth_date: "",
+        sex: "",
         created_at: "2026-01-02 15:30:00",
         updated_at: "2026-06-20 16:30:00",
     });
+});
+
+test("profile.csv carries the body details when given", () => {
+    const f = fieldsByName(
+        buildProfileCsv(
+            profile({ height_cm: 178, birth_date: "1996-01-01", sex: "male" }),
+            "UTC",
+        ),
+    );
+    expect(f.height_cm).toBe("178");
+    expect(f.birth_date).toBe("1996-01-01");
+    expect(f.sex).toBe("male");
 });
 
 test("profile.csv names the zone its own timestamps are rendered in", () => {

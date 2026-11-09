@@ -6,17 +6,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_DE: ToolsDoc = {
     meta: {
-        title: "Werkzeug-Referenz: Alle 38 Werkzeuge",
+        title: "Werkzeug-Referenz: Alle 39 Werkzeuge",
         description:
-            "Alle 38 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt — Mahlzeiten erfassen, Barcodes scannen, deine Historie aus einer anderen App importieren, Wasser und Gewicht verfolgen, Ziele festlegen und Trends auswerten. Vollständige Referenz mit Beschreibungen und Beispielsätzen.",
+            "Alle 39 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt — Mahlzeiten erfassen, Barcodes scannen, deine Historie aus einer anderen App importieren, Wasser und Gewicht verfolgen, Ziele festlegen und Trends auswerten. Vollständige Referenz mit Beschreibungen und Beispielsätzen.",
         ogDescription:
-            "Alle 38 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt, inklusive eines CSV-Importers für deine Historie aus einer anderen App — mit Beschreibungen und Beispielsätzen.",
+            "Alle 39 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt, inklusive eines CSV-Importers für deine Historie aus einer anderen App — mit Beschreibungen und Beispielsätzen.",
     },
     hero: {
         eyebrow: "Referenz",
         title: "Alles, was deine KI kann",
         lead: "Du rufst diese Werkzeuge nie selbst auf — du sprichst einfach, und der Assistent wählt das richtige Werkzeug. Hier ist die vollständige Liste, die der Nutrition-MCP-Server bereitstellt, mit dem, was jedes tut, und einem Satz, der es auslöst.",
-        countBold: "38 Werkzeuge",
+        countBold: "39 Werkzeuge",
         countTail: "in 7 Bereichen",
     },
     categories: {
@@ -299,6 +299,17 @@ export const TOOLS_DE: ToolsDoc = {
                 "Wähl, ob Gewichte in kg oder lb angezeigt und eingegeben werden. Gespeicherte Werte sind davon nicht betroffen — nur Anzeige und Standard-Auswertung ändern sich.",
             params: {},
             example: "Verwende ab jetzt Pfund für mein Gewicht",
+        },
+        set_body_profile: {
+            description:
+                "Speichere Größe, Geburtsdatum und Geschlecht für BMI, deinen gesunden Gewichtsbereich und den geschätzten Tagesumsatz (Mifflin-St Jeor) im Gewichts-Tracker des Dashboards — der daraus für jeden Tag auch geschätzte Gramm zu- oder abgenommen berechnet.",
+            params: {
+                height: "Größe in cm, oder in Zoll mit height_unit.",
+                height_unit: "<code>cm</code> (Standard) oder <code>in</code>.",
+                birth_date: "JJJJ-MM-TT; dein Alter wird daraus berechnet.",
+                sex: "<code>male</code> oder <code>female</code> — wählt nur die Konstante der Formel.",
+            },
+            example: "Ich bin 178 cm groß, geboren am 3. März 1996, männlich",
         },
         set_nutrition_goals: {
             description:
