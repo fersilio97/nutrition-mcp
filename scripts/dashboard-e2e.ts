@@ -320,6 +320,10 @@ console.log("touch");
     await login(page);
     await settled(page);
     await page.click("#tab-trends");
+    // A tap can only land on what is on screen; the chart may sit below
+    // the fold at 844px. Let the scroll settle (scroll dismisses tips).
+    await page.locator("#cal-plot svg").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
     const box = await page.locator("#cal-plot svg").boundingBox();
     await page.touchscreen.tap(
         box.x + box.width * 0.6,
@@ -425,6 +429,144 @@ console.log("deep link + body form");
         problems.length === 0,
         `console/network clean: ${problems.join(" | ") || "none"}`,
     );
+    await ctx.close();
+}
+
+// ---------- feedback round 1: burn split, 7-day pair, writes ----------
+// Chrome logs every 4xx response as a console error; the deliberate bad
+// submissions below produce exactly those, so only those are excused.
+const unexpected = (problems: string[]) =>
+    problems.filter((p) => !/status of 400 \(Bad Request\)/.test(p));
+for (const width of [390, 1440]) {
+    console.log(`round 1 · ${width}px`);
+    const { ctx, page, problems } = await open({ width });
+    await login(page);
+    await settled(page);
+
+    // Today: the two fixed 7-day figures.
+    const pair = await page.evaluate(
+        () =>
+            document.querySelector("#today-body .trio.two")?.textContent || "",
+    );
+    check(
+        /Scale/.test(pair) && /Net est\. change/.test(pair) && /g/.test(pair),
+        "Today shows the 7-day scale + net estimate pair",
+    );
+
+    // Trends: resting + workout in legend and tooltip.
+    await page.click("#tab-trends");
+    await settled(page);
+    const legendText = await page.textContent("#panel-trends .legend");
+    check(
+        /Resting burn \(changes with weight\)/.test(legendText) &&
+            /Workout \/ active/.test(legendText),
+        "Calories legend names resting burn and workout / active",
+    );
+    check(
+        (await page.locator("#cal-plot .m-rest").count()) === 1 &&
+            (await page.locator("#cal-plot .m-active").count()) > 0,
+        "Calories chart draws the resting line and active segments",
+    );
+    await page.focus("#cal-plot svg");
+    await page.keyboard.press("Home");
+    let tipText = "";
+    for (let i = 0; i < 30 && !/Active/.test(tipText); i++) {
+        tipText = (await page.textContent("#live")) || "";
+        if (!/Active/.test(tipText)) await page.keyboard.press("ArrowRight");
+    }
+    check(
+        /Resting/.test(tipText) &&
+            /Active/.test(tipText) &&
+            /Est\. burn total/.test(tipText),
+        "tooltip lists Resting, Active and Est. burn total",
+    );
+    await page.keyboard.press("Escape");
+
+    // Body: log a weigh-in — inline error, then a real save.
+    await page.click("#tab-body");
+    await settled(page);
+    await page.click("#lw-open");
+    await page.fill("#lw-weight", "3");
+    await page.click("#lw-save");
+    await page.waitForFunction(() =>
+        /outside/.test(document.querySelector("#lw-status")?.textContent || ""),
+    );
+    check(true, "Log weight: an implausible weight is refused inline");
+    await page.fill("#lw-weight", "80.4");
+    await page.fill("#lw-note", "e2e");
+    const wReq = page.waitForRequest((r: any) =>
+        r.url().endsWith("/api/dashboard/weight"),
+    );
+    await page.click("#lw-save");
+    const wBody = JSON.parse((await wReq).postData());
+    check(
+        wBody.weight === 80.4 &&
+            wBody.unit === "kg" &&
+            /^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(wBody.logged_at) &&
+            wBody.notes === "e2e",
+        `Log weight payload ${JSON.stringify(wBody)}`,
+    );
+    await page.waitForSelector(".lw-flash");
+    await settled(page);
+    check(
+        (await page.textContent(".w-now b"))!.trim() === "80.4",
+        "the new weigh-in becomes the current weight",
+    );
+
+    // Meals: edit one — bounds error, then only the changed fields.
+    await page.click("#tab-meals");
+    await settled(page);
+    await page.locator("#meals-body .btn-edit").first().click();
+    await page.fill("#me-calories", "25000");
+    await page.click("#me-save");
+    await page.waitForFunction(() =>
+        /must be/.test(document.querySelector("#me-status")?.textContent || ""),
+    );
+    check(true, "Edit meal: update_meal's bound is enforced inline");
+    await page.fill("#me-calories", "432");
+    const mReq = page.waitForRequest((r: any) => r.method() === "PATCH");
+    await page.click("#me-save");
+    const mBody = JSON.parse((await mReq).postData());
+    check(
+        JSON.stringify(mBody) === '{"calories":432}',
+        `Edit meal sends only the change: ${JSON.stringify(mBody)}`,
+    );
+    await page.waitForSelector(".meal-flash");
+    await settled(page);
+    check(
+        await page.evaluate(() =>
+            [...document.querySelectorAll("#meals-body td.k")].some(
+                (e) => e.textContent!.trim() === "432",
+            ),
+        ),
+        "the edited meal shows its new kcal",
+    );
+    check(
+        (await page.evaluate(
+            () => document.documentElement.scrollWidth - innerWidth,
+        )) <= 0,
+        "no horizontal scroll with the editor used",
+    );
+    if (SHOTS) {
+        await page.locator("#meals-body .btn-edit").first().click();
+        await page.waitForSelector("#me-form");
+        await page.screenshot({
+            path: `${SHOTS}/meals-edit-${width}-light.png`,
+            fullPage: false,
+        });
+        await page.click("#me-cancel");
+    }
+    await axe(page, `meals with editor ${width}`);
+    const bad = unexpected(problems);
+    check(
+        bad.length === 0,
+        `console/network clean: ${bad.join(" | ") || "none"}`,
+    );
+    await ctx.close();
+}
+// Reset the preview's in-memory writes.
+{
+    const { ctx } = await open({ width: 390, query: "?scenario=full" });
     await ctx.close();
 }
 

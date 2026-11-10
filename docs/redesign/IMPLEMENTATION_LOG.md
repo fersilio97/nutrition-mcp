@@ -203,12 +203,118 @@ Stage 2 of the redesign, built on branch `worktree-dashboard-daily-goal` against
 
 ## Known issues / notes
 
-- The `full` fixture's weigh-ins trend −0.15 kg/week as §5.2 specifies, but its
-  eating runs about 600 kcal under the estimated burn. Its Estimate vs reality
-  card therefore says the burn estimate looks about 420 kcal/day high. This is a
-  fixture artefact; `calibrate` is the scenario tuned to show the card's intended
-  reading (about 150 kcal/day high).
+- (Superseded by round 1's burn model.) Under BMR × 1.2 the `full` fixture's
+  Estimate vs reality card read about 420 kcal/day high. With resting + active
+  it now reads about 70 high; `calibrate` still lands at ~150 (tested).
 - At 1 year on 390px, bars are about 1px wide with no gap, and burn markers merge
   into a line. This is acceptable per §4.7; the tooltip and keyboard give
   per-day values.
 - Lighthouse accessibility ≥ 95 is not verified. axe is clean.
+
+## Round 1: user feedback (2026-11-10, REQUIREMENTS §0b)
+
+### What changed, per item
+
+1. **Burn model.**
+    - `src/body.ts`: `SEDENTARY_FACTOR` (1.2) is now `BASE_FACTOR` (1.0), so
+      burn = resting BMR + active kcal. The header comment gives the reasoning
+      (remote work, < 1,000 steps on rest days, matches Garmin's resting +
+      active split) and points to the Estimate vs reality card as the
+      calibration check.
+    - Tests moved to the new figures: 1768 + 300 = 2068, −9 g for 2000 eaten;
+      today's burn 1968.
+    - `calibrate` needed no retune: it derives its eating from `dailyBurn`, so
+      it still lands in its band.
+    - Page texts that said "× 1.2" / "desk day" now name the model. Today's
+      Est. burn foot shows the split ("1,751 resting + 452 active").
+    - `set_body_profile`'s description never said 1.2, but it now names the
+      model. `src/copy` has no burn "1.2"; the hits there are water amounts in
+      widget mock-ups.
+2. **Burn as resting + workout.**
+    - `daily[].bmr_kcal` is added, built in `buildDashboardDays`. It moves
+      with weight via `weightOn`.
+    - The Calories chart draws the resting burn as a dashed `--burn` line, the
+      active kcal as a `--burn` segment (with a surface halo) up to the total
+      ring, and keeps the total ring.
+    - Legend: "Resting burn (changes with weight)", "Workout / active",
+      "Est. burn (total)". Tooltip: Resting, Active, Est. burn total.
+    - Rings are sized by actual column width, so they shrink on a phone.
+    - Above 90 days the segments are dropped (bars are ~1px at 390px) and only
+      the resting line and total rings remain. The chart note says so, and
+      the tooltip still has the split. Checked legible at 390 and 1440.
+3. **Today's 7-day pair.**
+    - A pure `buildLast7` in `src/dashboard-stats.ts` (4 unit tests, plus a
+      range-independence test in `mcp.test.ts`) feeds the additive `last7`.
+    - Scale = last − first weigh-in in [today − 7, today], via
+      `buildEstimateVsScale`'s span logic, so it needs 2 weigh-ins on
+      different dates.
+    - Net est. = sum of `balance_g` over the complete logged days in
+      [today − 7, today − 1], the Trends tile's definition over a fixed week.
+    - `dashboardWindow` gains `fetchStart` (the range widened to today − 7).
+      Meals, water and activity are fetched from it, so `last7` never depends
+      on the range. `daily` and `meals` are cut back to the range, so those
+      payload fields are unchanged.
+    - It renders at the top of Today's "Last 7 days" card: signed grams,
+      amber/blue with sign, empty states, and a "Log weight" link.
+4. **Log weight.**
+    - `POST /api/dashboard/weight` runs the pure `checkWeightEntry`, then
+      `logWeightFromDashboard`.
+    - Validation reuses `toGrams`, `isPlausibleWeightGrams` and
+      `resolveWriteLoggedAt` in the profile timezone (no past bound, 5-minute
+      future). The unit falls back to the saved preference, and an omitted
+      time means now. Saved with `insertWeight`, whose idempotency is
+      unchanged.
+    - Body's "+ Log weight" opens an inline form (weight, kg/lb, date + time
+      defaulting to now in the profile timezone, note) with errors inline and
+      a confirmation after the refetch. Today's Scale cell links to it.
+5. **Edit a meal.**
+    - `PATCH /api/dashboard/meals/:id` runs the pure `checkMealPatch`, then
+      `updateMealFromDashboard`, persisted with `updateMeal`. That function
+      filters both its lookup and its UPDATE by `user_id`, which I verified.
+    - It returns 404 for another user's meal ("meal not found") and for a
+      non-uuid id, which would otherwise be a 500 on the uuid cast.
+    - Bounds reuse `MAX_CALORIES` and `MAX_MACRO_G` from `src/import.ts`.
+      Unknown keys are refused, and the page sends only changed fields, so
+      alcohol, caffeine and notes are never touched.
+    - Meals rows and cards get an Edit button that opens an inline edit row:
+      description, type, eaten-at time in the profile timezone, kcal, P, C, F,
+      fiber, sugar.
+    - **Delete was skipped:** there is no delete endpoint, and a proper
+      non-`confirm()` flow plus tests is not a cheap add.
+    - The preview supports both writes in memory, through the same validators.
+      Fixture meals now have uuid-shaped ids so they are editable there.
+
+### Decisions worth checking
+
+- **A cleared number in the meal editor is refused** ("can't be cleared —
+  enter 0 if there was none"). `updateMeal` stores calories through
+  `toStoredInteger`, where `null` rounds to a silent 0. `update_meal` can't
+  clear a number either.
+- **The 7-day window is calendar-fixed**, today − 7 … today. It is not "the
+  last 7 logged days, however far back".
+
+### Bug log (round 1)
+
+1. The meal editor's textarea rendered in the browser's monospace font. → The
+   base `font: inherit` rule listed button, input and select, not textarea. →
+   Added textarea. → 390 and 1440 screenshots.
+2. E2E only: "tap pins the tooltip" failed. → The longer Trends note and legend
+   pushed the chart below the 844px fold, so the tap landed off-screen
+   (`elementFromPoint` returned nothing). → The test scrolls the chart into
+   view before tapping. → E2E green.
+3. Prevented before shipping: a blanked calories field would have been stored
+   as 0 (see "Decisions worth checking").
+
+### Verification (round 1)
+
+- `bun test`: 939 pass, 0 fail. Typecheck and `format:check` are clean.
+- E2E: **173 checks, all passed, on two consecutive runs**. The new block
+  covers the 7-day pair, the burn legend, marks and tooltip, the Log weight
+  inline error and payload, the meal edit inline error and changed-fields-only
+  payload, and axe with the editor open. Console errors are excused only for
+  the deliberate 400s.
+- Screenshots refreshed (Today, Trends, Body, Meals, empty Today; both widths
+  and themes). New: `meals-edit-390-light.png` and `meals-edit-1440-light.png`.
+  The login screenshots were unchanged.
+- Not re-run this round: Claude in Chrome. The visual checks were Playwright
+  screenshots, each one viewed.
