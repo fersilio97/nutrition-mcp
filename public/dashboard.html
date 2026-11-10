@@ -1274,6 +1274,17 @@
                 border-top: 1px solid var(--border);
                 width: 100%;
             }
+            /* Today's 7-day pair: the trio's cells, two columns, ruled below. */
+            .trio.two {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                margin: 0 0 var(--s3);
+                padding-bottom: var(--s3);
+                border-top: 0;
+                border-bottom: 1px solid var(--border);
+            }
+            .trio.two > div {
+                padding-top: 0;
+            }
             .trio > div {
                 padding: var(--s3) var(--s2) 0;
                 min-width: 0;
@@ -1427,6 +1438,47 @@
             .w-hero {
                 display: grid;
                 gap: var(--s2);
+            }
+            .w-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--s3);
+                margin: calc(-1 * var(--s1)) 0 0;
+            }
+            .lw-flash {
+                margin: 0;
+                padding: var(--s2) var(--s3);
+                border-radius: var(--r-sm);
+                background: var(--accent-soft);
+                color: var(--ink);
+                font-size: var(--t-small);
+                font-weight: 600;
+            }
+            .lw-form {
+                display: grid;
+                gap: var(--s3) var(--s4);
+                margin-top: var(--s3);
+                padding-top: var(--s4);
+                border-top: 1px solid var(--border);
+            }
+            .lw-form .field {
+                margin: 0;
+            }
+            .lw-hint {
+                margin: 0;
+            }
+            @media (min-width: 700px) {
+                .lw-form {
+                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(
+                            0,
+                            1.4fr
+                        );
+                }
+                .lw-foot,
+                .lw-hint {
+                    grid-column: 1 / -1;
+                }
             }
             .card h3.micro {
                 font-size: var(--t-micro);
@@ -2250,6 +2302,63 @@
                         tzOpts({ hour: "2-digit", minute: "2-digit" }),
                     ).format(new Date(iso));
                 }
+                // "YYYY-MM-DDTHH:MM" in the PROFILE timezone, for a
+                // datetime-local input. The server reads the same offset-less
+                // string back in that zone (resolveWriteLoggedAt), so the
+                // round trip never depends on the browser's own zone.
+                function localInputValue(iso) {
+                    const p = {};
+                    new Intl.DateTimeFormat(
+                        "en-CA",
+                        tzOpts({
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hourCycle: "h23",
+                        }),
+                    )
+                        .formatToParts(iso ? new Date(iso) : new Date())
+                        .forEach(function (x) {
+                            p[x.type] = x.value;
+                        });
+                    return (
+                        p.year +
+                        "-" +
+                        p.month +
+                        "-" +
+                        p.day +
+                        "T" +
+                        p.hour +
+                        ":" +
+                        p.minute
+                    );
+                }
+                // A failed write's message: the server's sentence, else ours.
+                function writeJson(method, url, body) {
+                    return fetch(url, {
+                        method: method,
+                        headers: {
+                            Authorization: "Bearer " + token,
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(body),
+                    }).then(function (r) {
+                        return r
+                            .json()
+                            .catch(function () {
+                                return {};
+                            })
+                            .then(function (b) {
+                                if (r.status === 401) {
+                                    signOut();
+                                    throw new Error("unauthorized");
+                                }
+                                return { ok: r.ok, status: r.status, body: b };
+                            });
+                    });
+                }
 
                 /* ---------- svg ---------- */
                 function svgEl(tag, attrs) {
@@ -2978,6 +3087,7 @@
                         ev.target.closest && ev.target.closest("[data-go]");
                     if (!t) return;
                     if (t.dataset.go === "body-details") goBodyDetails();
+                    else if (t.dataset.go === "log-weight") openLogWeight();
                     else selectTab(t.dataset.go);
                 });
                 const ADD_BODY =
@@ -3180,6 +3290,55 @@
                         "</li>"
                     );
                 }
+                // The two fixed 7-day figures (server-side `last7`), never
+                // the Trends range: grams, signed, amber up / blue down.
+                function weekPairHtml() {
+                    const w = data.last7;
+                    if (!w) return "";
+                    const signedCell = function (label, g, foot) {
+                        return trioCell(label, fmtSigned(g), "g", foot, {
+                            sw: g > 0 ? "s-gain" : g < 0 ? "s-loss" : null,
+                        });
+                    };
+                    const LOG_WEIGHT =
+                        '<button type="button" class="link-btn" data-go="log-weight">Log weight</button>';
+                    const scale =
+                        w.weight_change_g != null
+                            ? signedCell(
+                                  "Scale",
+                                  w.weight_change_g,
+                                  esc(shortDay(w.weight_first_date)) +
+                                      " → " +
+                                      esc(shortDay(w.weight_last_date)) +
+                                      "<br>" +
+                                      LOG_WEIGHT,
+                              )
+                            : trioCell(
+                                  "Scale",
+                                  "—",
+                                  "",
+                                  "Needs 2 weigh-ins · " + LOG_WEIGHT,
+                                  { missing: true },
+                              );
+                    const est =
+                        w.est_net_g != null
+                            ? signedCell(
+                                  "Net est. change",
+                                  w.est_net_g,
+                                  plural(w.est_days, "complete day") +
+                                      " · estimate",
+                              )
+                            : trioCell(
+                                  "Net est. change",
+                                  "—",
+                                  "",
+                                  w.has_burn
+                                      ? "No complete logged days"
+                                      : ADD_BODY,
+                                  { missing: true },
+                              );
+                    return '<div class="trio two">' + scale + est + "</div>";
+                }
                 function todayMeals() {
                     return data.meals
                         .filter(function (m) {
@@ -3240,7 +3399,8 @@
                         ) +
                         "</ul></section></div>" +
                         '<div class="col">' +
-                        '<section class="card" aria-labelledby="h-strip"><div class="card-head"><div><h3 id="h-strip">Last 7 days</h3><p class="note">Calories per day, with each day’s goal as a tick.</p></div><button type="button" class="link-btn" data-go="trends">See trends ›</button></div>' +
+                        '<section class="card" aria-labelledby="h-strip"><div class="card-head"><div><h3 id="h-strip">Last 7 days</h3><p class="note">What the scale did next to the estimate, then calories per day with each day’s goal as a tick.</p></div><button type="button" class="link-btn" data-go="trends">See trends ›</button></div>' +
+                        weekPairHtml() +
                         (anyLogged(data.daily.slice(-7)) ||
                         data.daily.slice(-7).some((r) => r.goal_calories)
                             ? '<div class="plot" id="strip-plot"></div>'
@@ -4292,9 +4452,176 @@
                             : stat("Est. burn today", "—", "", ADD_BODY, true);
                     return '<div class="stats three">' + h + "</div>";
                 }
+                // "+ Log weight": form state that must survive a re-render
+                // (the refetch after a save, a range change).
+                let lwOpen = false;
+                let lwDraft = null;
+                let lwFlash = "";
+                let lwFlashTimer = 0;
+                function logWeightHtml() {
+                    const unit = data.weightUnit;
+                    const d = lwDraft || {
+                        weight: "",
+                        unit: unit,
+                        at: localInputValue(),
+                        note: "",
+                    };
+                    const opt = (u) =>
+                        '<option value="' +
+                        u +
+                        '"' +
+                        (d.unit === u ? " selected" : "") +
+                        ">" +
+                        u +
+                        "</option>";
+                    return (
+                        '<form id="lw-form" class="lw-form" novalidate aria-label="Log a weigh-in">' +
+                        '<div class="field"><label for="lw-weight">Weight</label><span class="pair"><input class="input" id="lw-weight" type="number" inputmode="decimal" step="0.1" min="0" value="' +
+                        esc(d.weight) +
+                        '" /><select class="input" id="lw-unit" aria-label="Weight unit">' +
+                        opt("kg") +
+                        opt("lb") +
+                        "</select></span></div>" +
+                        '<label class="field" for="lw-at">When<input class="input" id="lw-at" type="datetime-local" value="' +
+                        esc(d.at) +
+                        '" /></label>' +
+                        '<label class="field lw-note" for="lw-note">Note (optional)<input class="input" id="lw-note" type="text" maxlength="1000" placeholder="e.g. morning, fasted" value="' +
+                        esc(d.note) +
+                        '" /></label>' +
+                        '<div class="form-foot lw-foot"><button type="submit" class="btn primary" id="lw-save">Save weigh-in</button><button type="button" class="btn" id="lw-cancel">Cancel</button><span class="b-status" id="lw-status" role="status"></span></div>' +
+                        '<p class="note lw-hint">Time is in ' +
+                        esc(data.timezone) +
+                        ". Same rules as asking Claude to log it.</p></form>"
+                    );
+                }
+                function weightHeadHtml(title, srOnly) {
+                    return (
+                        '<div class="w-head"><h3 id="h-w" class="' +
+                        (srOnly ? "sr-only" : "micro") +
+                        '">' +
+                        title +
+                        '</h3><button type="button" class="btn" id="lw-open" aria-expanded="' +
+                        lwOpen +
+                        '" aria-controls="lw-form"' +
+                        (lwOpen ? " hidden" : "") +
+                        ">+ Log weight</button></div>" +
+                        (lwFlash
+                            ? '<p class="lw-flash" role="status">' +
+                              esc(lwFlash) +
+                              "</p>"
+                            : "")
+                    );
+                }
+                function openLogWeight() {
+                    lwOpen = true;
+                    selectTab("body");
+                    contentDirty.body = true;
+                    paint();
+                    const box = $("lw-weight");
+                    if (box) {
+                        box.scrollIntoView({ block: "center" });
+                        box.focus();
+                    }
+                }
+                function wireLogWeight() {
+                    const open = $("lw-open");
+                    if (open) open.addEventListener("click", openLogWeight);
+                    const form = $("lw-form");
+                    if (!form) return;
+                    const read = () => ({
+                        weight: $("lw-weight").value,
+                        unit: $("lw-unit").value,
+                        at: $("lw-at").value,
+                        note: $("lw-note").value,
+                    });
+                    form.addEventListener("input", function () {
+                        lwDraft = read();
+                    });
+                    $("lw-cancel").addEventListener("click", function () {
+                        lwOpen = false;
+                        lwDraft = null;
+                        contentDirty.body = true;
+                        paint();
+                        if ($("lw-open")) $("lw-open").focus();
+                    });
+                    form.addEventListener("submit", function (ev) {
+                        ev.preventDefault();
+                        const v = read();
+                        const st = $("lw-status");
+                        const btn = $("lw-save");
+                        st.className = "b-status";
+                        if (!v.weight.trim()) {
+                            st.className = "b-status err";
+                            st.textContent = "Enter a weight.";
+                            $("lw-weight").focus();
+                            return;
+                        }
+                        btn.disabled = true;
+                        st.textContent = "Saving…";
+                        writeJson("POST", "/api/dashboard/weight", {
+                            weight: Number(v.weight),
+                            unit: v.unit,
+                            logged_at: v.at || undefined,
+                            notes: v.note || undefined,
+                        })
+                            .then(function (res) {
+                                if ($("lw-save")) $("lw-save").disabled = false;
+                                if (!res.ok) {
+                                    const s = $("lw-status");
+                                    if (s) {
+                                        s.className = "b-status err";
+                                        s.textContent =
+                                            (res.body &&
+                                                res.body.error_description) ||
+                                            "Could not save.";
+                                    }
+                                    return;
+                                }
+                                const e = res.body.entry;
+                                lwOpen = false;
+                                lwDraft = null;
+                                lwFlash =
+                                    "Logged " +
+                                    wfmt(e.weight_g, data.weightUnit) +
+                                    " " +
+                                    data.weightUnit +
+                                    " for " +
+                                    shortDay(e.date) +
+                                    ", " +
+                                    localTime(e.logged_at) +
+                                    (res.body.deduplicated
+                                        ? " (already recorded)."
+                                        : ".");
+                                clearTimeout(lwFlashTimer);
+                                lwFlashTimer = setTimeout(function () {
+                                    lwFlash = "";
+                                    const f =
+                                        document.querySelector(".lw-flash");
+                                    if (f) f.remove();
+                                }, 6000);
+                                refresh();
+                            })
+                            .catch(function (err) {
+                                if (err && err.message === "unauthorized")
+                                    return;
+                                if ($("lw-save")) $("lw-save").disabled = false;
+                                const s = $("lw-status");
+                                if (s) {
+                                    s.className = "b-status err";
+                                    s.textContent =
+                                        "Could not reach the server.";
+                                }
+                            });
+                    });
+                }
                 function weightHero(s, unit) {
                     if (s.latest_g == null)
-                        return '<section class="card hero" aria-labelledby="h-w"><h3 id="h-w" class="sr-only">Current weight</h3><p class="empty">No weigh-ins yet. Ask Claude to log your weight.</p></section>';
+                        return (
+                            '<section class="card hero w-hero" aria-labelledby="h-w">' +
+                            weightHeadHtml("Current weight", false) +
+                            (lwOpen ? logWeightHtml() : "") +
+                            '<p class="empty">No weigh-ins yet. Log one here, or ask Claude to log your weight.</p></section>'
+                        );
                     const change =
                         s.change_g != null
                             ? "<b>" +
@@ -4335,7 +4662,9 @@
                                   "</span>";
                     }
                     return (
-                        '<section class="card hero w-hero" aria-labelledby="h-w"><h3 id="h-w" class="micro">Current weight</h3><div class="w-now"><b>' +
+                        '<section class="card hero w-hero" aria-labelledby="h-w">' +
+                        weightHeadHtml("Current weight", false) +
+                        '<div class="w-now"><b>' +
                         wfmt(s.latest_g, unit) +
                         '</b><span class="unit">' +
                         unit +
@@ -4345,6 +4674,7 @@
                         change +
                         "</p>" +
                         (target ? '<p class="w-line">' + target + "</p>" : "") +
+                        (lwOpen ? logWeightHtml() : "") +
                         "</section>"
                     );
                 }
@@ -4539,6 +4869,7 @@
                         "</section></div></div></div>";
                     fillBodyForm();
                     wireBodyForm();
+                    wireLogWeight();
                 };
 
                 // Time-scaled, not index-scaled: weigh-ins are irregular, and
