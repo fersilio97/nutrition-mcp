@@ -14,7 +14,15 @@ Stage 2 of the redesign, built on branch `worktree-dashboard-daily-goal` against
   a load without them keeps the current state.
 - **Real data:** `DASHBOARD_ENABLED=true PORT=8792 bun --watch src/index.ts`, then
   http://localhost:8792/dashboard. See "Real-data check" below for why this was
-  not run here.
+  not run here. Two caveats before you run it:
+    - This worktree has no `.env`. Copy or symlink yours from the main checkout
+      first; without it, `src/index.ts` throws at startup on the missing
+      `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET`.
+    - Running it as the entrypoint has more side effects than §5.3 lists. Beyond
+      one token row per sign-in, boot starts `startExportCleanup()` (deletes
+      expired export ZIPs from Supabase storage on a timer) and runs
+      `seedPatreonTokensFromEnv()` (writes Patreon tokens if those env vars are
+      set). Production does the same on every boot, but it is not read-only.
 - **E2E:** install Playwright and axe-core outside the repo
   (`mkdir -p /tmp/dash-tools && cd /tmp/dash-tools && bun add playwright axe-core && bunx playwright install chromium`).
   Start a second preview with `DASHBOARD_PREVIEW_PORT=8793 bun scripts/dashboard-preview.ts`,
@@ -94,7 +102,8 @@ Stage 2 of the redesign, built on branch `worktree-dashboard-daily-goal` against
    actually fire. → E2E "form auto-opens when details are missing".
 7. Re-running the E2E: `no-body` no longer had missing details. → The preview
    keeps Body-form saves in server memory across page loads. → Any page load
-   with scenario params now resets them. → E2E green on consecutive runs.
+   with scenario params now resets them. → The E2E (142 checks at that point)
+   passed on two consecutive runs against the same preview instance.
 8. E2E-only: an axe colour-contrast hit on a random tab in `empty`. → axe ran
    during the 160ms panel fade-in. → The E2E waits 250ms, as the main walk
    already did. → `axe1.ts` on the settled page showed 0 violations, and the
@@ -112,7 +121,8 @@ Stage 2 of the redesign, built on branch `worktree-dashboard-daily-goal` against
 
 - `bun test`: 928 pass, 0 fail (34 files). `bun run typecheck`: clean.
   `bun run format:check`: clean.
-- `scripts/dashboard-e2e.ts`: **147 checks, all passed**, on consecutive runs.
+- `scripts/dashboard-e2e.ts`: **147 checks, all passed** in the final run. The
+  142-check version before the theme block was added passed twice in a row.
 - Claude in Chrome (new tab, closed after): Today, Trends and Body at 1440 wide,
   in system dark and toggled light. The console was empty, and the only page
   requests were `/dashboard` and `/api/dashboard/data`. Mouse hover tooltips were
