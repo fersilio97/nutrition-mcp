@@ -2,69 +2,169 @@
 <html lang="en">
     <head>
         <meta charset="utf-8" />
+        <script>
+            // Pre-paint theme: runs before any CSS parses, so a dark-mode
+            // visitor never sees a light flash. localStorage can throw
+            // (private window, blocked site data); the page works without it.
+            (function () {
+                try {
+                    var t = localStorage.getItem("nutrition-dash-theme");
+                    if (t === "light" || t === "dark")
+                        document.documentElement.setAttribute("data-theme", t);
+                } catch (e) {}
+            })();
+        </script>
         <meta
             name="viewport"
             content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
+        <meta name="color-scheme" content="light dark" />
         <meta name="robots" content="noindex, nofollow" />
         <title>Your nutrition dashboard</title>
         <style>
-            /* Palette roles. Values come from the validated categorical set:
-               slots 1-3 (blue / orange / aqua), stepped per mode. Series are
-               referenced by role below so the two modes swap in one place.
-
-               Light mode note: the aqua slot sits at 2.74:1 on the light
-               surface, under the 3:1 bar. That obligates relief rather than
-               forbidding the colour, so fat is always direct-labelled in the
-               legend and every figure also exists in the meals table. */
-            :root {
+            /* ================= tokens =================
+               Contrast ratios for every pair are in
+               docs/redesign/REQUIREMENTS.md §4.2. Series colours are
+               graphics-only in light mode (never body text); every series
+               label is ink/muted text beside a swatch. Over goal and
+               gain/loss never rest on colour alone: a hatch + the word
+               "over", and a sign + bar direction. */
+            :root,
+            :root[data-theme="light"] {
                 color-scheme: light;
-                --surface-0: #f4f3f0;
-                --surface-1: #fcfcfb;
-                --text-primary: #0b0b0b;
-                --text-secondary: #52514e;
-                --text-muted: #77756f;
-                --border: #e2e0da;
-                --grid: #eceae4;
-                --series-1: #2a78d6;
-                --series-2: #eb6834;
-                --series-3: #1baf7a;
-                --accent: #2a78d6;
-                --over: #e34948;
+                --bg: #f3f7f4;
+                --surface: #ffffff;
+                --surface-2: #e8f0eb;
+                --border: #d5e0d9;
+                --control: #7b8c82;
+                --grid: #e3ebe6;
+                --ink: #0f1f18;
+                --muted: #4a5d53;
+                --subtle: #586960;
+                --accent: #0a7255;
+                --accent-ink: #ffffff;
+                --accent-soft: #d9f0e5;
+                --focus-ring: #1a66d1;
+                --kcal: #d4570b;
+                --protein: #7c3aed;
+                --carbs: #16803a;
+                --fat: #d6265f;
+                --fiber: #0f7f78;
+                --sugar: #5c7f0a;
+                --water: #0a78b8;
+                --burn: #2f5fd0;
+                --over: #c4262e;
+                --gain: #b45309;
+                --loss: #1d64b8;
+                --warn: #9a5b00;
+                --shadow-card:
+                    0 1px 2px rgb(15 31 24 / 0.05),
+                    0 6px 20px -8px rgb(15 31 24 / 0.12);
+                --over-tint: #f6d4d5;
             }
             @media (prefers-color-scheme: dark) {
                 :root:not([data-theme="light"]) {
                     color-scheme: dark;
-                    --surface-0: #121211;
-                    --surface-1: #1a1a19;
-                    --text-primary: #ffffff;
-                    --text-secondary: #c3c2b7;
-                    --text-muted: #8f8e85;
-                    --border: #2e2e2b;
-                    --grid: #272724;
-                    --series-1: #3987e5;
-                    --series-2: #d95926;
-                    --series-3: #199e70;
-                    --accent: #3987e5;
-                    --over: #e66767;
+                    --bg: #0a1310;
+                    --surface: #111d18;
+                    --surface-2: #182821;
+                    --border: #263a31;
+                    --control: #5d7468;
+                    --grid: #1c2c25;
+                    --ink: #e6f0ea;
+                    --muted: #a6b8ae;
+                    --subtle: #8fa298;
+                    --accent: #3dd6a0;
+                    --accent-ink: #04261b;
+                    --accent-soft: #123a2c;
+                    --focus-ring: #7fb2ff;
+                    --kcal: #fb923c;
+                    --protein: #b197fc;
+                    --carbs: #4ade80;
+                    --fat: #fb7199;
+                    --fiber: #2dd4bf;
+                    --sugar: #bef264;
+                    --water: #38bdf8;
+                    --burn: #7aa7ff;
+                    --over: #ff6b6b;
+                    --gain: #f6ad55;
+                    --loss: #6cb4ff;
+                    --warn: #f0b44c;
+                    --shadow-card: none;
+                    --over-tint: #4a1f22;
                 }
             }
             :root[data-theme="dark"] {
                 color-scheme: dark;
-                --surface-0: #121211;
-                --surface-1: #1a1a19;
-                --text-primary: #ffffff;
-                --text-secondary: #c3c2b7;
-                --text-muted: #8f8e85;
-                --border: #2e2e2b;
-                --grid: #272724;
-                --series-1: #3987e5;
-                --series-2: #d95926;
-                --series-3: #199e70;
-                --accent: #3987e5;
-                --over: #e66767;
+                --bg: #0a1310;
+                --surface: #111d18;
+                --surface-2: #182821;
+                --border: #263a31;
+                --control: #5d7468;
+                --grid: #1c2c25;
+                --ink: #e6f0ea;
+                --muted: #a6b8ae;
+                --subtle: #8fa298;
+                --accent: #3dd6a0;
+                --accent-ink: #04261b;
+                --accent-soft: #123a2c;
+                --focus-ring: #7fb2ff;
+                --kcal: #fb923c;
+                --protein: #b197fc;
+                --carbs: #4ade80;
+                --fat: #fb7199;
+                --fiber: #2dd4bf;
+                --sugar: #bef264;
+                --water: #38bdf8;
+                --burn: #7aa7ff;
+                --over: #ff6b6b;
+                --gain: #f6ad55;
+                --loss: #6cb4ff;
+                --warn: #f0b44c;
+                --shadow-card: none;
+                --over-tint: #4a1f22;
             }
 
+            :root {
+                --t-hero: 40px;
+                --t-figure: 26px;
+                --t-title: 20px;
+                --t-h2: 16px;
+                --t-body: 15px;
+                --t-small: 13px;
+                --t-micro: 12px;
+                --s1: 4px;
+                --s2: 8px;
+                --s3: 12px;
+                --s4: 16px;
+                --s5: 20px;
+                --s6: 24px;
+                --s8: 32px;
+                --s12: 48px;
+                --r-sm: 8px;
+                --r-md: 14px;
+                --r-lg: 20px;
+                --r-pill: 999px;
+                --gutter: 16px;
+                --ease: cubic-bezier(0.22, 1, 0.36, 1);
+            }
+            @media (min-width: 481px) {
+                :root {
+                    --gutter: 24px;
+                }
+            }
+            @media (min-width: 1024px) {
+                :root {
+                    --gutter: 32px;
+                }
+            }
+            @media (max-width: 480px) {
+                :root {
+                    --t-hero: 34px;
+                }
+            }
+
+            /* ================= base ================= */
             * {
                 box-sizing: border-box;
             }
@@ -73,388 +173,909 @@
                 margin: 0;
                 padding: 0;
             }
+            html {
+                -webkit-text-size-adjust: 100%;
+            }
             body {
-                background: var(--surface-0);
-                color: var(--text-primary);
+                background: var(--bg);
+                color: var(--ink);
                 font:
-                    15px/1.5 system-ui,
+                    400 var(--t-body) / 1.5 system-ui,
                     -apple-system,
+                    BlinkMacSystemFont,
                     "Segoe UI",
                     Roboto,
+                    "Helvetica Neue",
                     sans-serif;
-                padding: env(safe-area-inset-top, 0px) 0
-                    env(safe-area-inset-bottom, 0px);
+                -webkit-font-smoothing: antialiased;
+                overflow-x: hidden;
+                min-height: 100vh;
             }
             [hidden] {
                 display: none !important;
             }
-            .wrap {
-                max-width: 1080px;
-                margin: 0 auto;
-                padding-block: 28px 64px;
-                padding-inline: 16px;
+            button,
+            input,
+            select {
+                font: inherit;
+                color: inherit;
+            }
+            button {
+                cursor: pointer;
+            }
+            :focus-visible {
+                outline: 2px solid var(--focus-ring);
+                outline-offset: 2px;
+            }
+            .sr-only {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                padding: 0;
+                margin: -1px;
+                overflow: hidden;
+                clip: rect(0 0 0 0);
+                white-space: nowrap;
+                border: 0;
+            }
+            .num,
+            .tab-nums {
+                font-variant-numeric: tabular-nums;
             }
 
-            /* ---------- header ---------- */
-            header.top {
-                display: flex;
-                flex-wrap: wrap;
-                align-items: baseline;
-                gap: 12px;
-                margin-bottom: 4px;
+            /* ================= buttons ================= */
+            .btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: var(--s2);
+                min-height: 44px;
+                padding: 0 var(--s4);
+                border-radius: var(--r-sm);
+                border: 1px solid var(--control);
+                background: var(--surface);
+                font-weight: 600;
+                font-size: 14px;
+                transition:
+                    background-color 0.12s linear,
+                    transform 0.12s var(--ease);
             }
-            h1 {
-                font-size: 22px;
+            .btn:hover {
+                background: var(--surface-2);
+            }
+            .btn:active {
+                transform: scale(0.98);
+            }
+            .btn.primary {
+                background: var(--accent);
+                color: var(--accent-ink);
+                border-color: var(--accent);
+            }
+            .btn.primary:hover {
+                background: color-mix(in srgb, var(--accent) 88%, var(--ink));
+            }
+            .btn:disabled {
+                opacity: 0.6;
+                cursor: default;
+            }
+            .icon-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: var(--s2);
+                min-width: 44px;
+                height: 44px;
+                padding: 0 var(--s2);
+                border: 0;
+                border-radius: var(--r-sm);
+                background: transparent;
+                color: var(--muted);
+                font-size: 14px;
+                font-weight: 600;
+                transition:
+                    background-color 0.12s linear,
+                    transform 0.12s var(--ease);
+            }
+            .icon-btn:hover {
+                background: var(--surface-2);
+                color: var(--ink);
+            }
+            .icon-btn:active {
+                transform: scale(0.98);
+            }
+            .icon-btn svg {
+                width: 22px;
+                height: 22px;
+                flex: none;
+            }
+            .icon-btn .txt {
+                display: none;
+            }
+            @media (min-width: 481px) {
+                .icon-btn .txt {
+                    display: inline;
+                }
+                #signout {
+                    padding: 0 var(--s3);
+                }
+            }
+            .link-btn {
+                display: inline-flex;
+                align-items: center;
+                min-height: 44px;
+                padding: 0 var(--s1);
+                margin: -12px calc(-1 * var(--s1));
+                border: 0;
+                background: none;
+                color: var(--accent);
                 font-weight: 650;
-                letter-spacing: -0.01em;
+                font-size: var(--t-small);
+                text-decoration: underline;
+                text-underline-offset: 3px;
+                text-decoration-thickness: 1px;
+            }
+            .link-btn:hover {
+                text-decoration-thickness: 2px;
+            }
+
+            /* ================= login ================= */
+            .login-wrap {
+                min-height: 100vh;
+                display: grid;
+                place-items: center;
+                padding: max(var(--gutter), env(safe-area-inset-top))
+                    max(var(--gutter), env(safe-area-inset-right))
+                    max(var(--gutter), env(safe-area-inset-bottom))
+                    max(var(--gutter), env(safe-area-inset-left));
+            }
+            .login {
+                width: 100%;
+                max-width: 380px;
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: var(--r-lg);
+                box-shadow: var(--shadow-card);
+                padding: var(--s8) var(--s6);
+            }
+            .login .mark {
+                width: 40px;
+                height: 40px;
+                border-radius: 12px;
+                background: var(--accent-soft);
+                color: var(--accent);
+                display: grid;
+                place-items: center;
+                margin-bottom: var(--s4);
+            }
+            .login h1 {
+                font-size: var(--t-title);
+                line-height: 1.2;
+                font-weight: 680;
+                margin: 0 0 var(--s2);
+            }
+            .login p {
+                margin: 0 0 var(--s6);
+                color: var(--muted);
+                font-size: var(--t-small);
+            }
+            .field {
+                display: grid;
+                gap: 6px;
+                margin-bottom: var(--s4);
+            }
+            .field > span,
+            label.field {
+                font-size: var(--t-small);
+                font-weight: 600;
+                color: var(--ink);
+            }
+            .input {
+                width: 100%;
+                height: 44px;
+                padding: 0 var(--s3);
+                border: 1px solid var(--control);
+                border-radius: var(--r-sm);
+                background: var(--surface);
+                font-size: 16px;
+            }
+            .login .btn {
+                width: 100%;
+                margin-top: var(--s2);
+            }
+            .err {
+                color: var(--over);
+                font-size: var(--t-small);
+                font-weight: 600;
+                min-height: 1.45em;
+                margin-top: var(--s3);
+            }
+
+            /* ================= app chrome ================= */
+            .app {
+                max-width: 1120px;
+                margin: 0 auto;
+                padding: 0 max(var(--gutter), env(safe-area-inset-right))
+                    max(var(--s12), env(safe-area-inset-bottom))
+                    max(var(--gutter), env(safe-area-inset-left));
+            }
+            /* Mobile: the header scrolls away and only the tab bar sticks.
+               display:contents lets the nav stick to the page rather than
+               to this wrapper; at ≥1024 the wrapper becomes one sticky row. */
+            .chrome {
+                display: contents;
+            }
+            .top {
+                display: flex;
+                align-items: center;
+                gap: var(--s2);
+                padding: max(var(--s4), env(safe-area-inset-top)) 0 var(--s3);
+            }
+            .brand {
+                flex: 1;
+                min-width: 0;
+            }
+            .brand h1 {
                 margin: 0;
-                flex: 1 1 auto;
+                font-size: var(--t-title);
+                line-height: 1.2;
+                font-weight: 680;
+                letter-spacing: -0.01em;
+                display: flex;
+                align-items: center;
+                gap: var(--s2);
+            }
+            .brand h1 .dot {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: var(--accent);
+                flex: none;
             }
             .sub {
-                color: var(--text-secondary);
-                font-size: 13px;
-                margin: 0 0 22px;
-            }
-            .ghost {
-                background: none;
-                border: 1px solid var(--border);
-                color: var(--text-secondary);
-                border-radius: 8px;
-                padding: 5px 11px;
-                font: inherit;
-                font-size: 13px;
-                cursor: pointer;
-            }
-            .ghost:hover {
-                color: var(--text-primary);
-            }
-
-            /* ---------- filters: one row, above every chart ---------- */
-            .filters {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 8px;
-                align-items: center;
-                margin-bottom: 20px;
-            }
-            .seg {
-                display: inline-flex;
-                border: 1px solid var(--border);
-                border-radius: 9px;
+                margin: 2px 0 0;
+                color: var(--muted);
+                font-size: var(--t-small);
+                white-space: nowrap;
                 overflow: hidden;
+                text-overflow: ellipsis;
             }
-            .seg button {
-                background: none;
-                border: 0;
-                color: var(--text-secondary);
-                padding: 6px 13px;
-                font: inherit;
-                font-size: 13px;
-                cursor: pointer;
-            }
-            .seg button + button {
-                border-left: 1px solid var(--border);
-            }
-            .seg button[aria-pressed="true"] {
-                background: var(--surface-1);
-                color: var(--text-primary);
-                font-weight: 600;
-            }
-
-            /* ---------- stat tiles ---------- */
-            .tiles {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-                gap: 12px;
-                margin-bottom: 26px;
-            }
-            .tile {
-                background: var(--surface-1);
-                border: 1px solid var(--border);
-                border-radius: 12px;
-                padding: 15px 16px 16px;
-            }
-            .tile .label {
-                font-size: 12px;
-                color: var(--text-secondary);
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                margin-bottom: 7px;
-            }
-            /* No tabular-nums here: on a large figure equal-width digits make
-               the number read as a counter rather than a value. */
-            .tile .figure {
-                font-size: 30px;
-                font-weight: 640;
-                letter-spacing: -0.02em;
-                line-height: 1.05;
-            }
-            .tile .figure .unit {
-                font-size: 14px;
-                font-weight: 500;
-                color: var(--text-secondary);
-                margin-left: 3px;
-            }
-            .tile .foot {
-                font-size: 12.5px;
-                color: var(--text-secondary);
-                margin-top: 7px;
-            }
-            .tile .foot.over {
+            .sub.is-error {
                 color: var(--over);
                 font-weight: 600;
+                white-space: normal;
             }
-            .meter {
-                height: 6px;
-                border-radius: 3px;
-                background: var(--grid);
-                margin-top: 11px;
-                overflow: hidden;
+            .actions {
+                display: flex;
+                align-items: center;
+                gap: 2px;
+                flex: none;
             }
-            .meter > i {
-                display: block;
-                height: 100%;
-                border-radius: 3px;
+            .tabs-wrap {
+                position: sticky;
+                top: 0;
+                z-index: 20;
+                margin: 0 calc(-1 * var(--gutter));
+                padding: var(--s2) var(--gutter);
+                background: var(--surface);
+                border-bottom: 1px solid transparent;
+                transition: border-color 0.12s linear;
+            }
+            @supports (backdrop-filter: blur(12px)) or
+                (-webkit-backdrop-filter: blur(12px)) {
+                .tabs-wrap {
+                    background: color-mix(
+                        in srgb,
+                        var(--surface) 92%,
+                        transparent
+                    );
+                    -webkit-backdrop-filter: blur(12px);
+                    backdrop-filter: blur(12px);
+                }
+            }
+            body.scrolled .tabs-wrap {
+                border-bottom-color: var(--border);
+            }
+            [role="tablist"] {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: var(--s1);
+                padding: var(--s1);
+                border-radius: var(--r-md);
+                background: var(--surface-2);
+            }
+            [role="tab"] {
+                position: relative;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 2px;
+                min-height: 56px;
+                padding: var(--s1) var(--s1) 6px;
+                border: 0;
+                border-radius: 10px;
+                background: transparent;
+                color: var(--muted);
+                font-size: var(--t-micro);
+                font-weight: 550;
+                line-height: 1.2;
+            }
+            [role="tab"] svg {
+                width: 22px;
+                height: 22px;
+            }
+            [role="tab"]:hover {
+                color: var(--ink);
+                background: color-mix(in srgb, var(--surface) 50%, transparent);
+            }
+            [role="tab"][aria-selected="true"] {
+                background: var(--accent-soft);
+                color: var(--ink);
+                font-weight: 650;
+            }
+            [role="tab"][aria-selected="true"] svg {
+                color: var(--accent);
+            }
+            /* The non-colour cue: a 3px bar under the label. */
+            [role="tab"][aria-selected="true"]::after {
+                content: "";
+                position: absolute;
+                left: 50%;
+                bottom: 3px;
+                width: 22px;
+                height: 3px;
+                margin-left: -11px;
+                border-radius: var(--r-pill);
                 background: var(--accent);
             }
-            .meter > i.over {
-                background: var(--over);
+            @media (min-width: 481px) {
+                [role="tab"] {
+                    flex-direction: row;
+                    gap: var(--s2);
+                    min-height: 48px;
+                    font-size: 14px;
+                    padding: 0 var(--s3);
+                }
+                [role="tab"] svg {
+                    width: 20px;
+                    height: 20px;
+                }
+                [role="tab"][aria-selected="true"]::after {
+                    bottom: 4px;
+                    width: 28px;
+                    margin-left: -14px;
+                }
+            }
+            @media (min-width: 1024px) {
+                .chrome {
+                    display: grid;
+                    grid-template-columns: minmax(0, 1fr) auto auto;
+                    align-items: center;
+                    gap: var(--s6);
+                    position: sticky;
+                    top: 0;
+                    z-index: 20;
+                    margin: 0 calc(-1 * var(--gutter));
+                    padding: var(--s3) var(--gutter);
+                    background: var(--bg);
+                    border-bottom: 1px solid transparent;
+                }
+                @supports (backdrop-filter: blur(12px)) or
+                    (-webkit-backdrop-filter: blur(12px)) {
+                    .chrome {
+                        background: color-mix(
+                            in srgb,
+                            var(--bg) 92%,
+                            transparent
+                        );
+                        -webkit-backdrop-filter: blur(12px);
+                        backdrop-filter: blur(12px);
+                    }
+                }
+                body.scrolled .chrome {
+                    border-bottom-color: var(--border);
+                }
+                .top {
+                    display: contents;
+                }
+                .actions {
+                    grid-column: 3;
+                    grid-row: 1;
+                }
+                .tabs-wrap {
+                    position: static;
+                    grid-column: 2;
+                    grid-row: 1;
+                    margin: 0;
+                    padding: 0;
+                    background: none;
+                    border: 0;
+                    -webkit-backdrop-filter: none;
+                    backdrop-filter: none;
+                }
+                [role="tablist"] {
+                    grid-template-columns: repeat(4, auto);
+                }
+                [role="tab"] {
+                    min-height: 44px;
+                }
             }
 
-            /* ---------- chart cards ---------- */
+            /* ================= panels ================= */
+            main {
+                padding-top: var(--s4);
+            }
+            [role="tabpanel"] {
+                outline-offset: 4px;
+                border-radius: var(--r-sm);
+            }
+            [role="tabpanel"].enter {
+                animation: panel-in 160ms var(--ease);
+            }
+            @keyframes panel-in {
+                from {
+                    opacity: 0;
+                    transform: translateY(4px);
+                }
+                to {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+            .panel-body {
+                transition: opacity 0.12s linear;
+            }
+            .refreshing .panel-body {
+                opacity: 0.6;
+            }
+            .panel-head {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--s3);
+                margin-bottom: var(--s4);
+            }
+            .range-label {
+                margin: 0;
+                font-size: var(--t-h2);
+                font-weight: 650;
+                line-height: 1.3;
+            }
+            .range-label small {
+                display: block;
+                font-size: var(--t-small);
+                font-weight: 400;
+                color: var(--muted);
+            }
+            .seg {
+                display: inline-grid;
+                grid-auto-flow: column;
+                grid-auto-columns: 1fr;
+                border: 1px solid var(--control);
+                border-radius: var(--r-sm);
+                padding: 2px;
+                gap: 2px;
+                background: var(--surface);
+            }
+            .seg button {
+                position: relative;
+                min-height: 40px;
+                min-width: 72px;
+                padding: 0 var(--s3);
+                border: 1px solid transparent;
+                border-radius: 6px;
+                background: transparent;
+                color: var(--muted);
+                font-size: 14px;
+                font-weight: 550;
+                white-space: nowrap;
+            }
+            .seg button:hover {
+                background: var(--surface-2);
+                color: var(--ink);
+            }
+            .seg button[aria-pressed="true"] {
+                background: var(--accent-soft);
+                color: var(--ink);
+                font-weight: 650;
+                border-color: var(--accent);
+            }
+            .seg[aria-disabled="true"] button {
+                cursor: progress;
+            }
+            .spin {
+                display: inline-block;
+                width: 12px;
+                height: 12px;
+                margin-left: 6px;
+                vertical-align: -1px;
+                border: 2px solid currentColor;
+                border-right-color: transparent;
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+            }
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+            @media (max-width: 480px) {
+                .panel-head .seg {
+                    width: 100%;
+                }
+                .seg button {
+                    min-width: 0;
+                    min-height: 44px;
+                    padding: 0 var(--s1);
+                }
+            }
+
+            .grid {
+                display: grid;
+                gap: var(--s4);
+            }
             .card {
-                background: var(--surface-1);
+                background: var(--surface);
                 border: 1px solid var(--border);
-                border-radius: 12px;
-                padding: 17px 18px 12px;
-                margin-bottom: 18px;
+                border-radius: var(--r-md);
+                box-shadow: var(--shadow-card);
+                padding: var(--s4);
+                min-width: 0;
             }
-            .card h2 {
-                font-size: 14.5px;
-                font-weight: 620;
-                margin: 0 0 2px;
+            @media (min-width: 481px) {
+                .card {
+                    padding: var(--s5);
+                }
             }
-            .card .note {
-                font-size: 12.5px;
-                color: var(--text-secondary);
-                margin: 0 0 14px;
+            .card.hero {
+                border-radius: var(--r-lg);
             }
             .card-head {
                 display: flex;
                 align-items: flex-start;
-                gap: 12px;
+                justify-content: space-between;
+                gap: var(--s3);
+                margin-bottom: var(--s3);
+            }
+            .card h3 {
+                margin: 0;
+                font-size: var(--t-h2);
+                line-height: 1.3;
+                font-weight: 650;
+            }
+            .card h3 .est {
+                font-weight: 500;
+                color: var(--subtle);
+                font-size: var(--t-small);
+            }
+            .note {
+                margin: 4px 0 0;
+                font-size: var(--t-small);
+                line-height: 1.45;
+                color: var(--muted);
+            }
+            .micro {
+                font-size: var(--t-micro);
+                line-height: 1.35;
+                font-weight: 600;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: var(--muted);
+            }
+            .empty {
+                padding: var(--s6) var(--s2);
+                text-align: center;
+                color: var(--muted);
+                font-size: var(--t-small);
+            }
+            .banner {
+                display: flex;
                 flex-wrap: wrap;
+                align-items: center;
+                gap: var(--s3);
+                margin-bottom: var(--s4);
+                padding: var(--s3) var(--s4);
+                border: 1px solid
+                    color-mix(in srgb, var(--over) 45%, var(--border));
+                border-left: 4px solid var(--over);
+                border-radius: var(--r-sm);
+                background: var(--surface);
             }
-            .card-head > div:first-child {
+            .banner p {
                 flex: 1 1 200px;
+                margin: 0;
+                font-weight: 600;
             }
+            .notice {
+                display: flex;
+                gap: var(--s3);
+                align-items: flex-start;
+                padding: var(--s3) var(--s4);
+                border-radius: var(--r-sm);
+                background: color-mix(in srgb, var(--warn) 10%, var(--surface));
+                border: 1px solid
+                    color-mix(in srgb, var(--warn) 35%, var(--border));
+                font-size: var(--t-small);
+            }
+            .notice b {
+                color: var(--warn);
+            }
+
+            /* stat cards */
+            .stats {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: var(--s3);
+            }
+            @media (min-width: 700px) {
+                .stats.four {
+                    grid-template-columns: repeat(4, minmax(0, 1fr));
+                }
+            }
+            .stat {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: var(--r-md);
+                box-shadow: var(--shadow-card);
+                padding: var(--s3) var(--s4) var(--s4);
+                min-width: 0;
+            }
+            .stat .figure {
+                margin-top: 6px;
+                font-size: var(--t-figure);
+                line-height: 1.1;
+                font-weight: 680;
+                letter-spacing: -0.02em;
+                font-variant-numeric: tabular-nums;
+                overflow-wrap: anywhere;
+            }
+            .stat .unit {
+                margin-left: 3px;
+                font-size: var(--t-small);
+                font-weight: 500;
+                letter-spacing: 0;
+                color: var(--muted);
+            }
+            .stat .foot {
+                margin-top: 6px;
+                font-size: var(--t-small);
+                line-height: 1.4;
+                color: var(--muted);
+            }
+            .stat.missing .figure {
+                color: var(--subtle);
+            }
+            .over-text {
+                color: var(--over);
+                font-weight: 650;
+            }
+            .chip {
+                display: inline-flex;
+                align-items: center;
+                padding: 1px 8px;
+                border-radius: var(--r-pill);
+                font-size: var(--t-micro);
+                font-weight: 650;
+                line-height: 1.5;
+            }
+            .chip.over {
+                color: var(--over);
+                background: color-mix(in srgb, var(--over) 12%, var(--surface));
+                border: 1px solid
+                    color-mix(in srgb, var(--over) 40%, var(--surface));
+            }
+            .chip.est {
+                color: var(--subtle);
+                border: 1px solid var(--border);
+            }
+            .sw {
+                display: inline-block;
+                width: 10px;
+                height: 10px;
+                border-radius: 3px;
+                vertical-align: 0;
+                margin-right: 6px;
+                flex: none;
+            }
+            .sw.dot {
+                border-radius: 50%;
+            }
+
+            /* legends */
             .legend {
                 display: flex;
                 flex-wrap: wrap;
-                gap: 13px;
-                margin: 0 0 12px;
-                font-size: 12.5px;
-                color: var(--text-secondary);
+                gap: var(--s1) var(--s4);
+                margin: 0 0 var(--s2);
+                padding: 0;
+                list-style: none;
+                font-size: var(--t-small);
+                color: var(--ink);
             }
-            .legend span {
+            .legend li {
                 display: inline-flex;
                 align-items: center;
                 gap: 6px;
             }
-            .legend i {
-                width: 10px;
-                height: 10px;
-                border-radius: 3px;
-                display: inline-block;
+            .legend svg {
+                width: 14px;
+                height: 14px;
+                flex: none;
             }
+
+            /* ================= charts ================= */
             .plot {
+                position: relative;
                 width: 100%;
-                overflow-x: auto;
+                min-width: 0;
             }
-            svg {
+            .plot svg.chart {
                 display: block;
-                width: 100%;
-                height: auto;
+                touch-action: pan-y;
+                border-radius: 4px;
+                overflow: visible;
             }
-            .empty {
-                color: var(--text-muted);
-                font-size: 13px;
-                padding: 26px 0 30px;
-                text-align: center;
-            }
-
-            /* ---------- estimated body change (under the calorie chart) ----------
-               Gain uses --over and loss --series-3, both already declared for
-               light, prefers-color-scheme dark and [data-theme="dark"]. The
-               sign is also in every label (+/−), so colour is never the only
-               cue. */
-            .sub-head {
-                margin-top: 14px;
-                padding-top: 12px;
-                border-top: 1px solid var(--border);
-            }
-            .sub-head h3 {
-                font-size: 13.5px;
-                font-weight: 620;
-                margin: 0 0 2px;
-            }
-
-            /* ---------- weight tracker ---------- */
-            /* Ruled cells drawn by each cell's own hairline (outline overlaps
-               its neighbour's), so a short last row ends cleanly instead of
-               showing the container's background as a filler block. */
-            .wstats {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-                gap: 1px;
-                border: 1px solid var(--border);
-                border-radius: 10px;
-                overflow: hidden;
-                margin-bottom: 14px;
-            }
-            .wstat {
-                background: var(--surface-1);
-                outline: 1px solid var(--border);
-                padding: 11px 13px 12px;
-            }
-            .wstat .label {
-                font-size: 11.5px;
-                color: var(--text-secondary);
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-            }
-            .wstat .figure {
-                font-size: 20px;
-                font-weight: 640;
-                letter-spacing: -0.01em;
-                margin-top: 3px;
-            }
-            .wstat .figure .unit {
-                font-size: 12.5px;
-                font-weight: 500;
-                color: var(--text-secondary);
-                margin-left: 2px;
-            }
-            .wstat .foot {
+            .chart text {
                 font-size: 12px;
-                color: var(--text-secondary);
-                margin-top: 2px;
+                font-family: inherit;
             }
-            .wstat.missing .figure {
-                color: var(--text-muted);
-                font-size: 15px;
-                font-weight: 500;
-            }
-            .body-box {
-                margin-top: 10px;
-                border-top: 1px solid var(--border);
-                padding-top: 10px;
-            }
-            .body-box summary {
-                cursor: pointer;
-                font-size: 13px;
-                font-weight: 600;
-                color: var(--text-secondary);
-            }
-            .body-form {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 10px 14px;
-                align-items: flex-end;
-                margin: 4px 0 6px;
-            }
-            .body-form label {
-                display: flex;
-                flex-direction: column;
-                gap: 4px;
-                font-size: 12.5px;
-                color: var(--text-secondary);
-            }
-            .body-form .pair {
-                display: flex;
-                gap: 6px;
-            }
-            .body-form input,
-            .body-form select {
-                padding: 7px 9px;
-                border-radius: 8px;
-                border: 1px solid var(--border);
-                background: var(--surface-0);
-                color: var(--text-primary);
-                font: inherit;
-                font-size: 14px;
-            }
-            .body-form input[type="number"] {
-                width: 90px;
-            }
-            .body-form .save {
-                padding: 8px 16px;
-                border: 0;
-                border-radius: 8px;
-                background: var(--accent);
-                color: #fff;
-                font: inherit;
-                font-weight: 620;
-                cursor: pointer;
-            }
-            .b-status {
-                font-size: 12.5px;
-                color: var(--text-secondary);
-                align-self: center;
-            }
-            .b-status.err {
-                color: var(--over);
-                margin: 0;
-                min-height: 0;
-            }
-
-            /* ---------- table ---------- */
-            table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 13px;
-            }
-            .scroll-x {
-                overflow-x: auto;
-            }
-            th,
-            td {
-                text-align: left;
-                padding: 8px 10px;
-                border-bottom: 1px solid var(--border);
-                white-space: nowrap;
-            }
-            th {
-                color: var(--text-secondary);
-                font-weight: 600;
-                font-size: 12px;
-                text-transform: uppercase;
-                letter-spacing: 0.04em;
-            }
-            td.num,
-            th.num {
-                text-align: right;
+            .ax {
+                fill: var(--muted);
                 font-variant-numeric: tabular-nums;
             }
-            td.desc {
-                white-space: normal;
-                min-width: 220px;
-                color: var(--text-secondary);
+            .gridline {
+                stroke: var(--grid);
+                stroke-width: 1;
+            }
+            .zero {
+                stroke: var(--muted);
+                stroke-width: 1;
+            }
+            .goal-line {
+                fill: none;
+                stroke: var(--muted);
+                stroke-width: 2;
+                stroke-linejoin: round;
+            }
+            .goal-lbl {
+                fill: var(--muted);
+                font-weight: 600;
+                paint-order: stroke;
+                stroke: var(--surface);
+                stroke-width: 4px;
+                stroke-linejoin: round;
+            }
+            .m-kcal {
+                fill: var(--kcal);
+            }
+            .m-over {
+                fill: url(#hatch-over);
+            }
+            .m-protein {
+                fill: var(--protein);
+            }
+            .m-carbs {
+                fill: var(--carbs);
+            }
+            .m-fat {
+                fill: var(--fat);
+            }
+            .m-fiber {
+                fill: var(--fiber);
+            }
+            .m-gain {
+                fill: var(--gain);
+            }
+            .m-loss {
+                fill: var(--loss);
+            }
+            .m-burn {
+                fill: var(--surface);
+                stroke: var(--burn);
+                stroke-width: 2;
+            }
+            .m-band {
+                fill: var(--accent-soft);
+            }
+            .m-wline {
+                fill: none;
+                stroke: var(--accent);
+                stroke-width: 2;
+                stroke-linejoin: round;
+                stroke-linecap: round;
+            }
+            .m-wdot {
+                fill: var(--accent);
+                stroke: var(--surface);
+                stroke-width: 2;
+            }
+            .m-target {
+                stroke: var(--muted);
+                stroke-width: 2;
+                stroke-dasharray: 6 4;
+            }
+            .m-tick {
+                stroke: var(--muted);
+                stroke-width: 2;
+                stroke-linecap: round;
+            }
+            .dim {
+                opacity: 0.6;
+            }
+            .guide {
+                stroke: var(--muted);
+                stroke-width: 1;
+                pointer-events: none;
+            }
+            .lbl {
+                fill: var(--ink);
+                font-variant-numeric: tabular-nums;
+                font-weight: 600;
+            }
+            .hatch-bg {
+                fill: var(--over-tint);
+            }
+            .hatch-fg {
+                fill: var(--over);
+            }
+            .s-kcal {
+                background: var(--kcal);
+            }
+            .s-protein {
+                background: var(--protein);
+            }
+            .s-carbs {
+                background: var(--carbs);
+            }
+            .s-fat {
+                background: var(--fat);
+            }
+            .s-fiber {
+                background: var(--fiber);
+            }
+            .s-sugar {
+                background: var(--sugar);
+            }
+            .s-burn {
+                background: var(--surface);
+                box-shadow: inset 0 0 0 2px var(--burn);
+                border-radius: 50%;
+            }
+            .s-gain {
+                background: var(--gain);
+            }
+            .s-loss {
+                background: var(--loss);
+            }
+            .s-accent {
+                background: var(--accent);
+            }
+            .s-muted {
+                background: var(--muted);
             }
 
-            /* ---------- tooltip ---------- */
+            /* tooltip */
             #tip {
                 position: fixed;
-                z-index: 40;
-                pointer-events: none;
-                background: var(--surface-1);
+                z-index: 50;
+                left: 0;
+                top: 0;
+                min-width: 150px;
+                max-width: min(280px, calc(100vw - 16px));
+                padding: var(--s2) var(--s3);
+                border-radius: 10px;
+                background: var(--surface);
                 border: 1px solid var(--border);
-                border-radius: 9px;
-                padding: 9px 11px;
-                font-size: 12.5px;
-                line-height: 1.45;
-                box-shadow: 0 6px 22px rgb(0 0 0 / 0.16);
-                max-width: 240px;
+                box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+                font-size: var(--t-small);
+                line-height: 1.4;
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 100ms linear;
+            }
+            #tip.on {
+                opacity: 1;
             }
             #tip .t-date {
                 font-weight: 650;
@@ -463,268 +1084,396 @@
             #tip .row {
                 display: flex;
                 align-items: center;
-                gap: 7px;
-                white-space: nowrap;
+                gap: var(--s3);
+                font-variant-numeric: tabular-nums;
             }
-            #tip .row i {
-                width: 9px;
-                height: 9px;
-                border-radius: 2px;
-                flex: none;
+            #tip .row span {
+                flex: 1;
+                display: inline-flex;
+                align-items: center;
+                color: var(--muted);
             }
             #tip .row b {
-                margin-left: auto;
-                font-variant-numeric: tabular-nums;
-                font-weight: 600;
+                font-weight: 650;
+            }
+            #tip .row.strong span {
+                color: var(--ink);
             }
 
-            /* ---------- login ---------- */
-            .login-wrap {
-                min-height: 72vh;
+            /* skeletons */
+            .skel {
                 display: grid;
-                place-items: center;
-                padding: 24px 16px;
+                gap: var(--s4);
             }
-            .login {
-                width: 100%;
-                max-width: 340px;
-                background: var(--surface-1);
-                border: 1px solid var(--border);
-                border-radius: 14px;
-                padding: 26px 24px 24px;
+            .sk {
+                border-radius: var(--r-md);
+                background: linear-gradient(
+                        90deg,
+                        transparent 0%,
+                        color-mix(in srgb, var(--surface) 55%, transparent) 50%,
+                        transparent 100%
+                    )
+                    var(--surface-2);
+                background-size: 200% 100%;
+                animation: shimmer 1.2s linear infinite;
             }
-            .login h1 {
-                font-size: 18px;
-                margin: 0 0 6px;
+            @keyframes shimmer {
+                from {
+                    background-position: 150% 0;
+                }
+                to {
+                    background-position: -50% 0;
+                }
             }
-            .login p {
-                color: var(--text-secondary);
-                font-size: 13px;
-                margin: 0 0 18px;
+
+            @media (prefers-reduced-motion: reduce) {
+                *,
+                *::before,
+                *::after {
+                    animation: none !important;
+                    transition: none !important;
+                }
+                .btn:active,
+                .icon-btn:active {
+                    transform: none;
+                }
             }
-            .login label {
-                display: block;
-                font-size: 12.5px;
-                color: var(--text-secondary);
-                margin: 12px 0 5px;
-            }
-            .login input {
-                width: 100%;
-                padding: 9px 11px;
-                border-radius: 9px;
-                border: 1px solid var(--border);
-                background: var(--surface-0);
-                color: var(--text-primary);
-                font: inherit;
-                font-size: 14px;
-            }
-            .login button[type="submit"] {
-                width: 100%;
-                margin-top: 18px;
-                padding: 10px;
-                border: 0;
-                border-radius: 9px;
-                background: var(--accent);
-                color: #fff;
-                font: inherit;
-                font-weight: 620;
-                cursor: pointer;
-            }
-            .err {
-                color: var(--over);
-                font-size: 13px;
-                margin-top: 12px;
-                min-height: 18px;
-            }
+
+            /* ===== panel-specific styles are added below ===== */
         </style>
     </head>
     <body>
+        <!-- Shared SVG patterns, outside every panel: a <pattern> inside a
+             display:none panel does not paint, and per-chart copies would
+             duplicate the id. -->
+        <svg
+            width="0"
+            height="0"
+            aria-hidden="true"
+            focusable="false"
+            style="position: absolute"
+        >
+            <defs>
+                <pattern
+                    id="hatch-over"
+                    width="6"
+                    height="6"
+                    patternUnits="userSpaceOnUse"
+                    patternTransform="rotate(45)"
+                >
+                    <rect class="hatch-bg" width="6" height="6"></rect>
+                    <rect class="hatch-fg" width="2.5" height="6"></rect>
+                </pattern>
+            </defs>
+        </svg>
+
         <!-- login -->
         <div class="login-wrap" id="login">
-            <form class="login" id="login-form">
+            <form class="login" id="login-form" novalidate>
+                <div class="mark" aria-hidden="true">
+                    <svg
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <path
+                            d="M12 21c-4.5-2.5-8-6-8-10.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 3.5C20 15 16.5 18.5 12 21Z"
+                        />
+                    </svg>
+                </div>
                 <h1>Your nutrition dashboard</h1>
                 <p>
                     Sign in with the same email and password you used to connect
                     your MCP client.
                 </p>
-                <label for="email">Email</label>
-                <input
-                    id="email"
-                    type="email"
-                    autocomplete="username"
-                    required
-                />
-                <label for="password">Password</label>
-                <input
-                    id="password"
-                    type="password"
-                    autocomplete="current-password"
-                    required
-                />
-                <button type="submit">Sign in</button>
+                <label class="field" for="email"
+                    >Email
+                    <input
+                        class="input"
+                        id="email"
+                        type="email"
+                        autocomplete="username"
+                        required
+                    />
+                </label>
+                <label class="field" for="password"
+                    >Password
+                    <input
+                        class="input"
+                        id="password"
+                        type="password"
+                        autocomplete="current-password"
+                        required
+                    />
+                </label>
+                <button class="btn primary" id="login-btn" type="submit">
+                    Sign in
+                </button>
                 <div class="err" id="login-err" role="alert"></div>
             </form>
         </div>
 
         <!-- dashboard -->
-        <div class="wrap" id="app" hidden>
-            <header class="top">
-                <h1>Your nutrition</h1>
-                <button class="ghost" id="theme-btn" type="button">
-                    Theme
-                </button>
-                <button class="ghost" id="signout" type="button">
-                    Sign out
-                </button>
-            </header>
-            <p class="sub" id="range-label"></p>
-
-            <div class="filters">
-                <div class="seg" role="group" aria-label="Date range">
-                    <button type="button" data-days="1">Today</button>
-                    <button type="button" data-days="7">7 days</button>
-                    <button type="button" data-days="30" aria-pressed="true">
-                        30 days
-                    </button>
-                    <button type="button" data-days="90">90 days</button>
-                </div>
+        <div class="app" id="app" hidden>
+            <div class="chrome">
+                <header class="top">
+                    <div class="brand">
+                        <h1>
+                            <span class="dot" aria-hidden="true"></span
+                            >Nutrition
+                        </h1>
+                        <p class="sub" id="sub">Loading…</p>
+                    </div>
+                    <div class="actions">
+                        <button
+                            class="icon-btn"
+                            id="theme-btn"
+                            type="button"
+                            aria-label="Switch to dark theme"
+                        >
+                            <svg
+                                class="i-moon"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path
+                                    d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"
+                                />
+                            </svg>
+                            <svg
+                                class="i-sun"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                aria-hidden="true"
+                                hidden
+                            >
+                                <circle cx="12" cy="12" r="4" />
+                                <path
+                                    d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
+                                />
+                            </svg>
+                        </button>
+                        <button
+                            class="icon-btn"
+                            id="signout"
+                            type="button"
+                            aria-label="Sign out"
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path
+                                    d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"
+                                />
+                                <path d="M10 17l5-5-5-5M15 12H4" />
+                            </svg>
+                            <span class="txt" aria-hidden="true">Sign out</span>
+                        </button>
+                    </div>
+                </header>
+                <nav class="tabs-wrap" aria-label="Dashboard">
+                    <div
+                        role="tablist"
+                        aria-label="Dashboard sections"
+                        id="tablist"
+                    >
+                        <button
+                            role="tab"
+                            type="button"
+                            id="tab-today"
+                            aria-controls="panel-today"
+                            aria-selected="true"
+                            data-tab="today"
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                aria-hidden="true"
+                            >
+                                <circle cx="12" cy="12" r="8" />
+                                <path
+                                    d="M12 4a8 8 0 0 1 8 8"
+                                    stroke-width="3"
+                                />
+                            </svg>
+                            <span>Today</span>
+                        </button>
+                        <button
+                            role="tab"
+                            type="button"
+                            id="tab-trends"
+                            aria-controls="panel-trends"
+                            aria-selected="false"
+                            tabindex="-1"
+                            data-tab="trends"
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M5 20V12M10 20V6M15 20v-9M20 20V9" />
+                            </svg>
+                            <span>Trends</span>
+                        </button>
+                        <button
+                            role="tab"
+                            type="button"
+                            id="tab-body"
+                            aria-controls="panel-body"
+                            aria-selected="false"
+                            tabindex="-1"
+                            data-tab="body"
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <rect
+                                    x="4"
+                                    y="4"
+                                    width="16"
+                                    height="16"
+                                    rx="4"
+                                />
+                                <path d="M8.5 10a5 5 0 0 1 7 0L12 13" />
+                            </svg>
+                            <span>Body</span>
+                        </button>
+                        <button
+                            role="tab"
+                            type="button"
+                            id="tab-meals"
+                            aria-controls="panel-meals"
+                            aria-selected="false"
+                            tabindex="-1"
+                            data-tab="meals"
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M5 6h14M5 12h14M5 18h9" />
+                            </svg>
+                            <span>Meals</span>
+                        </button>
+                    </div>
+                </nav>
             </div>
 
-            <div class="tiles" id="tiles"></div>
-
-            <section class="card">
-                <div class="card-head">
-                    <div>
-                        <h2>Calories per day</h2>
-                        <p class="note" id="cal-note"></p>
-                    </div>
-                </div>
-                <div class="legend" id="cal-legend"></div>
-                <div class="plot" id="cal-plot"></div>
-                <div class="sub-head">
-                    <h3>Estimated body change</h3>
-                    <p class="note" id="bal-note"></p>
-                </div>
-                <div class="plot" id="bal-plot"></div>
-            </section>
-
-            <section class="card">
-                <div class="card-head">
-                    <div>
-                        <h2>Macros per day</h2>
-                        <p class="note">
-                            Stacked grams of protein, carbs and fat.
-                        </p>
-                    </div>
-                </div>
-                <div class="legend" id="macro-legend"></div>
-                <div class="plot" id="macro-plot"></div>
-            </section>
-
-            <section class="card" id="weight-card">
-                <div class="card-head">
-                    <div>
-                        <h2>Weight tracker</h2>
-                        <p class="note" id="weight-note"></p>
-                    </div>
-                </div>
-                <div class="wstats" id="wstats"></div>
-                <div class="legend" id="weight-legend"></div>
-                <div class="plot" id="weight-plot"></div>
-
-                <details class="body-box" id="body-box">
-                    <summary>Body details</summary>
-                    <p class="note">
-                        Used only for BMI, your healthy weight range and the
-                        estimated daily burn (Mifflin-St Jeor × 1.2 for a desk
-                        day, plus your workouts' active calories).
-                    </p>
-                    <form id="body-form" class="body-form">
-                        <label
-                            >Height
-                            <span class="pair">
-                                <input
-                                    id="b-height"
-                                    type="number"
-                                    inputmode="decimal"
-                                    step="0.1"
-                                    min="20"
-                                    max="272"
-                                />
-                                <select id="b-unit" aria-label="Height unit">
-                                    <option value="cm">cm</option>
-                                    <option value="in">in</option>
-                                </select>
-                            </span>
-                        </label>
-                        <label
-                            >Birth date
-                            <input id="b-birth" type="date" />
-                        </label>
-                        <label
-                            >Sex
-                            <select id="b-sex">
-                                <option value="">—</option>
-                                <option value="male">Male</option>
-                                <option value="female">Female</option>
-                            </select>
-                        </label>
-                        <button type="submit" class="save">Save</button>
-                        <span
-                            class="b-status"
-                            id="b-status"
-                            role="status"
-                        ></span>
-                    </form>
-                </details>
-            </section>
-
-            <section class="card">
-                <div class="card-head">
-                    <div>
-                        <h2>Recent meals</h2>
-                        <p class="note">
-                            Every figure plotted above, as numbers.
-                        </p>
-                    </div>
-                </div>
-                <div class="scroll-x">
-                    <table id="meals-table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Meal</th>
-                                <th>Description</th>
-                                <th class="num">kcal</th>
-                                <th class="num">P</th>
-                                <th class="num">C</th>
-                                <th class="num">F</th>
-                                <th class="num">Fib</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-                <div class="empty" id="meals-empty" hidden>
-                    No meals logged in this range.
-                </div>
-            </section>
+            <main id="main">
+                <section
+                    role="tabpanel"
+                    id="panel-today"
+                    aria-labelledby="tab-today"
+                    tabindex="0"
+                >
+                    <h2 class="sr-only">Today</h2>
+                    <div class="banner-slot"></div>
+                    <div class="panel-body" id="today-body"></div>
+                </section>
+                <section
+                    role="tabpanel"
+                    id="panel-trends"
+                    aria-labelledby="tab-trends"
+                    tabindex="0"
+                    hidden
+                >
+                    <h2 class="sr-only">Trends</h2>
+                    <div class="banner-slot"></div>
+                    <div class="panel-head" data-range-head></div>
+                    <div class="panel-body" id="trends-body"></div>
+                </section>
+                <section
+                    role="tabpanel"
+                    id="panel-body"
+                    aria-labelledby="tab-body"
+                    tabindex="0"
+                    hidden
+                >
+                    <h2 class="sr-only">Body</h2>
+                    <div class="banner-slot"></div>
+                    <div class="panel-body" id="body-body"></div>
+                </section>
+                <section
+                    role="tabpanel"
+                    id="panel-meals"
+                    aria-labelledby="tab-meals"
+                    tabindex="0"
+                    hidden
+                >
+                    <h2 class="sr-only">Meals</h2>
+                    <div class="banner-slot"></div>
+                    <div class="panel-head" data-range-head></div>
+                    <div class="panel-body" id="meals-body"></div>
+                </section>
+            </main>
         </div>
 
-        <div id="tip" hidden></div>
+        <div id="tip" role="tooltip" hidden></div>
+        <div id="live" class="sr-only" aria-live="polite"></div>
 
         <script>
             (function () {
                 "use strict";
 
-                var KEY = "nutrition-dash-token";
-                var THEME_KEY = "nutrition-dash-theme";
-                var token = null;
-                var days = 30;
-                var data = null;
+                const KEY = "nutrition-dash-token";
+                const THEME_KEY = "nutrition-dash-theme";
+                const RANGE_KEY = "nutrition-dash-range";
+                const TABS = ["today", "trends", "body", "meals"];
+                const RANGES = [
+                    [7, "7 days"],
+                    [30, "30 days"],
+                    [90, "90 days"],
+                    [365, "1 year"],
+                ];
 
-                // localStorage throws in a private window or with site data
-                // blocked, and the page must still work without it.
+                let token = null;
+                let data = null;
+                let loading = false;
+                let loadError = false;
+                let active = "today";
+                let range = 30;
+                // Content is rebuilt when data changes; charts also redraw
+                // on resize. Only the visible panel is ever painted.
+                const contentDirty = {};
+                const chartsDirty = {};
+
+                /* ---------- storage (try/catch: private windows) ---------- */
                 function store(k, v) {
                     try {
                         if (v === null) localStorage.removeItem(k);
@@ -739,85 +1488,114 @@
                     }
                 }
 
-                var $ = function (id) {
-                    return document.getElementById(id);
-                };
-                var cssVar = function (n) {
-                    return getComputedStyle(document.documentElement)
-                        .getPropertyValue(n)
-                        .trim();
-                };
+                const $ = (id) => document.getElementById(id);
 
-                /* ---------- theme ---------- */
-                var savedTheme = load(THEME_KEY);
-                if (savedTheme)
-                    document.documentElement.setAttribute(
-                        "data-theme",
-                        savedTheme,
+                /* ---------- formatting ---------- */
+                const round = (n) => Math.round(n || 0);
+                const fmt = (n) => round(n).toLocaleString();
+                const MINUS = "−";
+                function fmtSigned(n) {
+                    const r = round(n);
+                    return (
+                        (r > 0 ? "+" : r < 0 ? MINUS : "") +
+                        Math.abs(r).toLocaleString()
                     );
-                $("theme-btn").addEventListener("click", function () {
-                    var cur =
-                        document.documentElement.getAttribute("data-theme");
-                    var isDark =
-                        cur === "dark" ||
-                        (!cur &&
-                            matchMedia("(prefers-color-scheme: dark)").matches);
-                    var next = isDark ? "light" : "dark";
-                    document.documentElement.setAttribute("data-theme", next);
-                    store(THEME_KEY, next);
-                    if (data) render();
-                });
-
-                /* ---------- helpers ---------- */
-                function round(n) {
-                    return Math.round(n || 0);
                 }
-                function fmt(n) {
-                    return round(n).toLocaleString();
+                function fmtSignedDec(n, dp) {
+                    const d = dp == null ? 1 : dp;
+                    const v = Number(n.toFixed(d));
+                    return (
+                        (v > 0 ? "+" : v < 0 ? MINUS : "") +
+                        Math.abs(v).toFixed(d)
+                    );
                 }
                 // Parse YYYY-MM-DD as a local date. new Date("2026-09-16")
                 // parses as UTC and can display as the previous day west of
                 // Greenwich — which is exactly where this user is.
                 function parseDay(iso) {
-                    var p = iso.split("-");
+                    const p = iso.split("-");
                     return new Date(+p[0], +p[1] - 1, +p[2]);
                 }
-                function shortDay(iso) {
-                    return parseDay(iso).toLocaleDateString(undefined, {
+                const shortDay = (iso) =>
+                    parseDay(iso).toLocaleDateString(undefined, {
                         month: "short",
                         day: "numeric",
                     });
-                }
-                function longDay(iso) {
-                    return parseDay(iso).toLocaleDateString(undefined, {
+                const longDay = (iso) =>
+                    parseDay(iso).toLocaleDateString(undefined, {
                         weekday: "short",
                         month: "short",
                         day: "numeric",
                     });
-                }
+                const dayDiff = (a, b) =>
+                    Math.round((parseDay(b) - parseDay(a)) / 864e5);
                 function esc(s) {
                     return String(s == null ? "" : s).replace(
                         /[&<>"']/g,
-                        function (c) {
-                            return {
+                        (c) =>
+                            ({
                                 "&": "&amp;",
                                 "<": "&lt;",
                                 ">": "&gt;",
                                 '"': "&quot;",
                                 "'": "&#39;",
-                            }[c];
-                        },
+                            })[c],
                     );
                 }
+                const toUnit = (g, unit) =>
+                    unit === "lb" ? g / 453.59237 : g / 1000;
+                const wfmt = (g, unit) => toUnit(g, unit).toFixed(1);
+
+                /* Profile-timezone dates and times. An invalid zone falls
+                   back to the browser's, rather than throwing mid-render. */
+                function tzOpts(o) {
+                    const tz = data && data.timezone;
+                    if (!tz) return o;
+                    try {
+                        new Intl.DateTimeFormat(undefined, { timeZone: tz });
+                        return Object.assign({ timeZone: tz }, o);
+                    } catch (e) {
+                        return o;
+                    }
+                }
+                function localDate(iso) {
+                    return new Intl.DateTimeFormat(
+                        "en-CA",
+                        tzOpts({
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                        }),
+                    ).format(new Date(iso));
+                }
+                function localTime(iso) {
+                    return new Intl.DateTimeFormat(
+                        undefined,
+                        tzOpts({ hour: "2-digit", minute: "2-digit" }),
+                    ).format(new Date(iso));
+                }
+
+                /* ---------- svg ---------- */
                 function svgEl(tag, attrs) {
-                    var e = document.createElementNS(
+                    const e = document.createElementNS(
                         "http://www.w3.org/2000/svg",
                         tag,
                     );
-                    for (var k in attrs)
+                    for (const k in attrs)
                         if (attrs[k] !== null && attrs[k] !== undefined)
                             e.setAttribute(k, attrs[k]);
                     return e;
+                }
+                function svgText(svg, x, y, txt, cls, anchor) {
+                    const t = svgEl("text", {
+                        x: x,
+                        y: y,
+                        class: cls || "ax",
+                        "text-anchor": anchor || "middle",
+                    });
+                    t.textContent = txt;
+                    svg.appendChild(t);
+                    return t;
                 }
                 // Bar with only its top corners rounded, so the mark stays
                 // anchored to the baseline instead of floating on a pill.
@@ -837,8 +1615,8 @@
                         r +
                         " 0 0 1 " +
                         r +
-                        ",-" +
-                        r +
+                        "," +
+                        -r +
                         "h" +
                         (w - 2 * r) +
                         "a" +
@@ -854,1260 +1632,545 @@
                         "Z"
                     );
                 }
+                const rectPath = (x, y, w, h) =>
+                    h <= 0
+                        ? ""
+                        : "M" +
+                          x +
+                          "," +
+                          y +
+                          "h" +
+                          w +
+                          "v" +
+                          h +
+                          "h" +
+                          -w +
+                          "Z";
                 // Snap up to a whole multiple of the tick count so every
-                // gridline lands on an integer. Without this a max of 10 over
-                // 4 ticks stepped by 2.5 and the labels rounded to 0/3/5/8/10.
-                function snapToTicks(max, ticks) {
-                    return Math.ceil(max / ticks) * ticks;
-                }
+                // gridline lands on an integer.
+                const snapToTicks = (max, ticks) =>
+                    Math.ceil(max / ticks) * ticks;
                 function niceMax(v) {
                     if (v <= 0) return 10;
-                    var mag = Math.pow(10, Math.floor(Math.log10(v)));
-                    var steps = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10];
-                    for (var i = 0; i < steps.length; i++) {
-                        if (steps[i] * mag >= v) return steps[i] * mag;
-                    }
+                    const mag = Math.pow(10, Math.floor(Math.log10(v)));
+                    const steps = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10];
+                    for (const s of steps) if (s * mag >= v) return s * mag;
                     return 10 * mag;
                 }
-
-                /* ---------- tooltip ---------- */
-                var tip = $("tip");
-                function showTip(html, ev) {
-                    tip.innerHTML = html;
-                    tip.hidden = false;
-                    var r = tip.getBoundingClientRect();
-                    var x = ev.clientX + 14;
-                    var y = ev.clientY - r.height - 12;
-                    if (x + r.width > innerWidth - 8)
-                        x = ev.clientX - r.width - 14;
-                    if (y < 8) y = ev.clientY + 16;
-                    tip.style.left = Math.max(8, x) + "px";
-                    tip.style.top = y + "px";
-                }
-                function hideTip() {
-                    tip.hidden = true;
-                }
-                document.addEventListener("scroll", hideTip, true);
-
-                /* ---------- charts ---------- */
-                var W = 860,
-                    H = 260,
-                    PAD = { t: 14, r: 12, b: 26, l: 46 };
-
-                function axes(svg, maxY, plotW, plotH, ticks) {
-                    var grid = cssVar("--grid"),
-                        ink = cssVar("--text-secondary");
-                    for (var i = 0; i <= ticks; i++) {
-                        var v = (maxY / ticks) * i;
-                        var y = PAD.t + plotH - (v / maxY) * plotH;
-                        // Solid, recessive. Dashed gridlines read as data.
-                        svg.appendChild(
-                            svgEl("line", {
-                                x1: PAD.l,
-                                x2: PAD.l + plotW,
-                                y1: y,
-                                y2: y,
-                                stroke: grid,
-                                "stroke-width": 1,
-                            }),
-                        );
-                        var t = svgEl("text", {
-                            x: PAD.l - 8,
-                            y: y + 4,
-                            "text-anchor": "end",
-                            "font-size": 11,
-                            fill: ink,
-                        });
-                        t.textContent = fmt(v);
-                        svg.appendChild(t);
-                    }
-                }
-
-                // Label roughly every Nth day, and always the last one so the
-                // range's end is readable. The last label is dropped when it
-                // would land on top of the previous one — at 30 days the
-                // stride lands on Sep 26 and the forced final tick printed
-                // Sep 27 straight through it.
-                var MIN_LABEL_GAP = 52;
-                function xLabels(svg, rows, plotW, plotH, step) {
-                    var ink = cssVar("--text-secondary");
-                    var bw = plotW / rows.length;
-                    var lastX = -Infinity;
-                    for (var i = 0; i < rows.length; i++) {
-                        var isLast = i === rows.length - 1;
-                        if (i % step !== 0 && !isLast) continue;
-                        var cx = PAD.l + bw * (i + 0.5);
-                        if (cx - lastX < MIN_LABEL_GAP) {
-                            // Keep the endpoint in preference to the tick that
-                            // merely fell on the stride.
-                            if (!isLast) continue;
-                            var prev = svg.querySelector(
-                                "text[data-xtick='1']:last-of-type",
-                            );
-                            if (prev) prev.remove();
-                        }
-                        lastX = cx;
-                        var t = svgEl("text", {
-                            x: cx,
-                            y: PAD.t + plotH + 17,
-                            "text-anchor": "middle",
-                            "font-size": 11,
-                            fill: ink,
-                            "data-xtick": "1",
-                        });
-                        t.textContent = shortDay(rows[i].date);
-                        svg.appendChild(t);
-                    }
-                }
-
-                function emptyState(host, msg) {
-                    var d = document.createElement("div");
-                    d.className = "empty";
-                    d.textContent = msg;
-                    host.appendChild(d);
-                }
-                function anyLogged(rows) {
-                    return rows.some(function (r) {
-                        return r.mealCount > 0;
-                    });
-                }
-
-                function fmtSigned(n) {
-                    var r = round(n);
+                function legend(items) {
+                    // items: [shape, swatch class / svg, label]
                     return (
-                        (r > 0 ? "+" : r < 0 ? "−" : "") +
-                        Math.abs(r).toLocaleString()
+                        '<ul class="legend">' +
+                        items
+                            .map(function (it) {
+                                return "<li>" + it[0] + esc(it[1]) + "</li>";
+                            })
+                            .join("") +
+                        "</ul>"
                     );
                 }
-
-                // Calories eaten per day against THAT day's goal — the stored
-                // baseline plus the day's active kcal, so the line steps up on
-                // a training day — with the estimated burn as a dot per day.
-                function caloriesChart(rows) {
-                    var host = $("cal-plot");
-                    host.textContent = "";
-                    var fill = cssVar("--series-1"),
-                        overFill = cssVar("--over"),
-                        burnInk = cssVar("--series-2"),
-                        goalInk = cssVar("--text-secondary");
-                    var hasGoal = rows.some(function (r) {
-                        return r.goal_calories;
-                    });
-                    var hasBurn = rows.some(function (r) {
-                        return r.burn_kcal;
-                    });
-                    $("cal-legend").innerHTML =
-                        '<span><i style="background:' +
-                        fill +
-                        '"></i>Eaten</span>' +
-                        (hasGoal
-                            ? '<span><i style="background:' +
-                              goalInk +
-                              ';height:3px;border-radius:1px"></i>Goal (incl. active kcal)</span>' +
-                              '<span><i style="background:' +
-                              overFill +
-                              '"></i>Over goal</span>'
-                            : "") +
-                        (hasBurn
-                            ? '<span><i style="background:' +
-                              burnInk +
-                              ';border-radius:50%"></i>Est. burn</span>'
-                            : "");
-                    if (!rows.length) return;
-                    if (!anyLogged(rows) && !hasGoal) {
-                        emptyState(host, "Nothing logged in this range.");
-                        return;
-                    }
-
-                    var plotW = W - PAD.l - PAD.r,
-                        plotH = H - PAD.t - PAD.b;
-                    var peak = Math.max.apply(
-                        null,
-                        rows.map(function (r) {
-                            return Math.max(
-                                r.calories,
-                                r.goal_calories || 0,
-                                r.burn_kcal || 0,
-                            );
-                        }),
-                    );
-                    var maxY = snapToTicks(niceMax(peak * 1.08), 4);
-                    var yAt = function (v) {
-                        return PAD.t + plotH - (v / maxY) * plotH;
-                    };
-                    var svg = svgEl("svg", {
-                        viewBox: "0 0 " + W + " " + H,
-                        role: "img",
-                        "aria-label":
-                            "Calories eaten per day against each day's goal and estimated burn.",
-                    });
-                    axes(svg, maxY, plotW, plotH, 4);
-
-                    var bw = plotW / rows.length;
-                    var gap = Math.min(2, bw * 0.18);
-                    // A single day would otherwise be one bar the width of the
-                    // whole chart.
-                    var barW = Math.min(bw - gap, 120);
-
-                    rows.forEach(function (r, i) {
-                        var h = (r.calories / maxY) * plotH;
-                        var x = PAD.l + bw * i + (bw - barW) / 2;
-                        var w = Math.max(1, barW);
-                        var over =
-                            r.goal_calories && r.calories > r.goal_calories;
-                        if (h > 0)
-                            svg.appendChild(
-                                svgEl("path", {
-                                    d: barPath(
-                                        x,
-                                        yAt(r.calories),
-                                        w,
-                                        h,
-                                        Math.min(4, w / 2),
-                                    ),
-                                    fill: over ? overFill : fill,
-                                    opacity: r.in_progress ? 0.75 : 1,
-                                }),
-                            );
-                        var hit = svgEl("rect", {
-                            x: PAD.l + bw * i,
-                            y: PAD.t,
-                            width: bw,
-                            height: plotH,
-                            fill: "transparent",
-                        });
-                        hit.addEventListener("mousemove", function (ev) {
-                            var dim = ' style="color:var(--text-secondary)"';
-                            showTip(
-                                '<div class="t-date">' +
-                                    longDay(r.date) +
-                                    (r.in_progress ? " · so far" : "") +
-                                    "</div>" +
-                                    '<div class="row"><i style="background:' +
-                                    (over ? overFill : fill) +
-                                    '"></i>Eaten<b>' +
-                                    fmt(r.calories) +
-                                    "</b></div>" +
-                                    (r.goal_calories
-                                        ? '<div class="row"' +
-                                          dim +
-                                          ">Goal<b>" +
-                                          fmt(r.goal_calories) +
-                                          "</b></div>"
-                                        : "") +
-                                    (r.active_kcal
-                                        ? '<div class="row"' +
-                                          dim +
-                                          ">incl. active<b>+" +
-                                          fmt(r.active_kcal) +
-                                          "</b></div>"
-                                        : "") +
-                                    (r.burn_kcal
-                                        ? '<div class="row"><i style="background:' +
-                                          burnInk +
-                                          ';border-radius:50%"></i>Est. burn<b>' +
-                                          fmt(r.burn_kcal) +
-                                          "</b></div>"
-                                        : "") +
-                                    (r.balance_g != null
-                                        ? '<div class="row"' +
-                                          dim +
-                                          ">Est. change<b>" +
-                                          fmtSigned(r.balance_g) +
-                                          " g</b></div>"
-                                        : "") +
-                                    '<div class="row"' +
-                                    dim +
-                                    ">Meals<b>" +
-                                    r.mealCount +
-                                    "</b></div>",
-                                ev,
-                            );
-                        });
-                        hit.addEventListener("mouseleave", hideTip);
-                        svg.appendChild(hit);
-                    });
-
-                    // Goal as a step line: each day's own target across its
-                    // column, joined vertically where it changes.
-                    var d = "";
-                    rows.forEach(function (r, i) {
-                        if (!r.goal_calories) return;
-                        var y = yAt(r.goal_calories);
-                        var x0 = PAD.l + bw * i,
-                            x1 = x0 + bw;
-                        var prev = rows[i - 1];
-                        d +=
-                            (prev && prev.goal_calories ? "L" : "M") +
-                            x0 +
-                            "," +
-                            y +
-                            "L" +
-                            x1 +
-                            "," +
-                            y;
-                    });
-                    if (d)
-                        svg.appendChild(
-                            svgEl("path", {
-                                d: d,
-                                fill: "none",
-                                stroke: goalInk,
-                                "stroke-width": 2,
-                                "pointer-events": "none",
-                            }),
-                        );
-                    var lastGoal = rows[rows.length - 1].goal_calories;
-                    if (lastGoal) {
-                        var gl = svgEl("text", {
-                            x: PAD.l + plotW,
-                            y: yAt(lastGoal) - 6,
-                            "text-anchor": "end",
-                            "font-size": 11,
-                            fill: goalInk,
-                        });
-                        gl.textContent = "Goal " + fmt(lastGoal);
-                        svg.appendChild(gl);
-                    }
-
-                    rows.forEach(function (r, i) {
-                        if (!r.burn_kcal) return;
-                        svg.appendChild(
-                            svgEl("circle", {
-                                cx: PAD.l + bw * (i + 0.5),
-                                cy: yAt(r.burn_kcal),
-                                r: rows.length > 45 ? 2.5 : 3.5,
-                                fill: burnInk,
-                                stroke: cssVar("--surface-1"),
-                                "stroke-width": 1.5,
-                                "pointer-events": "none",
-                            }),
-                        );
-                    });
-
-                    xLabels(
-                        svg,
-                        rows,
-                        plotW,
-                        plotH,
-                        Math.max(1, Math.ceil(rows.length / 8)),
-                    );
-                    host.appendChild(svg);
-                }
-
-                // Estimated grams gained (up, --over) or lost (down,
-                // --series-3) per day: (eaten − est. burn) ÷ 7.7 kcal/g.
-                var BH = 150;
-                function balanceChart(rows) {
-                    var host = $("bal-plot");
-                    host.textContent = "";
-                    // A day still running reads as a huge deficit (breakfast
-                    // against a whole day's burn). Over a range it would set
-                    // the scale and dwarf every finished day, so it is only
-                    // plotted in the Today view; the top tile carries it.
-                    var multi = rows.length > 1;
-                    var plotted = function (r) {
-                        return r.balance_g != null && !(multi && r.in_progress);
-                    };
-                    var known = rows.filter(plotted);
-                    if (
-                        !rows.some(function (r) {
-                            return r.burn_kcal;
-                        })
-                    ) {
-                        $("bal-note").textContent = "";
-                        emptyState(
-                            host,
-                            "Add your height, birth date and sex under Weight tracker → Body details to estimate this.",
-                        );
-                        return;
-                    }
-                    var done = known.filter(function (r) {
-                        return !r.in_progress;
-                    });
-                    var net = done.reduce(function (a, r) {
-                        return a + r.balance_g;
-                    }, 0);
-                    $("bal-note").textContent = known.length
-                        ? "(eaten − estimated burn) ÷ 7.7 kcal per gram. An estimate for spotting the trend — daily scale weight swings far more with water and salt." +
-                          (done.length > 1
-                              ? " Net over " +
-                                done.length +
-                                " complete logged days: " +
-                                fmtSigned(net) +
-                                " g."
-                              : "")
-                        : "No logged days in this range.";
-                    if (!known.length) return;
-
-                    var plotW = W - PAD.l - PAD.r,
-                        plotH = BH - PAD.t - PAD.b;
-                    var peak = Math.max.apply(
-                        null,
-                        known.map(function (r) {
-                            return Math.abs(r.balance_g);
-                        }),
-                    );
-                    var maxAbs = niceMax(Math.max(peak, 20) * 1.15);
-                    var zeroY = PAD.t + plotH / 2;
-                    var yAt = function (v) {
-                        return zeroY - (v / maxAbs) * (plotH / 2);
-                    };
-                    var svg = svgEl("svg", {
-                        viewBox: "0 0 " + W + " " + BH,
-                        role: "img",
-                        "aria-label": "Estimated grams gained or lost per day.",
-                    });
-                    var grid = cssVar("--grid"),
-                        ink = cssVar("--text-secondary");
-                    [maxAbs, 0, -maxAbs].forEach(function (v) {
-                        var y = yAt(v);
-                        svg.appendChild(
-                            svgEl("line", {
-                                x1: PAD.l,
-                                x2: PAD.l + plotW,
-                                y1: y,
-                                y2: y,
-                                stroke: v === 0 ? ink : grid,
-                                "stroke-width": 1,
-                            }),
-                        );
-                        var t = svgEl("text", {
-                            x: PAD.l - 8,
-                            y: y + 4,
-                            "text-anchor": "end",
-                            "font-size": 11,
-                            fill: ink,
-                        });
-                        t.textContent = v === 0 ? "0 g" : fmtSigned(v);
-                        svg.appendChild(t);
-                    });
-
-                    var bw = plotW / rows.length;
-                    var barW = Math.min(bw - Math.min(2, bw * 0.18), 120);
-                    var gain = cssVar("--over"),
-                        loss = cssVar("--series-3");
-                    rows.forEach(function (r, i) {
-                        if (!plotted(r)) return;
-                        var v = r.balance_g;
-                        var x = PAD.l + bw * i + (bw - barW) / 2;
-                        var y = v >= 0 ? yAt(v) : zeroY;
-                        var h = Math.max(1, Math.abs(yAt(v) - zeroY));
-                        svg.appendChild(
-                            svgEl("rect", {
-                                x: x,
-                                y: y,
-                                width: Math.max(1, barW),
-                                height: h,
-                                rx: Math.min(3, barW / 2),
-                                fill: v >= 0 ? gain : loss,
-                                opacity: r.in_progress ? 0.6 : 1,
-                            }),
-                        );
-                        // Direct labels while they fit; the tooltip covers
-                        // the rest.
-                        if (rows.length <= 14) {
-                            var t = svgEl("text", {
-                                x: x + barW / 2,
-                                y: v >= 0 ? y - 4 : y + h + 12,
-                                "text-anchor": "middle",
-                                "font-size": 11,
-                                fill: ink,
-                            });
-                            t.textContent =
-                                fmtSigned(v) +
-                                " g" +
-                                (r.in_progress ? "*" : "");
-                            svg.appendChild(t);
-                        }
-                        var hit = svgEl("rect", {
-                            x: PAD.l + bw * i,
-                            y: PAD.t,
-                            width: bw,
-                            height: plotH,
-                            fill: "transparent",
-                        });
-                        hit.addEventListener("mousemove", function (ev) {
-                            showTip(
-                                '<div class="t-date">' +
-                                    longDay(r.date) +
-                                    (r.in_progress ? " · so far" : "") +
-                                    "</div>" +
-                                    '<div class="row"><i style="background:' +
-                                    (v >= 0 ? gain : loss) +
-                                    '"></i>Est. change<b>' +
-                                    fmtSigned(v) +
-                                    " g</b></div>" +
-                                    '<div class="row" style="color:var(--text-secondary)">Eaten − burn<b>' +
-                                    fmtSigned(r.calories - r.burn_kcal) +
-                                    " kcal</b></div>",
-                                ev,
-                            );
-                        });
-                        hit.addEventListener("mouseleave", hideTip);
-                        svg.appendChild(hit);
-                    });
-                    xLabels(
-                        svg,
-                        rows,
-                        plotW,
-                        plotH,
-                        Math.max(1, Math.ceil(rows.length / 8)),
-                    );
-                    host.appendChild(svg);
-                }
-
-                var MACROS = [
-                    { key: "protein_g", name: "Protein", v: "--series-1" },
-                    { key: "carbs_g", name: "Carbs", v: "--series-2" },
-                    { key: "fat_g", name: "Fat", v: "--series-3" },
-                ];
-
-                function macroChart(rows) {
-                    var host = $("macro-plot");
-                    host.textContent = "";
-                    $("macro-legend").innerHTML = MACROS.map(function (m) {
-                        return (
-                            '<span><i style="background:' +
-                            cssVar(m.v) +
-                            '"></i>' +
-                            m.name +
-                            "</span>"
-                        );
-                    }).join("");
-                    if (!rows.length) return;
-                    if (!anyLogged(rows)) {
-                        emptyState(host, "Nothing logged in this range.");
-                        return;
-                    }
-
-                    var plotW = W - PAD.l - PAD.r,
-                        plotH = H - PAD.t - PAD.b;
-                    var peak = Math.max.apply(
-                        null,
-                        rows.map(function (r) {
-                            return r.protein_g + r.carbs_g + r.fat_g;
-                        }),
-                    );
-                    var maxY = snapToTicks(niceMax(peak * 1.08), 4);
-                    var svg = svgEl("svg", {
-                        viewBox: "0 0 " + W + " " + H,
-                        role: "img",
-                        "aria-label":
-                            "Protein, carbs and fat in grams per day.",
-                    });
-                    axes(svg, maxY, plotW, plotH, 4);
-
-                    var bw = plotW / rows.length;
-                    var gap = Math.min(2, bw * 0.18);
-
-                    rows.forEach(function (r, i) {
-                        var x = PAD.l + bw * i + gap / 2;
-                        var w = Math.max(1, bw - gap);
-                        var acc = 0;
-                        // Draw from the top of the stack down so the 2px
-                        // separator between segments is cut out of the
-                        // segment below rather than painted over it.
-                        for (var s = MACROS.length - 1; s >= 0; s--) {
-                            var val = r[MACROS[s].key] || 0;
-                            if (val <= 0) continue;
-                            var h = (val / maxY) * plotH;
-                            var yTop =
-                                PAD.t + plotH - ((acc + val) / maxY) * plotH;
-                            var segH = Math.max(0, h - (acc > 0 ? 2 : 0));
-                            // Only the segment that finishes the stack is
-                            // rounded. Testing the slot index instead rounded
-                            // the BOTTOM segment (fat is drawn first), putting
-                            // a curve in the middle of the bar.
-                            var isTop =
-                                acc + val >=
-                                r.protein_g + r.carbs_g + r.fat_g - 0.001;
-                            svg.appendChild(
-                                svgEl("path", {
-                                    d: isTop
-                                        ? barPath(
-                                              x,
-                                              yTop,
-                                              w,
-                                              segH,
-                                              Math.min(4, w / 2),
-                                          )
-                                        : "M" +
-                                          x +
-                                          "," +
-                                          yTop +
-                                          "h" +
-                                          w +
-                                          "v" +
-                                          segH +
-                                          "h" +
-                                          -w +
-                                          "Z",
-                                    fill: cssVar(MACROS[s].v),
-                                }),
-                            );
-                            acc += val;
-                        }
-                        var hit = svgEl("rect", {
-                            x: PAD.l + bw * i,
-                            y: PAD.t,
-                            width: bw,
-                            height: plotH,
-                            fill: "transparent",
-                        });
-                        hit.addEventListener("mousemove", function (ev) {
-                            showTip(
-                                '<div class="t-date">' +
-                                    longDay(r.date) +
-                                    "</div>" +
-                                    MACROS.map(function (m) {
-                                        return (
-                                            '<div class="row"><i style="background:' +
-                                            cssVar(m.v) +
-                                            '"></i>' +
-                                            m.name +
-                                            "<b>" +
-                                            fmt(r[m.key]) +
-                                            " g</b></div>"
-                                        );
-                                    }).join(""),
-                                ev,
-                            );
-                        });
-                        hit.addEventListener("mouseleave", hideTip);
-                        svg.appendChild(hit);
-                    });
-
-                    xLabels(
-                        svg,
-                        rows,
-                        plotW,
-                        plotH,
-                        Math.max(1, Math.ceil(rows.length / 8)),
-                    );
-                    host.appendChild(svg);
-                }
-
-                /* ---------- weight tracker ---------- */
-                function toUnit(g, unit) {
-                    return unit === "lb" ? g / 453.59237 : g / 1000;
-                }
-                function wfmt(g, unit) {
-                    return toUnit(g, unit).toFixed(1);
-                }
-                function wstat(label, value, unit, foot, missing) {
-                    return (
-                        '<div class="wstat' +
-                        (missing ? " missing" : "") +
-                        '"><div class="label">' +
-                        esc(label) +
-                        '</div><div class="figure">' +
-                        value +
-                        (unit
-                            ? '<span class="unit">' + esc(unit) + "</span>"
-                            : "") +
-                        "</div>" +
-                        (foot ? '<div class="foot">' + foot + "</div>" : "") +
-                        "</div>"
-                    );
-                }
-                var BMI_LABEL = {
-                    underweight: "Underweight",
-                    healthy: "Healthy range",
-                    overweight: "Overweight",
-                    obese: "Obese",
+                const LG = {
+                    bar: (cls) =>
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="1" width="12" height="12" rx="3" class="' +
+                        cls +
+                        '"/></svg>',
+                    hatch: () =>
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="1" width="12" height="12" rx="3" class="m-over"/></svg>',
+                    line: (dashed) =>
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="' +
+                        (dashed ? "m-target" : "goal-line") +
+                        '"/></svg>',
+                    ring: () =>
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" class="m-burn"/></svg>',
+                    dotline: () =>
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="m-wline"/><circle cx="7" cy="7" r="3.5" class="m-wdot"/></svg>',
                 };
 
-                function renderWeightStats(s, unit) {
-                    var ask = function (what) {
-                        return wstat(
-                            what,
-                            "Add details",
-                            "",
-                            "Body details below",
-                            true,
-                        );
-                    };
-                    var html = "";
-                    html +=
-                        s.latest_g != null
-                            ? wstat(
-                                  "Current",
-                                  wfmt(s.latest_g, unit),
-                                  unit,
-                                  "Logged " + shortDay(s.latest_date),
-                              )
-                            : wstat(
-                                  "Current",
-                                  "No weigh-ins",
-                                  "",
-                                  "Ask Claude to log your weight",
-                                  true,
-                              );
-                    html +=
-                        s.bmi != null
-                            ? wstat(
-                                  "BMI",
-                                  s.bmi.toFixed(1),
-                                  "",
-                                  BMI_LABEL[s.bmi_category],
-                              )
-                            : s.height_cm == null
-                              ? ask("BMI")
-                              : wstat("BMI", "—", "", "Needs a weigh-in", true);
-                    if (s.healthy_min_g != null)
-                        html += wstat(
-                            "Healthy range",
-                            wfmt(s.healthy_min_g, unit) +
-                                "–" +
-                                wfmt(s.healthy_max_g, unit),
-                            unit,
-                            "BMI 18.5–24.9 at " +
-                                Number(s.height_cm).toFixed(0) +
-                                " cm",
-                        );
-                    html +=
-                        s.change_g != null
-                            ? wstat(
-                                  "Change",
-                                  fmtSignedDec(toUnit(s.change_g, unit)),
-                                  unit,
-                                  "over " +
-                                      s.trend_days +
-                                      " days · " +
-                                      fmtSignedDec(
-                                          toUnit(s.weekly_rate_g, unit),
-                                          2,
-                                      ) +
-                                      " " +
-                                      unit +
-                                      "/week",
-                              )
-                            : wstat(
-                                  "Change",
-                                  "—",
-                                  "",
-                                  "Needs 2+ weigh-ins on different days",
-                                  true,
-                              );
-                    if (s.target_g != null) {
-                        var foot;
-                        if (s.to_target_g === 0) foot = "At target";
-                        else if (s.projected_date)
-                            foot = "At this rate: " + longDay(s.projected_date);
-                        else if (s.weekly_rate_g != null)
-                            foot = "Current trend is not heading there";
-                        else
-                            foot =
-                                "Target " + wfmt(s.target_g, unit) + " " + unit;
-                        html += wstat(
-                            "To target",
-                            s.to_target_g != null
-                                ? fmtSignedDec(toUnit(s.to_target_g, unit))
-                                : wfmt(s.target_g, unit),
-                            unit,
-                            foot,
-                        );
+                /* ---------- x-axis layout ---------- */
+                const PAD = { t: 16, r: 12, b: 28, l: 44 };
+                function xLabelIdx(n, plotW) {
+                    // floor(plotW / 56) labels at most, always the last one.
+                    const max = Math.max(2, Math.floor(plotW / 56));
+                    const step = Math.max(1, Math.ceil(n / max));
+                    const out = [];
+                    for (let i = 0; i < n; i += step) out.push(i);
+                    const last = n - 1;
+                    if (out[out.length - 1] !== last) {
+                        if (
+                            out.length > 1 &&
+                            last - out[out.length - 1] < step * 0.6
+                        )
+                            out.pop();
+                        out.push(last);
                     }
-                    html +=
-                        s.bmr_kcal != null
-                            ? wstat(
-                                  "Resting burn",
-                                  fmt(s.bmr_kcal),
-                                  "kcal",
-                                  "BMR · Mifflin-St Jeor" +
-                                      (s.age != null ? " · age " + s.age : ""),
-                              )
-                            : ask("Resting burn");
-                    $("wstats").innerHTML = html;
+                    return out;
                 }
-                function fmtSignedDec(n, dp) {
-                    var v = Number(n.toFixed(dp == null ? 1 : dp));
-                    return (
-                        (v > 0 ? "+" : v < 0 ? "−" : "") +
-                        Math.abs(v).toFixed(dp == null ? 1 : dp)
-                    );
+                function bandLayout(n, plotW) {
+                    const bw = plotW / n;
+                    const gap = bw >= 5 ? Math.min(2, bw * 0.18) : 0;
+                    const barW = Math.max(1, Math.min(bw - gap, 48));
+                    return { bw: bw, barW: barW };
                 }
 
-                // Time-scaled, not index-scaled: weigh-ins are irregular, and
-                // even spacing would make a two-week gap look like a day.
-                function weightChart(d) {
-                    var host = $("weight-plot");
+                /* ---------- tooltip / inspect ---------- */
+                const tip = $("tip");
+                const live = $("live");
+                let current = null; // { svg, clear }
+
+                function tipContent(title, rows) {
+                    // rows: [swatchClass|null, label, value, strong?]
+                    const html =
+                        '<div class="t-date">' +
+                        esc(title) +
+                        "</div>" +
+                        rows
+                            .map(function (r) {
+                                return (
+                                    '<div class="row' +
+                                    (r[3] ? " strong" : "") +
+                                    '"><span>' +
+                                    (r[0]
+                                        ? '<i class="sw ' + r[0] + '"></i>'
+                                        : "") +
+                                    esc(r[1]) +
+                                    "</span><b>" +
+                                    esc(r[2]) +
+                                    "</b></div>"
+                                );
+                            })
+                            .join("");
+                    const text =
+                        title +
+                        ". " +
+                        rows
+                            .map(function (r) {
+                                return r[1] + " " + r[2];
+                            })
+                            .join(", ") +
+                        ".";
+                    return { html: html, text: text };
+                }
+                function placeTip(html, x, y) {
+                    tip.innerHTML = html;
+                    tip.hidden = false;
+                    const r = tip.getBoundingClientRect();
+                    let left = x - r.width / 2;
+                    left = Math.max(
+                        8,
+                        Math.min(innerWidth - r.width - 8, left),
+                    );
+                    let top = y - r.height - 12;
+                    if (top < 8) top = y + 16;
+                    if (top + r.height > innerHeight - 8)
+                        top = Math.max(8, innerHeight - r.height - 8);
+                    tip.style.left = left + "px";
+                    tip.style.top = top + "px";
+                    requestAnimationFrame(function () {
+                        tip.classList.add("on");
+                    });
+                }
+                function hideTip() {
+                    tip.classList.remove("on");
+                    tip.hidden = true;
+                }
+                function clearInspect() {
+                    if (current) current.clear();
+                    current = null;
+                    hideTip();
+                }
+
+                /**
+                 * Pointer + keyboard inspection for one chart. cols:
+                 * [{x, html, text}] in svg pixels; top/bottom bound the
+                 * guide. Mouse hovers; touch/pen pins the column with a
+                 * guide; arrows step it, mirrored to the live region.
+                 */
+                function inspect(svg, cols, top, bottom) {
+                    if (!cols.length) return;
+                    let idx = -1;
+                    let pinned = false;
+                    const guide = svgEl("line", {
+                        class: "guide",
+                        x1: -10,
+                        x2: -10,
+                        y1: top,
+                        y2: bottom,
+                    });
+                    guide.style.display = "none";
+                    svg.appendChild(guide);
+                    function colAt(clientX) {
+                        const x = clientX - svg.getBoundingClientRect().left;
+                        let best = 0;
+                        let bd = Infinity;
+                        cols.forEach(function (c, i) {
+                            const d = Math.abs(c.x - x);
+                            if (d < bd) {
+                                bd = d;
+                                best = i;
+                            }
+                        });
+                        return best;
+                    }
+                    const self = {
+                        svg: svg,
+                        clear: function () {
+                            idx = -1;
+                            pinned = false;
+                            guide.style.display = "none";
+                        },
+                    };
+                    function anchorShow(i) {
+                        idx = i;
+                        const c = cols[i];
+                        guide.setAttribute("x1", c.x);
+                        guide.setAttribute("x2", c.x);
+                        guide.style.display = "";
+                        const r = svg.getBoundingClientRect();
+                        if (current && current !== self) current.clear();
+                        current = self;
+                        placeTip(c.html, r.left + c.x, r.top + top);
+                    }
+                    svg.addEventListener("pointermove", function (ev) {
+                        if (ev.pointerType !== "mouse" || pinned) return;
+                        const i = colAt(ev.clientX);
+                        idx = i;
+                        if (current && current !== self) current.clear();
+                        current = self;
+                        guide.style.display = "none";
+                        placeTip(cols[i].html, ev.clientX, ev.clientY - 4);
+                    });
+                    svg.addEventListener("pointerleave", function (ev) {
+                        if (
+                            ev.pointerType === "mouse" &&
+                            !pinned &&
+                            current === self
+                        )
+                            clearInspect();
+                    });
+                    svg.addEventListener("pointerdown", function (ev) {
+                        if (ev.pointerType === "mouse") return;
+                        ev.stopPropagation();
+                        pinned = true;
+                        anchorShow(colAt(ev.clientX));
+                    });
+                    svg.addEventListener("keydown", function (ev) {
+                        let i = idx;
+                        if (ev.key === "ArrowRight")
+                            i = i < 0 ? 0 : Math.min(cols.length - 1, i + 1);
+                        else if (ev.key === "ArrowLeft")
+                            i = i < 0 ? cols.length - 1 : Math.max(0, i - 1);
+                        else if (ev.key === "Home") i = 0;
+                        else if (ev.key === "End") i = cols.length - 1;
+                        else if (ev.key === "Escape") {
+                            if (current === self) clearInspect();
+                            return;
+                        } else return;
+                        ev.preventDefault();
+                        pinned = true;
+                        anchorShow(i);
+                        live.textContent = cols[i].text;
+                    });
+                    svg.addEventListener("blur", function () {
+                        if (current === self) clearInspect();
+                    });
+                }
+                document.addEventListener("pointerdown", function (ev) {
+                    if (current && !current.svg.contains(ev.target))
+                        clearInspect();
+                });
+                document.addEventListener("keydown", function (ev) {
+                    if (ev.key === "Escape" && current) clearInspect();
+                });
+                addEventListener(
+                    "scroll",
+                    function () {
+                        if (current) clearInspect();
+                        document.body.classList.toggle("scrolled", scrollY > 4);
+                    },
+                    { passive: true },
+                );
+
+                function chartSvg(host, h, label) {
+                    const w = Math.floor(host.clientWidth);
                     host.textContent = "";
-                    var unit = d.weightUnit,
-                        s = d.weightStats;
-                    var pts = d.weights
-                        .map(function (w) {
-                            return {
-                                date: w.date,
-                                v: toUnit(w.weight_g, unit),
-                            };
-                        })
-                        .sort(function (a, b) {
-                            return a.date < b.date ? -1 : 1;
-                        });
-                    var line = cssVar("--series-1"),
-                        band = cssVar("--series-3"),
-                        ink = cssVar("--text-secondary");
-                    $("weight-legend").innerHTML = pts.length
-                        ? '<span><i style="background:' +
-                          line +
-                          '"></i>Weight</span>' +
-                          (s.target_g != null
-                              ? '<span><i style="background:' +
-                                ink +
-                                ';height:3px;border-radius:1px"></i>Target</span>'
-                              : "") +
-                          (s.healthy_min_g != null
-                              ? '<span><i style="background:' +
-                                band +
-                                ';opacity:.25"></i>Healthy BMI range</span>'
-                              : "")
-                        : "";
-                    $("weight-note").textContent = pts.length
-                        ? pts.length +
-                          " weigh-in" +
-                          (pts.length === 1 ? "" : "s") +
-                          " since " +
-                          longDay(d.weightWindowStart) +
-                          ", in " +
-                          unit +
-                          "."
-                        : "No weigh-ins in the last " +
-                          Math.round(
-                              (parseDay(d.endDate) -
-                                  parseDay(d.weightWindowStart)) /
-                                  864e5 +
-                                  1,
-                          ) +
-                          " days.";
-                    if (!pts.length) return;
-
-                    var plotW = W - PAD.l - PAD.r,
-                        plotH = H - PAD.t - PAD.b;
-                    var vals = pts.map(function (p) {
-                        return p.v;
-                    });
-                    if (s.target_g != null) vals.push(toUnit(s.target_g, unit));
-                    var lo = Math.min.apply(null, vals),
-                        hi = Math.max.apply(null, vals);
-                    var padY = (hi - lo) * 0.2 || 1;
-                    lo -= padY;
-                    hi += padY;
-                    var t0 = parseDay(d.weightWindowStart).getTime(),
-                        t1 = parseDay(d.endDate).getTime();
-                    var xAt = function (iso) {
-                        return (
-                            PAD.l +
-                            (t1 === t0
-                                ? plotW / 2
-                                : ((parseDay(iso).getTime() - t0) / (t1 - t0)) *
-                                  plotW)
-                        );
-                    };
-                    var yAt = function (v) {
-                        return PAD.t + plotH - ((v - lo) / (hi - lo)) * plotH;
-                    };
-                    var svg = svgEl("svg", {
-                        viewBox: "0 0 " + W + " " + H,
+                    const svg = svgEl("svg", {
+                        class: "chart",
+                        width: w,
+                        height: h,
+                        viewBox: "0 0 " + w + " " + h,
                         role: "img",
-                        "aria-label":
-                            "Body weight over time, with target and healthy range.",
-                    });
-
-                    if (s.healthy_min_g != null) {
-                        var a = Math.max(lo, toUnit(s.healthy_min_g, unit)),
-                            b = Math.min(hi, toUnit(s.healthy_max_g, unit));
-                        if (b > a)
-                            svg.appendChild(
-                                svgEl("rect", {
-                                    x: PAD.l,
-                                    y: yAt(b),
-                                    width: plotW,
-                                    height: yAt(a) - yAt(b),
-                                    fill: band,
-                                    opacity: 0.12,
-                                }),
-                            );
-                    }
-                    var grid = cssVar("--grid");
-                    for (var i = 0; i <= 3; i++) {
-                        var v = lo + ((hi - lo) / 3) * i;
-                        var y = yAt(v);
-                        svg.appendChild(
-                            svgEl("line", {
-                                x1: PAD.l,
-                                x2: PAD.l + plotW,
-                                y1: y,
-                                y2: y,
-                                stroke: grid,
-                                "stroke-width": 1,
-                            }),
-                        );
-                        var t = svgEl("text", {
-                            x: PAD.l - 8,
-                            y: y + 4,
-                            "text-anchor": "end",
-                            "font-size": 11,
-                            fill: ink,
-                        });
-                        t.textContent = v.toFixed(1);
-                        svg.appendChild(t);
-                    }
-                    if (s.target_g != null) {
-                        var ty = yAt(toUnit(s.target_g, unit));
-                        svg.appendChild(
-                            svgEl("line", {
-                                x1: PAD.l,
-                                x2: PAD.l + plotW,
-                                y1: ty,
-                                y2: ty,
-                                stroke: ink,
-                                "stroke-width": 2,
-                            }),
-                        );
-                        var tl = svgEl("text", {
-                            x: PAD.l + plotW,
-                            y: ty - 6,
-                            "text-anchor": "end",
-                            "font-size": 11,
-                            fill: ink,
-                        });
-                        tl.textContent = "Target " + wfmt(s.target_g, unit);
-                        svg.appendChild(tl);
-                    }
-                    svg.appendChild(
-                        svgEl("path", {
-                            d: pts
-                                .map(function (p, i) {
-                                    return (
-                                        (i ? "L" : "M") +
-                                        xAt(p.date) +
-                                        "," +
-                                        yAt(p.v)
-                                    );
-                                })
-                                .join(" "),
-                            fill: "none",
-                            stroke: line,
-                            "stroke-width": 2,
-                            "stroke-linejoin": "round",
-                            "stroke-linecap": "round",
-                        }),
-                    );
-                    pts.forEach(function (p) {
-                        svg.appendChild(
-                            svgEl("circle", {
-                                cx: xAt(p.date),
-                                cy: yAt(p.v),
-                                r: 4,
-                                fill: line,
-                                stroke: cssVar("--surface-1"),
-                                "stroke-width": 2,
-                            }),
-                        );
-                        var hit = svgEl("circle", {
-                            cx: xAt(p.date),
-                            cy: yAt(p.v),
-                            r: 14,
-                            fill: "transparent",
-                        });
-                        hit.addEventListener("mousemove", function (ev) {
-                            showTip(
-                                '<div class="t-date">' +
-                                    longDay(p.date) +
-                                    "</div>" +
-                                    '<div class="row"><i style="background:' +
-                                    line +
-                                    '"></i>Weight<b>' +
-                                    p.v.toFixed(1) +
-                                    " " +
-                                    unit +
-                                    "</b></div>" +
-                                    (s.height_cm
-                                        ? '<div class="row" style="color:var(--text-secondary)">BMI<b>' +
-                                          (
-                                              (unit === "lb"
-                                                  ? p.v * 0.45359237
-                                                  : p.v) /
-                                              Math.pow(s.height_cm / 100, 2)
-                                          ).toFixed(1) +
-                                          "</b></div>"
-                                        : ""),
-                                ev,
-                            );
-                        });
-                        hit.addEventListener("mouseleave", hideTip);
-                        svg.appendChild(hit);
-                    });
-                    // Start and end dates of the window.
-                    [d.weightWindowStart, d.endDate].forEach(function (iso, k) {
-                        var t = svgEl("text", {
-                            x: k ? PAD.l + plotW : PAD.l,
-                            y: PAD.t + plotH + 17,
-                            "text-anchor": k ? "end" : "start",
-                            "font-size": 11,
-                            fill: ink,
-                        });
-                        t.textContent = shortDay(iso);
-                        svg.appendChild(t);
+                        tabindex: 0,
+                        "aria-label": label,
                     });
                     host.appendChild(svg);
+                    return { svg: svg, w: w, h: h };
                 }
+                const isDesktop = () => innerWidth >= 1024;
 
-                /* ---------- body details form ---------- */
-                function fillBodyForm(body) {
-                    var unit = data.weightUnit === "lb" ? "in" : "cm";
-                    $("b-unit").value = unit;
-                    $("b-height").value =
-                        body.height_cm == null
-                            ? ""
-                            : unit === "in"
-                              ? (body.height_cm / 2.54).toFixed(1)
-                              : String(body.height_cm);
-                    $("b-birth").value = body.birth_date || "";
-                    $("b-sex").value = body.sex || "";
-                    var missing =
-                        body.height_cm == null || !body.birth_date || !body.sex;
-                    // Open it when something is missing, so the ask is visible.
-                    if (missing && !$("body-box").dataset.touched)
-                        $("body-box").open = true;
+                /* ---------- theme ---------- */
+                const mq = matchMedia("(prefers-color-scheme: dark)");
+                function isDark() {
+                    const cur =
+                        document.documentElement.getAttribute("data-theme");
+                    return cur === "dark" || (!cur && mq.matches);
                 }
-                $("body-box").addEventListener("toggle", function () {
-                    $("body-box").dataset.touched = "1";
+                function syncThemeBtn() {
+                    const dark = isDark();
+                    $("theme-btn").setAttribute(
+                        "aria-label",
+                        dark ? "Switch to light theme" : "Switch to dark theme",
+                    );
+                    $("theme-btn").querySelector(".i-moon").hidden = dark;
+                    $("theme-btn").querySelector(".i-sun").hidden = !dark;
+                }
+                $("theme-btn").addEventListener("click", function () {
+                    const next = isDark() ? "light" : "dark";
+                    document.documentElement.setAttribute("data-theme", next);
+                    store(THEME_KEY, next);
+                    // Every mark takes colour through CSS variables, so a
+                    // theme switch needs no re-render.
+                    syncThemeBtn();
                 });
-                $("body-form").addEventListener("submit", function (ev) {
-                    ev.preventDefault();
-                    var st = $("b-status");
-                    st.className = "b-status";
-                    st.textContent = "Saving…";
-                    var h = $("b-height").value.trim();
-                    fetch("/api/dashboard/body", {
-                        method: "POST",
-                        headers: {
-                            Authorization: "Bearer " + token,
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                            height: h === "" ? null : Number(h),
-                            height_unit: $("b-unit").value,
-                            birth_date: $("b-birth").value || null,
-                            sex: $("b-sex").value || null,
-                        }),
-                    })
-                        .then(function (r) {
-                            return r.json().then(function (b) {
-                                return { ok: r.ok, status: r.status, body: b };
-                            });
-                        })
-                        .then(function (res) {
-                            if (res.status === 401) return signOut();
-                            if (!res.ok) {
-                                st.className = "b-status err";
-                                st.textContent =
-                                    (res.body && res.body.error_description) ||
-                                    "Could not save.";
-                                return;
-                            }
-                            st.textContent = "Saved.";
-                            refresh();
-                        })
-                        .catch(function () {
-                            st.className = "b-status err";
-                            st.textContent = "Could not reach the server.";
-                        });
+                if (mq.addEventListener)
+                    mq.addEventListener("change", syncThemeBtn);
+                syncThemeBtn();
+
+                /* ---------- tabs ---------- */
+                const tabBtns = TABS.map((t) => $("tab-" + t));
+                function selectTab(name, opts) {
+                    opts = opts || {};
+                    if (TABS.indexOf(name) < 0) name = "today";
+                    const changed = name !== active;
+                    active = name;
+                    clearInspect();
+                    TABS.forEach(function (t) {
+                        const on = t === name;
+                        const b = $("tab-" + t);
+                        b.setAttribute("aria-selected", on ? "true" : "false");
+                        b.tabIndex = on ? 0 : -1;
+                        const p = $("panel-" + t);
+                        p.hidden = !on;
+                        if (on && changed) {
+                            p.classList.remove("enter");
+                            void p.offsetWidth;
+                            p.classList.add("enter");
+                        }
+                    });
+                    if (opts.focus) $("tab-" + name).focus();
+                    // A history entry per tab change, so back/forward
+                    // moves between tabs. The panels' ids are panel-*,
+                    // so the browser has no anchor to scroll to.
+                    if (!opts.fromHash && location.hash !== "#" + name)
+                        history.pushState(null, "", "#" + name);
+                    paint();
+                    // Start the new panel at its top when the tab bar is
+                    // already stuck.
+                    if (changed && !opts.fromHash) {
+                        const nav = document.querySelector(
+                            isDesktop() ? ".chrome" : ".tabs-wrap",
+                        );
+                        const navTop =
+                            $("main").getBoundingClientRect().top +
+                            scrollY -
+                            nav.offsetHeight;
+                        if (scrollY > navTop) scrollTo(0, Math.max(0, navTop));
+                    }
+                }
+                tabBtns.forEach(function (b, i) {
+                    b.addEventListener("click", function () {
+                        selectTab(b.dataset.tab);
+                    });
+                    b.addEventListener("keydown", function (ev) {
+                        let j = -1;
+                        if (ev.key === "ArrowRight") j = (i + 1) % TABS.length;
+                        else if (ev.key === "ArrowLeft")
+                            j = (i - 1 + TABS.length) % TABS.length;
+                        else if (ev.key === "Home") j = 0;
+                        else if (ev.key === "End") j = TABS.length - 1;
+                        if (j < 0) return;
+                        ev.preventDefault();
+                        selectTab(TABS[j], { focus: true });
+                    });
+                });
+                addEventListener("hashchange", function () {
+                    selectTab(location.hash.slice(1), { fromHash: true });
+                });
+                addEventListener("popstate", function () {
+                    selectTab(location.hash.slice(1) || "today", {
+                        fromHash: true,
+                    });
                 });
 
-                /* ---------- tiles ---------- */
-                function tile(label, value, unit, foot, pct, over) {
-                    var meter =
-                        pct === null || pct === undefined
-                            ? ""
-                            : '<div class="meter"><i class="' +
-                              (over ? "over" : "") +
-                              '" style="width:' +
-                              Math.max(0, Math.min(100, pct)) +
-                              '%"></i></div>';
-                    return (
-                        '<div class="tile"><div class="label">' +
-                        esc(label) +
-                        '</div><div class="figure">' +
-                        value +
-                        (unit ? '<span class="unit">' + unit + "</span>" : "") +
-                        "</div>" +
-                        meter +
-                        (foot
-                            ? '<div class="foot' +
-                              (over ? " over" : "") +
-                              '">' +
-                              foot +
-                              "</div>"
-                            : "") +
-                        "</div>"
-                    );
-                }
-
-                function renderTiles(today, rows) {
-                    var html = "";
-                    var t = today || {};
-                    var kcal = t.calories || 0;
-                    var goal = t.goal_calories;
-
-                    if (goal) {
-                        var left = goal - kcal;
-                        // "1,800 + 5 active" — say where the goal came from.
-                        var basis = t.active_kcal
-                            ? " (" +
-                              fmt(goal - t.active_kcal) +
-                              " + " +
-                              fmt(t.active_kcal) +
-                              " active)"
-                            : "";
-                        html += tile(
-                            "Today",
-                            fmt(kcal),
-                            "kcal",
-                            (left >= 0
-                                ? fmt(left) + " kcal left of " + fmt(goal)
-                                : fmt(-left) + " kcal over " + fmt(goal)) +
-                                basis,
-                            (kcal / goal) * 100,
-                            left < 0,
-                        );
-                    } else {
-                        html += tile(
-                            "Today",
-                            fmt(kcal),
-                            "kcal",
-                            "No calorie goal set",
-                            null,
-                        );
-                    }
-
-                    html += tile(
-                        "Protein today",
-                        fmt(t.protein_g),
-                        "g",
-                        t.goal_protein_g
-                            ? "of " + fmt(t.goal_protein_g) + " g"
-                            : null,
-                        t.goal_protein_g
-                            ? ((t.protein_g || 0) / t.goal_protein_g) * 100
-                            : null,
-                    );
-                    var fiberGoal = data.goals && data.goals.fiber_g;
-                    html += tile(
-                        "Fiber today",
-                        fmt(t.fiber_g),
-                        "g",
-                        fiberGoal ? "of " + fmt(fiberGoal) + " g" : null,
-                        fiberGoal ? ((t.fiber_g || 0) / fiberGoal) * 100 : null,
-                    );
-
-                    if (t.burn_kcal) {
-                        html += tile(
-                            "Est. burn today",
-                            fmt(t.burn_kcal),
-                            "kcal",
-                            t.balance_g != null
-                                ? fmtSigned(t.balance_g) + " g so far (est.)"
-                                : "Nothing eaten logged yet",
-                            null,
-                        );
-                    }
-
-                    if (rows.length > 1) {
-                        var logged = rows.filter(function (r) {
-                            return r.mealCount > 0;
+                /* ---------- range control (Trends + Meals) ---------- */
+                function renderRangeHeads() {
+                    const label = data
+                        ? esc(shortDay(data.startDate)) +
+                          " – " +
+                          esc(shortDay(data.endDate)) +
+                          "<small>" +
+                          esc(
+                              RANGES.filter((r) => r[0] === range)[0][1] +
+                                  " · " +
+                                  data.timezone,
+                          ) +
+                          "</small>"
+                        : "&nbsp;<small>&nbsp;</small>";
+                    // Keep keyboard focus on a segment across the rebuild.
+                    const fe = document.activeElement;
+                    const focusDays =
+                        fe && fe.closest && fe.closest(".seg") ? range : null;
+                    document
+                        .querySelectorAll("[data-range-head]")
+                        .forEach(function (h) {
+                            h.innerHTML =
+                                '<p class="range-label">' +
+                                label +
+                                '</p><div class="seg" role="group" aria-label="Date range"' +
+                                (loading ? ' aria-disabled="true"' : "") +
+                                ">" +
+                                RANGES.map(function (r) {
+                                    const on = r[0] === range;
+                                    return (
+                                        '<button type="button" data-days="' +
+                                        r[0] +
+                                        '" aria-pressed="' +
+                                        on +
+                                        '">' +
+                                        r[1] +
+                                        (on && loading
+                                            ? '<span class="spin" aria-hidden="true"></span>'
+                                            : "") +
+                                        "</button>"
+                                    );
+                                }).join("") +
+                                "</div>";
                         });
-                        var avg = logged.length
-                            ? logged.reduce(function (a, r) {
-                                  return a + r.calories;
-                              }, 0) / logged.length
-                            : 0;
-                        html += tile(
-                            "Daily average",
-                            fmt(avg),
-                            "kcal",
-                            logged.length +
-                                " of " +
-                                rows.length +
-                                " days logged",
-                            null,
+                    if (focusDays != null) {
+                        const b = document.querySelector(
+                            "#panel-" +
+                                active +
+                                ' .seg button[data-days="' +
+                                focusDays +
+                                '"]',
                         );
+                        if (b) b.focus();
                     }
-
-                    $("tiles").innerHTML = html;
                 }
+                document.addEventListener("click", function (ev) {
+                    const b =
+                        ev.target.closest && ev.target.closest(".seg button");
+                    if (!b || loading) return;
+                    const n = +b.dataset.days;
+                    if (n === range) return;
+                    range = n;
+                    store(RANGE_KEY, String(n));
+                    refresh();
+                });
 
-                function renderTable(meals) {
-                    var tb = document.querySelector("#meals-table tbody");
-                    tb.textContent = "";
-                    $("meals-empty").hidden = meals.length > 0;
-                    document.querySelector("#meals-table").hidden =
-                        meals.length === 0;
-                    meals.forEach(function (m) {
-                        var tr = document.createElement("tr");
-                        tr.innerHTML =
-                            "<td>" +
-                            esc(
-                                new Date(m.logged_at).toLocaleDateString(
-                                    undefined,
-                                    { month: "short", day: "numeric" },
-                                ),
-                            ) +
-                            "</td><td>" +
-                            esc(m.meal_type || "-") +
-                            '</td><td class="desc">' +
-                            esc(m.description) +
-                            '</td><td class="num">' +
-                            fmt(m.calories) +
-                            '</td><td class="num">' +
-                            fmt(m.protein_g) +
-                            '</td><td class="num">' +
-                            fmt(m.carbs_g) +
-                            '</td><td class="num">' +
-                            fmt(m.fat_g) +
-                            '</td><td class="num">' +
-                            fmt(m.fiber_g) +
-                            "</td>";
-                        tb.appendChild(tr);
+                /* ---------- painting ---------- */
+                function markDirty() {
+                    TABS.forEach(function (t) {
+                        contentDirty[t] = true;
+                        chartsDirty[t] = true;
                     });
                 }
-
-                function render() {
-                    var rows = data.daily;
-                    var today = rows[rows.length - 1];
-
-                    $("range-label").textContent =
-                        (data.days === 1
-                            ? "Today, " + longDay(data.endDate)
-                            : longDay(data.startDate) +
-                              " to " +
-                              longDay(data.endDate)) +
-                        " · " +
-                        data.timezone;
-                    $("cal-note").textContent = rows.some(function (r) {
-                        return r.goal_calories;
-                    })
-                        ? "Each day's goal is your " +
-                          fmt(data.goals.calories) +
-                          " kcal baseline plus that day's active calories from your watch; bars above it are red."
-                        : "No calorie goal set.";
-
-                    renderTiles(today, rows);
-                    caloriesChart(rows);
-                    balanceChart(rows);
-                    macroChart(rows);
-                    renderWeightStats(data.weightStats, data.weightUnit);
-                    weightChart(data);
-                    fillBodyForm(data.body);
-                    renderTable(data.meals);
+                const RENDER = {};
+                const CHARTS = {};
+                const SKELETON = {
+                    today: '<div class="skel"><div class="sk" style="height:220px"></div><div class="sk" style="height:160px"></div><div class="sk" style="height:140px"></div></div>',
+                    trends: '<div class="skel"><div class="stats four"><div class="sk" style="height:104px"></div><div class="sk" style="height:104px"></div><div class="sk" style="height:104px"></div><div class="sk" style="height:104px"></div></div><div class="sk" style="height:300px"></div><div class="sk" style="height:200px"></div></div>',
+                    body: '<div class="skel"><div class="sk" style="height:150px"></div><div class="sk" style="height:220px"></div><div class="sk" style="height:300px"></div></div>',
+                    meals: '<div class="skel"><div class="sk" style="height:120px"></div><div class="sk" style="height:120px"></div><div class="sk" style="height:120px"></div></div>',
+                };
+                function paint() {
+                    const t = active;
+                    const panel = $("panel-" + t);
+                    panel.classList.toggle("refreshing", loading && !!data);
+                    if (!data) {
+                        const b = $(t + "-body");
+                        if (!b.querySelector(".skel") && !loadError)
+                            b.innerHTML = SKELETON[t];
+                        if (loadError) b.innerHTML = "";
+                        return;
+                    }
+                    if (contentDirty[t]) {
+                        RENDER[t]();
+                        contentDirty[t] = false;
+                        chartsDirty[t] = true;
+                    }
+                    if (chartsDirty[t] && CHARTS[t]) {
+                        CHARTS[t]();
+                        chartsDirty[t] = false;
+                    }
                 }
+                let lastW = 0;
+                let rafId = 0;
+                new ResizeObserver(function (entries) {
+                    const w = Math.round(entries[0].contentRect.width);
+                    if (w === lastW) return;
+                    lastW = w;
+                    cancelAnimationFrame(rafId);
+                    rafId = requestAnimationFrame(function () {
+                        TABS.forEach(function (t) {
+                            chartsDirty[t] = true;
+                        });
+                        clearInspect();
+                        if (data) paint();
+                    });
+                }).observe($("main"));
+
+                /* ---------- error banner ---------- */
+                function renderBanners() {
+                    document
+                        .querySelectorAll(".banner-slot")
+                        .forEach(function (s) {
+                            s.innerHTML = loadError
+                                ? '<div class="banner" role="alert"><p>Could not load data. Is the server running?</p><button type="button" class="btn" data-retry>Retry</button><button type="button" class="icon-btn" data-dismiss aria-label="Dismiss"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>'
+                                : "";
+                        });
+                }
+                document.addEventListener("click", function (ev) {
+                    if (ev.target.closest("[data-retry]")) refresh();
+                    else if (ev.target.closest("[data-dismiss]")) {
+                        ev.target.closest(".banner").remove();
+                    }
+                });
+
+                /* ================= TODAY ================= */
+                RENDER.today = function () {
+                    $("today-body").innerHTML = '<div class="card">Today</div>';
+                };
+
+                /* ================= TRENDS ================= */
+                RENDER.trends = function () {
+                    $("trends-body").innerHTML =
+                        '<div class="card">Trends</div>';
+                };
+
+                /* ================= BODY ================= */
+                RENDER.body = function () {
+                    $("body-body").innerHTML = '<div class="card">Body</div>';
+                };
+
+                /* ================= MEALS ================= */
+                RENDER.meals = function () {
+                    $("meals-body").innerHTML = '<div class="card">Meals</div>';
+                };
 
                 /* ---------- data ---------- */
+                function renderHeader() {
+                    const sub = $("sub");
+                    sub.classList.toggle("is-error", loadError && !data);
+                    if (loadError && !data)
+                        sub.textContent =
+                            "Could not load data. Is the server running?";
+                    else if (data)
+                        sub.textContent =
+                            longDay(data.endDate) + " · " + data.timezone;
+                    else sub.textContent = "Loading…";
+                }
                 function fetchData() {
-                    return fetch("/api/dashboard/data?days=" + days, {
+                    return fetch("/api/dashboard/data?days=" + range, {
                         headers: { Authorization: "Bearer " + token },
                     }).then(function (r) {
                         if (r.status === 401) {
@@ -2118,50 +2181,74 @@
                         return r.json();
                     });
                 }
-
+                let seq = 0;
                 function refresh() {
+                    const mine = ++seq;
+                    loading = true;
+                    loadError = false;
+                    renderBanners();
+                    renderRangeHeads();
+                    renderHeader();
+                    paint();
                     return fetchData()
                         .then(function (d) {
+                            if (mine !== seq || !token) return;
                             data = d;
-                            render();
+                            loading = false;
+                            onData();
                         })
                         .catch(function (e) {
+                            if (mine !== seq) return;
+                            loading = false;
                             if (e && e.message === "unauthorized") return;
-                            $("range-label").textContent =
-                                "Could not load data. Is the server running?";
+                            loadError = true;
+                            renderBanners();
+                            renderRangeHeads();
+                            renderHeader();
+                            paint();
                         });
                 }
+                function onData() {
+                    markDirty();
+                    renderBanners();
+                    renderRangeHeads();
+                    renderHeader();
+                    if (typeof fillBodyForm === "function") fillBodyForm();
+                    paint();
+                }
 
+                /* ---------- session ---------- */
+                function showApp() {
+                    $("login").hidden = true;
+                    $("app").hidden = false;
+                }
                 function signOut() {
                     token = null;
+                    data = null;
+                    loading = false;
+                    loadError = false;
+                    seq++;
                     store(KEY, null);
+                    clearInspect();
+                    TABS.forEach(function (t) {
+                        $(t + "-body").innerHTML = "";
+                    });
                     $("app").hidden = true;
                     $("login").hidden = false;
+                    $("email").focus();
                 }
                 $("signout").addEventListener("click", signOut);
 
-                Array.prototype.forEach.call(
-                    document.querySelectorAll(".seg button"),
-                    function (b) {
-                        b.addEventListener("click", function () {
-                            days = +b.dataset.days;
-                            Array.prototype.forEach.call(
-                                document.querySelectorAll(".seg button"),
-                                function (o) {
-                                    o.setAttribute(
-                                        "aria-pressed",
-                                        o === b ? "true" : "false",
-                                    );
-                                },
-                            );
-                            refresh();
-                        });
-                    },
-                );
-
                 $("login-form").addEventListener("submit", function (ev) {
                     ev.preventDefault();
-                    $("login-err").textContent = "";
+                    const err = $("login-err");
+                    const btn = $("login-btn");
+                    err.textContent = "";
+                    if (!$("email").value.trim() || !$("password").value) {
+                        err.textContent = "Email or password is incorrect.";
+                        return;
+                    }
+                    btn.disabled = true;
                     fetch("/api/dashboard/login", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -2171,13 +2258,23 @@
                         }),
                     })
                         .then(function (r) {
-                            return r.json().then(function (b) {
-                                return { ok: r.ok, status: r.status, body: b };
-                            });
+                            return r
+                                .json()
+                                .catch(function () {
+                                    return {};
+                                })
+                                .then(function (b) {
+                                    return {
+                                        ok: r.ok,
+                                        status: r.status,
+                                        body: b,
+                                    };
+                                });
                         })
                         .then(function (res) {
-                            if (!res.ok) {
-                                $("login-err").textContent =
+                            btn.disabled = false;
+                            if (!res.ok || !res.body.access_token) {
+                                err.textContent =
                                     res.status === 429
                                         ? "Too many attempts. Wait a minute and try again."
                                         : "Email or password is incorrect.";
@@ -2186,21 +2283,26 @@
                             token = res.body.access_token;
                             store(KEY, token);
                             $("password").value = "";
-                            $("login").hidden = true;
-                            $("app").hidden = false;
+                            showApp();
+                            selectTab("today", { fromHash: true });
+                            $("tab-today").focus();
                             refresh();
                         })
                         .catch(function () {
-                            $("login-err").textContent =
-                                "Could not reach the server.";
+                            btn.disabled = false;
+                            err.textContent = "Could not reach the server.";
                         });
                 });
 
                 /* ---------- boot ---------- */
+                const savedRange = +load(RANGE_KEY);
+                if (RANGES.some((r) => r[0] === savedRange)) range = savedRange;
+                const startTab = location.hash.slice(1);
+                active = TABS.indexOf(startTab) >= 0 ? startTab : "today";
+                selectTab(active, { fromHash: true });
                 token = load(KEY);
                 if (token) {
-                    $("login").hidden = true;
-                    $("app").hidden = false;
+                    showApp();
                     refresh();
                 }
             })();
