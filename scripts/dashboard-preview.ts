@@ -160,6 +160,8 @@ const server = Bun.serve({
             if (state.fail === 401)
                 return json({ error: "invalid_token" }, 401);
             if (state.fail === 500) return json({ error: "server_error" }, 500);
+            // Visible dashboard ranges are 7 / 30 / 365; leave this endpoint
+            // permissive for fixture and API tests.
             const n = Number.parseInt(url.searchParams.get("days") ?? "", 10);
             const days = Number.isFinite(n)
                 ? Math.min(365, Math.max(1, n))

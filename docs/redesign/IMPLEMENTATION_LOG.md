@@ -119,6 +119,27 @@ Stage 2 of the redesign, built on branch `worktree-dashboard-daily-goal` against
 
 ## Verification
 
+## Feedback round 2 (§0c, 2026-11-10)
+
+- Trends and Meals now offer 7 days, 30 days and 1 year. The page migrates a
+  saved 90-day selection to 30 days. Grouped ranges use the server's weekly and
+  monthly buckets, show averages per logged day, mark the current partial
+  bucket, and report logged-day coverage in tooltips. Summary tiles and
+  Estimate vs reality still use the complete daily range.
+- Calories notes and tooltips explain that Goal is the planned target and
+  estimated burn is break-even, with the burn-minus-goal planned deficit.
+  Balance tooltips and labels include kcal beside grams. Today's fixed 7-day
+  card adds net kcal and average kcal per complete logged day.
+- The meal editor includes Treat; its label is generated as "Treat".
+- Updated the E2E range walk and added an assertion for the Treat option.
+- `bun test` (950 passed), `bun run typecheck`, and `bun run format:check`
+  pass. Browser preview and screenshot refresh were attempted, but this
+  environment could not access the existing preview listener on port 8791 or
+  bind a second preview listener; screenshots therefore still need a browser
+  run in an environment where the local preview server is reachable.
+
+## Verification
+
 - `bun test`: 928 pass, 0 fail (34 files). `bun run typecheck`: clean.
   `bun run format:check`: clean.
 - `scripts/dashboard-e2e.ts`: **147 checks, all passed** in the final run. The

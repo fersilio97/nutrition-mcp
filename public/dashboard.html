@@ -2278,10 +2278,11 @@
                 const THEME_KEY = "nutrition-dash-theme";
                 const RANGE_KEY = "nutrition-dash-range";
                 const TABS = ["today", "trends", "body", "meals"];
+                // 7 days → daily bars, 30 → weekly, a year → monthly (the
+                // server's groupDays). 90 was dropped (§0c).
                 const RANGES = [
                     [7, "7 days"],
                     [30, "30 days"],
-                    [90, "90 days"],
                     [365, "1 year"],
                 ];
 
@@ -3041,22 +3042,32 @@
                 const anyLogged = (rows) => rows.some((r) => r.mealCount > 0);
                 const hasBurn = () => data.daily.some((r) => r.burn_kcal);
                 // Whether the Calories chart draws the active kcal as its own
-                // segment. Past 90 days a bar is ~1px at phone width and the
-                // segments become noise, so only the total is marked there.
-                const SPLIT_BURN_MAX_DAYS = 90;
+                // segment. With weekly/monthly bars there are at most 12 per
+                // chart, so the split always has room.
                 const splitBurn = (rows) =>
-                    rows.length <= SPLIT_BURN_MAX_DAYS &&
                     rows.some((r) => r.bmr_kcal != null && r.active_kcal);
                 function plural(n, one, many) {
                     return n + " " + (n === 1 ? one : many || one + "s");
                 }
-                // Every field of the old calories tooltip, plus "Over by".
+                // The calories tooltip, for a day or a weekly/monthly bar (the
+                // normalized rows of dayRow / bucketRow). Every field of the
+                // old tooltip, plus Over by, the planned deficit and the kcal
+                // balance; a bar says it is a per-logged-day average and how
+                // many days it covers.
                 function calTip(r) {
+                    const per = r.avg ? " (avg/day)" : "";
                     const rows = [
-                        ["s-kcal", "Eaten", fmt(r.calories) + " kcal", 1],
+                        r.calories == null
+                            ? ["s-kcal", "Eaten", "nothing logged", 1]
+                            : [
+                                  "s-kcal",
+                                  "Eaten" + per,
+                                  fmt(r.calories) + " kcal",
+                                  1,
+                              ],
                     ];
                     if (r.goal_calories)
-                        rows.push([null, "Goal", fmt(r.goal_calories)]);
+                        rows.push([null, "Goal" + per, fmt(r.goal_calories)]);
                     if (r.active_kcal)
                         rows.push([
                             null,
@@ -3084,18 +3095,41 @@
                             "Est. burn total",
                             fmt(r.burn_kcal),
                         ]);
+                        // Burn = break-even, goal = target: the difference
+                        // is the deficit the goal plans for.
+                        if (r.goal_calories) {
+                            const gap = r.burn_kcal - r.goal_calories;
+                            rows.push([
+                                null,
+                                "Planned deficit: burn − goal",
+                                fmtSigned(gap) + " kcal",
+                            ]);
+                        }
                     }
+                    if (r.balance_kcal != null)
+                        rows.push([
+                            r.balance_kcal >= 0 ? "s-gain" : "s-loss",
+                            "Balance" + per,
+                            fmtSigned(r.balance_kcal) + " kcal",
+                        ]);
                     if (r.balance_g != null)
                         rows.push([
                             null,
-                            "Est. change",
+                            "Est. change" + per,
                             fmtSigned(r.balance_g) + " g",
                         ]);
-                    rows.push([null, "Meals", String(r.mealCount)]);
-                    return tipContent(
-                        longDay(r.date) + (r.in_progress ? " · so far" : ""),
-                        rows,
+                    rows.push(
+                        r.avg
+                            ? [null, "Logged", loggedText(r)]
+                            : [null, "Meals", String(r.mealCount)],
                     );
+                    if (r.burn_kcal && r.goal_calories)
+                        rows.push([
+                            null,
+                            "Goal = your target; Est. burn = break-even (0 change). The gap is your planned deficit.",
+                            "",
+                        ]);
+                    return tipContent(r.title, rows);
                 }
                 function mealTypeLabel(t) {
                     if (!t) return "Meal";
@@ -3388,8 +3422,7 @@
                         "</li>"
                     );
                 }
-                // The two fixed 7-day figures (server-side `last7`), never
-                // the Trends range: grams, signed, amber up / blue down.
+                // Fixed 7-day figures (server-side `last7`), never the Trends range.
                 function weekPairHtml() {
                     const w = data.last7;
                     if (!w) return "";
@@ -3435,7 +3468,36 @@
                                       : ADD_BODY,
                                   { missing: true },
                               );
-                    return '<div class="trio two">' + scale + est + "</div>";
+                    const balance =
+                        w.est_net_kcal != null
+                            ? trioCell(
+                                  "Net kcal balance",
+                                  fmtSigned(w.est_net_kcal),
+                                  "kcal",
+                                  fmtSigned(w.est_avg_kcal) +
+                                      " kcal/day avg · " +
+                                      plural(w.est_days, "complete day"),
+                                  {
+                                      sw:
+                                          w.est_net_kcal > 0
+                                              ? "s-gain"
+                                              : w.est_net_kcal < 0
+                                                ? "s-loss"
+                                                : null,
+                                  },
+                              )
+                            : trioCell(
+                                  "Net kcal balance",
+                                  "—",
+                                  "",
+                                  w.has_burn
+                                      ? "No complete logged days"
+                                      : ADD_BODY,
+                                  { missing: true },
+                              );
+                    return (
+                        '<div class="trio">' + scale + est + balance + "</div>"
+                    );
                 }
                 function todayMeals() {
                     return data.meals
@@ -3497,7 +3559,7 @@
                         ) +
                         "</ul></section></div>" +
                         '<div class="col">' +
-                        '<section class="card" aria-labelledby="h-strip"><div class="card-head"><div><h3 id="h-strip">Last 7 days</h3><p class="note">What the scale did next to the estimate, then calories per day with each day’s goal as a tick.</p></div><button type="button" class="link-btn" data-go="trends">See trends ›</button></div>' +
+                        '<section class="card" aria-labelledby="h-strip"><div class="card-head"><div><h3 id="h-strip">Last 7 days</h3><p class="note">Scale change, estimated change and kcal balance over complete logged days; then calories per day with each day’s goal as a tick.</p></div><button type="button" class="link-btn" data-go="trends">See trends ›</button></div>' +
                         weekPairHtml() +
                         (anyLogged(data.daily.slice(-7)) ||
                         data.daily.slice(-7).some((r) => r.goal_calories)
@@ -3542,7 +3604,7 @@
                 CHARTS.today = function () {
                     const host = $("strip-plot");
                     if (!host || !host.clientWidth) return;
-                    const rows = data.daily.slice(-7);
+                    const rows = data.daily.slice(-7).map(dayRow);
                     const logged = rows.filter((r) => r.mealCount > 0).length;
                     const c = chartSvg(
                         host,
@@ -3870,25 +3932,144 @@
                     );
                 }
 
+                /* ---------- chart rows: days, or weekly / monthly bars ---------- */
+                // The Trends charts plot `trendBuckets` (server-side, averages
+                // per logged day) when the range is grouped, and the daily rows
+                // for 7 days — one shape for both, so every chart and tooltip
+                // reads the same fields.
+                const gran = () => data.granularity || "day";
+                function monthName(iso, long) {
+                    const d = parseDay(iso);
+                    return d.toLocaleDateString(
+                        undefined,
+                        long
+                            ? { month: "long", year: "numeric" }
+                            : d.getMonth() === 0
+                              ? { month: "short", year: "2-digit" }
+                              : { month: "short" },
+                    );
+                }
+                // "Oct 14–20", or "Oct 28–Nov 3" across a month boundary.
+                function spanLabel(start, end) {
+                    const s = parseDay(start);
+                    const e = parseDay(end);
+                    if (s.getMonth() === e.getMonth())
+                        return (
+                            s.toLocaleDateString(undefined, {
+                                month: "short",
+                            }) +
+                            " " +
+                            s.getDate() +
+                            "–" +
+                            e.getDate()
+                        );
+                    return shortDay(start) + "–" + shortDay(end);
+                }
+                function dayRow(r) {
+                    return {
+                        date: r.date,
+                        title:
+                            longDay(r.date) +
+                            (r.in_progress ? " · so far" : ""),
+                        label: shortDay(r.date),
+                        calories: r.calories,
+                        protein_g: r.protein_g,
+                        carbs_g: r.carbs_g,
+                        fat_g: r.fat_g,
+                        goal_calories: r.goal_calories,
+                        goal_protein_g: r.goal_protein_g,
+                        bmr_kcal: r.bmr_kcal,
+                        active_kcal: r.active_kcal,
+                        burn_kcal: r.burn_kcal,
+                        balance_g: r.balance_g,
+                        balance_kcal: r.balance_kcal,
+                        in_progress: r.in_progress,
+                        dim: r.in_progress,
+                        avg: false,
+                        mealCount: r.mealCount,
+                        // The body-change band: today is never counted
+                        // while it runs.
+                        band_g: r.in_progress ? null : r.balance_g,
+                        band_kcal: r.in_progress ? null : r.balance_kcal,
+                        band_days: r.in_progress || r.balance_g == null ? 0 : 1,
+                    };
+                }
+                function bucketRow(b) {
+                    const week = gran() === "week";
+                    return {
+                        date: b.start,
+                        title:
+                            (week
+                                ? shortDay(b.start) + " – " + shortDay(b.end)
+                                : monthName(b.start, true)) +
+                            (b.partial ? " · so far" : ""),
+                        label: week
+                            ? spanLabel(b.start, b.end)
+                            : monthName(b.start, false),
+                        calories: b.calories,
+                        protein_g: b.protein_g,
+                        carbs_g: b.carbs_g,
+                        fat_g: b.fat_g,
+                        goal_calories: b.goal_calories,
+                        goal_protein_g: null,
+                        bmr_kcal: b.bmr_kcal,
+                        active_kcal: b.active_kcal,
+                        burn_kcal: b.burn_kcal,
+                        balance_g: b.balance_g,
+                        balance_kcal: b.balance_kcal,
+                        in_progress: b.partial,
+                        dim: b.partial,
+                        avg: true,
+                        logged: b.logged_days,
+                        days: b.days,
+                        band_g: b.balance_g_sum,
+                        band_kcal: b.balance_kcal_sum,
+                        band_days: b.balance_days,
+                    };
+                }
+                function chartRows() {
+                    return gran() === "day"
+                        ? data.daily.map(dayRow)
+                        : (data.trendBuckets || []).map(bucketRow);
+                }
+                const loggedText = (r) =>
+                    r.avg
+                        ? r.logged + " of " + plural(r.days, "day") + " logged"
+                        : String(r.mealCount);
+                const perWord = () =>
+                    gran() === "week"
+                        ? "week"
+                        : gran() === "month"
+                          ? "month"
+                          : "day";
+                // "−420 kcal · −55 g"
+                const kcalG = (kcal, g) =>
+                    fmtSigned(kcal) + " kcal · " + fmtSigned(g) + " g";
+
                 RENDER.trends = function () {
                     const rows = data.daily;
                     const s = trendsStats(rows);
                     const any = anyLogged(rows);
                     const hasGoal = rows.some((r) => r.goal_calories);
+                    const g = gran();
                     const emptyMsg =
                         '<p class="empty">Nothing logged in these ' +
                         rows.length +
                         " days.</p>";
                     const calLegend = legend(
-                        [[LG.bar("m-kcal"), "Eaten"]]
+                        [
+                            [
+                                LG.bar("m-kcal"),
+                                g === "day"
+                                    ? "Eaten"
+                                    : "Eaten (avg per logged day)",
+                            ],
+                        ]
                             .concat(
                                 hasGoal
                                     ? [
                                           [LG.hatch(), "Over goal"],
-                                          [
-                                              LG.line(),
-                                              "Goal (incl. active kcal)",
-                                          ],
+                                          [LG.line(), "Goal = your target"],
                                       ]
                                     : [],
                             )
@@ -3901,7 +4082,7 @@
                                           ],
                                       ]
                                           .concat(
-                                              splitBurn(rows)
+                                              splitBurn(chartRows())
                                                   ? [
                                                         [
                                                             LG.active(),
@@ -3911,39 +4092,69 @@
                                                   : [],
                                           )
                                           .concat([
-                                              [LG.ring(), "Est. burn (total)"],
+                                              [
+                                                  LG.ring(),
+                                                  "Est. burn = break-even",
+                                              ],
                                           ])
                                     : [],
                             ),
                     );
                     const done = s.done;
+                    const grouped =
+                        g === "day"
+                            ? ""
+                            : " Each bar is one " +
+                              perWord() +
+                              ": the average per logged day, so unlogged days don’t pull it toward zero; the current " +
+                              perWord() +
+                              " is dimmed and counts today once it ends.";
                     const balNote = !hasBurn()
                         ? ""
-                        : "(eaten − estimated burn) ÷ 7.7 kcal per gram. An estimate for spotting the trend — daily scale weight swings far more with water and salt. Today is left out until it ends." +
+                        : "Eaten − estimated burn, in kcal and in grams (÷ 7.7 kcal per gram). An estimate for spotting the trend — daily scale weight swings far more with water and salt. Today is left out until it ends." +
+                          (g === "day"
+                              ? ""
+                              : " Each bar is the " +
+                                perWord() +
+                                "’s total over its complete logged days.") +
                           (done.length > 1
                               ? " Net over " +
                                 done.length +
                                 " complete logged days: " +
+                                fmtSigned(
+                                    done.reduce(
+                                        (a, r) => a + (r.balance_kcal || 0),
+                                        0,
+                                    ),
+                                ) +
+                                " kcal · " +
                                 fmtSigned(s.net) +
                                 " g."
                               : "");
+                    const calTitle =
+                        g === "day"
+                            ? "Calories per day"
+                            : "Calories · " +
+                              (g === "week" ? "weekly" : "monthly") +
+                              " average per logged day";
                     $("trends-body").innerHTML =
                         '<div class="stack">' +
                         tilesHtml(rows, s) +
-                        '<section class="card" aria-labelledby="h-cal"><div class="card-head"><div><h3 id="h-cal">Calories per day</h3><p class="note">' +
+                        '<section class="card" aria-labelledby="h-cal"><div class="card-head"><div><h3 id="h-cal">' +
+                        calTitle +
+                        '</h3><p class="note">' +
+                        (hasGoal && hasBurn()
+                            ? "<b>Goal = your target; Est. burn = break-even (0 change). The gap is your planned deficit.</b> "
+                            : "") +
                         (hasGoal
-                            ? "Each day’s goal is your " +
+                            ? "The goal is your " +
                               fmt(data.goals.calories) +
                               " kcal baseline plus that day’s active calories from your watch; the part of a bar above it is hatched."
                             : "No calorie goal set.") +
                         (hasBurn()
-                            ? " Est. burn is your resting burn (dashed) plus the day’s workout / active kcal" +
-                              (splitBurn(rows)
-                                  ? " (the blue segment up to the ring)."
-                                  : rows.length > SPLIT_BURN_MAX_DAYS
-                                    ? "; over this long a range only the total ring is marked — the tooltip has the split."
-                                    : ".")
+                            ? " Est. burn is your resting burn (dashed) plus workout / active kcal (the blue segment up to the ring)."
                             : "") +
+                        grouped +
                         "</p></div></div>" +
                         (any
                             ? calLegend +
@@ -3967,7 +4178,13 @@
                         '<section class="card" aria-labelledby="h-evs">' +
                         evsHtml() +
                         "</section>" +
-                        '<section class="card" aria-labelledby="h-mac"><div class="card-head"><div><h3 id="h-mac">Macros per day</h3><p class="note">Stacked grams of protein, carbs and fat.</p></div></div>' +
+                        '<section class="card" aria-labelledby="h-mac"><div class="card-head"><div><h3 id="h-mac">' +
+                        (g === "day"
+                            ? "Macros per day"
+                            : "Macros · " +
+                              (g === "week" ? "weekly" : "monthly") +
+                              " average per logged day") +
+                        '</h3><p class="note">Stacked grams of protein, carbs and fat.</p></div></div>' +
                         (any
                             ? legend([
                                   [LG.bar("m-protein"), "Protein"],
@@ -4008,7 +4225,7 @@
                                 svg,
                                 x0 + lay.bw * (i + 0.5),
                                 y,
-                                shortDay(rows[i].date),
+                                rows[i].label,
                                 "ax",
                                 "middle",
                             );
@@ -4022,24 +4239,28 @@
                         shortDay(data.endDate)
                     );
                 }
+                const stepWord = () => (gran() === "day" ? "day" : perWord());
 
                 function caloriesChart() {
                     const host = $("cal-plot");
                     if (!host || !host.clientWidth) return;
-                    const rows = data.daily;
-                    const s = trendsStats(rows);
+                    const rows = chartRows();
+                    const s = trendsStats(data.daily);
                     const c = chartSvg(
                         host,
                         isDesktop() ? 280 : 220,
-                        "Calories per day, " +
+                        "Calories, " +
                             rangeText() +
+                            (gran() === "day"
+                                ? ", per day"
+                                : ", average per logged day by " + perWord()) +
                             ": average " +
                             fmt(s.avgKcal) +
                             " kcal over " +
                             plural(s.logged.length, "logged day") +
-                            ", " +
-                            s.overDays +
-                            " over goal. Use the arrow keys to read each day.",
+                            ". Use the arrow keys to read each " +
+                            stepWord() +
+                            ".",
                     );
                     const svg = c.svg;
                     const plotW = c.w - PAD.l - PAD.r;
@@ -4049,7 +4270,7 @@
                         null,
                         rows.map((r) =>
                             Math.max(
-                                r.calories,
+                                r.calories || 0,
                                 r.goal_calories || 0,
                                 r.burn_kcal || 0,
                             ),
@@ -4060,7 +4281,7 @@
                     yAxis(svg, maxY, PAD.l, PAD.l + plotW, yAt, 4);
                     const lay = bandLayout(rows.length, plotW);
                     calBars(svg, rows, PAD.l, plotW, yAt, base, lay);
-                    // Goal as a step line: each day's own target across its
+                    // Goal as a step line: each bar's own target across its
                     // column, joined vertically where it changes.
                     let d = "";
                     rows.forEach(function (r, i) {
@@ -4117,7 +4338,7 @@
                             const a = svgEl("line", seg);
                             a.setAttribute(
                                 "class",
-                                "m-active" + (r.in_progress ? " dim" : ""),
+                                "m-active" + (r.dim ? " dim" : ""),
                             );
                             a.style.strokeWidth = w + "px";
                             svg.appendChild(a);
@@ -4139,7 +4360,7 @@
                             cx: PAD.l + lay.bw * (i + 0.5),
                             cy: yAt(r.burn_kcal),
                             r: rr,
-                            class: "m-burn" + (r.in_progress ? " dim" : ""),
+                            class: "m-burn" + (r.dim ? " dim" : ""),
                         });
                         if (rr < 3) ci.style.strokeWidth = "1.5";
                         svg.appendChild(ci);
@@ -4171,36 +4392,42 @@
                     );
                 }
 
-                // Estimated grams gained (up, --gain) or lost (down, --loss)
-                // per complete day. Today is excluded: a day still running
-                // reads as a huge deficit and would set the scale.
+                // Estimated change per bar, up in --gain or down in --loss,
+                // in grams with the kcal beside it. Bars are per-period sums
+                // over complete logged days; today is never counted while it
+                // runs (a half-eaten day reads as a huge deficit).
                 function balanceChart() {
                     const host = $("bal-plot");
                     if (!host || !host.clientWidth) return;
-                    const rows = data.daily;
-                    const plotted = (r) =>
-                        r.balance_g != null && !r.in_progress;
+                    const rows = chartRows();
+                    const plotted = (r) => r.band_g != null;
                     const known = rows.filter(plotted);
-                    const net = known.reduce((a, r) => a + r.balance_g, 0);
+                    const netG = known.reduce((a, r) => a + r.band_g, 0);
+                    const netK = known.reduce(
+                        (a, r) => a + (r.band_kcal || 0),
+                        0,
+                    );
                     const c = chartSvg(
                         host,
-                        isDesktop() ? 160 : 140,
-                        "Estimated grams gained or lost per day, " +
+                        isDesktop() ? 180 : 160,
+                        "Estimated change per " +
+                            stepWord() +
+                            ", " +
                             rangeText() +
                             ": net " +
-                            fmtSigned(net) +
-                            " g over " +
-                            plural(known.length, "complete logged day") +
-                            ". Use the arrow keys to read each day.",
+                            kcalG(netK, netG) +
+                            ". Use the arrow keys to read each " +
+                            stepWord() +
+                            ".",
                     );
                     const svg = c.svg;
                     const plotW = c.w - PAD.l - PAD.r;
-                    const top = PAD.t;
-                    const bottom = c.h - PAD.b;
+                    const top = PAD.t + 6;
+                    const bottom = c.h - PAD.b - 6;
                     const zeroY = (top + bottom) / 2;
                     const peak = Math.max.apply(
                         null,
-                        known.map((r) => Math.abs(r.balance_g)),
+                        known.map((r) => Math.abs(r.band_g)),
                     );
                     const maxAbs = niceMax(Math.max(peak, 20) * 1.15);
                     const yAt = (v) =>
@@ -4225,10 +4452,19 @@
                         );
                     });
                     const lay = bandLayout(rows.length, plotW);
-                    const labels = rows.length <= 14;
+                    // Direct labels while they fit: "−420 kcal · −55 g" on
+                    // one line, else kcal over grams, else grams alone.
+                    const mode =
+                        lay.bw >= 132
+                            ? "one"
+                            : lay.bw >= 50
+                              ? "two"
+                              : lay.bw >= 28
+                                ? "g"
+                                : "none";
                     rows.forEach(function (r, i) {
                         if (!plotted(r)) return;
-                        const v = r.balance_g;
+                        const v = r.band_g;
                         const x = PAD.l + lay.bw * i + (lay.bw - lay.barW) / 2;
                         const y = v >= 0 ? yAt(v) : zeroY;
                         const h = Math.max(1, Math.abs(yAt(v) - zeroY));
@@ -4239,14 +4475,46 @@
                                 width: lay.barW,
                                 height: h,
                                 rx: Math.min(3, lay.barW / 2),
-                                class: v >= 0 ? "m-gain" : "m-loss",
+                                class:
+                                    (v >= 0 ? "m-gain" : "m-loss") +
+                                    (r.dim ? " dim" : ""),
                             }),
                         );
-                        if (labels)
+                        const cx = x + lay.barW / 2;
+                        const up = v >= 0;
+                        if (mode === "one")
                             svgText(
                                 svg,
-                                x + lay.barW / 2,
-                                v >= 0 ? y - 4 : y + h + 13,
+                                cx,
+                                up ? y - 5 : y + h + 13,
+                                kcalG(r.band_kcal || 0, v),
+                                "lbl",
+                                "middle",
+                            );
+                        else if (mode === "two") {
+                            const a = fmtSigned(r.band_kcal || 0) + " kcal";
+                            const b = fmtSigned(v) + " g";
+                            svgText(
+                                svg,
+                                cx,
+                                up ? y - 18 : y + h + 13,
+                                up ? a : b,
+                                up ? "ax" : "lbl",
+                                "middle",
+                            );
+                            svgText(
+                                svg,
+                                cx,
+                                up ? y - 5 : y + h + 27,
+                                up ? b : a,
+                                up ? "lbl" : "ax",
+                                "middle",
+                            );
+                        } else if (mode === "g")
+                            svgText(
+                                svg,
+                                cx,
+                                up ? y - 5 : y + h + 13,
                                 fmtSigned(v),
                                 "lbl",
                                 "middle",
@@ -4266,38 +4534,60 @@
                     inspect(
                         svg,
                         rows.map(function (r, i) {
-                            const t = plotted(r)
-                                ? tipContent(longDay(r.date), [
-                                      [
-                                          r.balance_g >= 0
-                                              ? "s-gain"
-                                              : "s-loss",
-                                          "Est. change",
-                                          fmtSigned(r.balance_g) + " g",
-                                          1,
-                                      ],
-                                      [
-                                          null,
-                                          "Eaten − burn",
-                                          fmtSigned(r.calories - r.burn_kcal) +
-                                              " kcal",
-                                      ],
-                                  ])
-                                : tipContent(
-                                      longDay(r.date) +
-                                          (r.in_progress ? " · so far" : ""),
-                                      [
-                                          [
-                                              null,
-                                              r.in_progress
-                                                  ? "In progress"
-                                                  : "Not logged",
-                                              r.in_progress
-                                                  ? "not counted yet"
-                                                  : "no estimate",
-                                          ],
-                                      ],
-                                  );
+                            let t;
+                            if (!plotted(r))
+                                t = tipContent(
+                                    r.title,
+                                    [
+                                        [
+                                            null,
+                                            r.in_progress && !r.avg
+                                                ? "In progress"
+                                                : "No complete logged days",
+                                            r.in_progress && !r.avg
+                                                ? "not counted yet"
+                                                : "no estimate",
+                                        ],
+                                    ].concat(
+                                        r.avg
+                                            ? [[null, "Logged", loggedText(r)]]
+                                            : [],
+                                    ),
+                                );
+                            else if (!r.avg)
+                                t = tipContent(r.title, [
+                                    [
+                                        r.band_g >= 0 ? "s-gain" : "s-loss",
+                                        "Est. change",
+                                        fmtSigned(r.band_g) + " g",
+                                        1,
+                                    ],
+                                    [
+                                        null,
+                                        "Balance (eaten − burn)",
+                                        fmtSigned(r.band_kcal) + " kcal",
+                                    ],
+                                ]);
+                            else
+                                t = tipContent(r.title, [
+                                    [
+                                        r.band_g >= 0 ? "s-gain" : "s-loss",
+                                        "Total est. change",
+                                        kcalG(r.band_kcal, r.band_g),
+                                        1,
+                                    ],
+                                    [
+                                        null,
+                                        "Per logged day",
+                                        kcalG(r.balance_kcal, r.balance_g),
+                                    ],
+                                    [
+                                        null,
+                                        "Covers",
+                                        plural(r.band_days, "complete day"),
+                                    ],
+                                    [null, "Logged", loggedText(r)],
+                                ]);
                             return {
                                 x: PAD.l + lay.bw * (i + 0.5),
                                 html: t.html,
@@ -4327,8 +4617,8 @@
                 function macroChart() {
                     const host = $("macro-plot");
                     if (!host || !host.clientWidth) return;
-                    const rows = data.daily;
-                    const logged = rows.filter((r) => r.mealCount > 0);
+                    const rows = chartRows();
+                    const logged = data.daily.filter((r) => r.mealCount > 0);
                     const avg = (k) =>
                         logged.length
                             ? logged.reduce((a, r) => a + r[k], 0) /
@@ -4337,21 +4627,27 @@
                     const c = chartSvg(
                         host,
                         isDesktop() ? 280 : 220,
-                        "Protein, carbs and fat in grams per day, " +
+                        "Protein, carbs and fat in grams, " +
                             rangeText() +
+                            (gran() === "day"
+                                ? ", per day"
+                                : ", average per logged day by " + perWord()) +
                             ". Averages per logged day: protein " +
                             fmt(avg("protein_g")) +
                             " g, carbs " +
                             fmt(avg("carbs_g")) +
                             " g, fat " +
                             fmt(avg("fat_g")) +
-                            " g. Use the arrow keys to read each day.",
+                            " g. Use the arrow keys to read each " +
+                            stepWord() +
+                            ".",
                     );
                     const svg = c.svg;
                     const plotW = c.w - PAD.l - PAD.r;
                     const base = c.h - PAD.b;
                     const plotH = base - PAD.t;
-                    const total = (r) => r.protein_g + r.carbs_g + r.fat_g;
+                    const total = (r) =>
+                        (r.protein_g || 0) + (r.carbs_g || 0) + (r.fat_g || 0);
                     const maxY = tickMax(
                         Math.max.apply(null, rows.map(total)) * 1.05,
                         4,
@@ -4361,6 +4657,7 @@
                     const lay = bandLayout(rows.length, plotW);
                     const gapPx = lay.barW >= 4 ? 2 : 0;
                     rows.forEach(function (r, i) {
+                        if (r.calories == null) return; // no logged days
                         const x = PAD.l + lay.bw * i + (lay.bw - lay.barW) / 2;
                         const w = lay.barW;
                         let acc = 0;
@@ -4388,8 +4685,7 @@
                                           )
                                         : rectPath(x, yTop, w, segH),
                                     class:
-                                        MACROS[s].cls +
-                                        (r.in_progress ? " dim" : ""),
+                                        MACROS[s].cls + (r.dim ? " dim" : ""),
                                 }),
                             );
                             acc += val;
@@ -4399,25 +4695,23 @@
                     inspect(
                         svg,
                         rows.map(function (r, i) {
-                            const t = tipContent(
-                                longDay(r.date) +
-                                    (r.in_progress ? " · so far" : ""),
-                                MACROS.map((m) => [
-                                    m.sw,
-                                    m.name,
-                                    fmt(r[m.key]) + " g",
-                                ]).concat(
-                                    r.goal_protein_g
-                                        ? [
-                                              [
-                                                  null,
-                                                  "Protein goal",
-                                                  fmt(r.goal_protein_g) + " g",
-                                              ],
-                                          ]
-                                        : [],
-                                ),
-                            );
+                            const lines =
+                                r.calories == null
+                                    ? [[null, "Nothing logged", ""]]
+                                    : MACROS.map((m) => [
+                                          m.sw,
+                                          m.name + (r.avg ? " (avg/day)" : ""),
+                                          fmt(r[m.key]) + " g",
+                                      ]);
+                            if (r.goal_protein_g)
+                                lines.push([
+                                    null,
+                                    "Protein goal",
+                                    fmt(r.goal_protein_g) + " g",
+                                ]);
+                            if (r.avg)
+                                lines.push([null, "Logged", loggedText(r)]);
+                            const t = tipContent(r.title, lines);
                             return {
                                 x: PAD.l + lay.bw * (i + 0.5),
                                 html: t.html,
@@ -5185,7 +5479,13 @@
                 }
                 function mealEditForm(m) {
                     const v = mealDraft || mealValues(m);
-                    const types = ["breakfast", "lunch", "dinner", "snack"];
+                    const types = [
+                        "breakfast",
+                        "lunch",
+                        "dinner",
+                        "snack",
+                        "treat",
+                    ];
                     return (
                         '<form id="me-form" class="me-form" novalidate aria-label="Edit meal">' +
                         '<label class="field me-desc" for="me-description">Description<textarea class="input" id="me-description" rows="2" maxlength="2000">' +
@@ -5644,7 +5944,13 @@
                 });
 
                 /* ---------- boot ---------- */
-                const savedRange = +load(RANGE_KEY);
+                let savedRange = +load(RANGE_KEY);
+                // The 90-day range was dropped: a stored 90 becomes 30, and
+                // the migration is written back so it happens once.
+                if (savedRange === 90) {
+                    savedRange = 30;
+                    store(RANGE_KEY, "30");
+                }
                 if (RANGES.some((r) => r[0] === savedRange)) range = savedRange;
                 const startTab = location.hash.slice(1);
                 active = TABS.indexOf(startTab) >= 0 ? startTab : "today";

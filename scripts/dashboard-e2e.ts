@@ -201,7 +201,7 @@ for (const theme of ["light", "dark"] as const)
         }
         // Range: every segment, then back to 30.
         await page.click("#tab-trends");
-        for (const d of [7, 90, 365, 30]) {
+        for (const d of [7, 365, 30]) {
             await page.click(`#panel-trends .seg button[data-days="${d}"]`);
             await settled(page);
             const days = await page.evaluate(
@@ -517,6 +517,11 @@ for (const width of [390, 1440]) {
     await page.click("#tab-meals");
     await settled(page);
     await page.locator("#meals-body .btn-edit").first().click();
+    check(
+        (await page.locator('#me-type option[value="treat"]').textContent()) ===
+            "Treat",
+        "meal editor offers Treat",
+    );
     await page.fill("#me-calories", "25000");
     await page.click("#me-save");
     await page.waitForFunction(() =>

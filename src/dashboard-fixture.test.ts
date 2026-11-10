@@ -60,6 +60,18 @@ describe("preview fixture windows", () => {
                 HEAVY_MS,
             );
 
+    test("dashboard ranges return their daily, weekly and monthly buckets", () => {
+        for (const [days, granularity, count] of [
+            [7, "day", 7],
+            [30, "week", 4],
+            [365, "month", 12],
+        ] as const) {
+            const d = payloadAt("full", days);
+            expect(d.granularity).toBe(granularity);
+            expect(d.trendBuckets).toHaveLength(count);
+        }
+    });
+
     test(
         "the real-today path the server uses also holds",
         () => {
