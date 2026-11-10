@@ -41,6 +41,7 @@ import { Hono } from "hono";
 import { createActivitySyncRouter } from "./activity-sync.js";
 import { todayInTz } from "./tz.js";
 import { dashboardPayload, saveBodyDetails } from "./dashboard.js";
+import { previewPayload } from "./dashboard-fixture.js";
 import { McpServer, InMemoryTransport } from "@modelcontextprotocol/server";
 import * as actualSupabase from "./supabase.js";
 
@@ -4875,5 +4876,39 @@ describe("dashboard API", () => {
             sex: "male",
         });
         expect((ok.json.body as { height_cm: number }).height_cm).toBe(177.8);
+    });
+
+    // Drift guard for the dev preview (scripts/dashboard-preview.ts): its
+    // fixture payload must have exactly the shape the real one has, or the
+    // page gets reviewed against JSON production never sends.
+    test("the preview fixture's payload has the real payload's deep key set", async () => {
+        stage();
+        // Populate every array so element shapes are compared too.
+        const now = new Date().toISOString();
+        db.meals = [meal({ logged_at: now })];
+        db.weights = [
+            {
+                ...db.weights[0]!,
+                id: "w0",
+                logged_at: new Date(Date.now() - 10 * 864e5).toISOString(),
+            },
+            ...db.weights,
+        ];
+        const real = await dashboardPayload("u1", 30);
+        const preview = previewPayload("full", 30);
+        const keys = (v: unknown, path = ""): string[] => {
+            if (Array.isArray(v))
+                return v.length ? keys(v[0], `${path}[]`) : [`${path}[]`];
+            if (v && typeof v === "object")
+                return Object.entries(v).flatMap(([k, x]) => [
+                    `${path}.${k}`,
+                    ...keys(x, `${path}.${k}`),
+                ]);
+            return [];
+        };
+        const realKeys = [...new Set(keys(real))].sort();
+        expect(realKeys).toContain(".meals[].description");
+        expect(realKeys).toContain(".estimateVsScale.implied_kcal_per_day");
+        expect([...new Set(keys(preview))].sort()).toEqual(realKeys);
     });
 });

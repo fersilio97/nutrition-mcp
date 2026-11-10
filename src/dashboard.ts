@@ -29,13 +29,22 @@ import {
     upsertProfile,
     timezoneFromProfile,
     preferredWeightUnitFromProfile,
+    type ActivityDay,
+    type Meal,
+    type NutritionGoals,
     type Profile,
+    type WaterEntry,
+    type WeightEntry,
 } from "./supabase.js";
 import { buildDailyBuckets } from "./insights.js";
 import { todayInTz, shiftLocalDate, dateInTz } from "./tz.js";
 import { authenticateBearer, rateLimitAuth } from "./middleware.js";
 import { checkBodyPatch, type BodyDetails, type WeighIn } from "./body.js";
-import { buildDashboardDays, buildWeightStats } from "./dashboard-stats.js";
+import {
+    buildDashboardDays,
+    buildEstimateVsScale,
+    buildWeightStats,
+} from "./dashboard-stats.js";
 
 // The weight rate needs a span longer than a day or a week to mean anything,
 // so the weight tracker always looks back at least this far, whatever range
@@ -68,6 +77,39 @@ function clampDays(raw: string | undefined): number {
 }
 
 /**
+ * The local-date windows one request covers: the charts' [startDate, endDate]
+ * and the weight tracker's longer [weightStart, endDate]. One helper so the
+ * fetch, the payload and the dev preview's fixture filter cannot disagree.
+ */
+export function dashboardWindow(
+    today: string,
+    days: number,
+): { startDate: string; endDate: string; weightStart: string } {
+    return {
+        startDate: shiftLocalDate(today, -(days - 1)),
+        endDate: today,
+        weightStart: shiftLocalDate(
+            today,
+            -(Math.max(days, WEIGHT_WINDOW_DAYS) - 1),
+        ),
+    };
+}
+
+/** What dashboardPayload fetches, already filtered to dashboardWindow. */
+export interface DashboardInputs {
+    profile: Profile | null;
+    meals: Meal[];
+    water: WaterEntry[];
+    weight: WeightEntry[];
+    goals: NutritionGoals | null;
+    latestWeight: WeightEntry | null;
+    activityRows: ActivityDay[];
+    days: number;
+    /** The user's local today, YYYY-MM-DD. */
+    today: string;
+}
+
+/**
  * Everything the page charts, for one user and range. Separate from the route
  * so it is testable without a bearer token (src/mcp.test.ts drives it through
  * the shared Supabase mock).
@@ -75,14 +117,8 @@ function clampDays(raw: string | undefined): number {
 export async function dashboardPayload(userId: string, days: number) {
     const profile = await getProfile(userId);
     const tz = timezoneFromProfile(profile) ?? "UTC";
-    const weightUnit = preferredWeightUnitFromProfile(profile) ?? "kg";
-
-    const endDate = todayInTz(tz);
-    const startDate = shiftLocalDate(endDate, -(days - 1));
-    const weightStart = shiftLocalDate(
-        endDate,
-        -(Math.max(days, WEIGHT_WINDOW_DAYS) - 1),
-    );
+    const today = todayInTz(tz);
+    const { startDate, endDate, weightStart } = dashboardWindow(today, days);
 
     const [meals, water, weight, goals, latestWeight, activityRows] =
         await Promise.all([
@@ -95,6 +131,40 @@ export async function dashboardPayload(userId: string, days: number) {
             // the whole dashboard down with it.
             getActivityInRange(userId, startDate, endDate).catch(() => []),
         ]);
+
+    return buildDashboardPayload({
+        profile,
+        meals,
+        water,
+        weight,
+        goals,
+        latestWeight,
+        activityRows,
+        days,
+        today,
+    });
+}
+
+/**
+ * The pure half of dashboardPayload: rows in, page JSON out. No Supabase, so
+ * the dev preview (scripts/dashboard-preview.ts) renders the real page from
+ * synthetic rows through exactly the code production runs.
+ */
+export function buildDashboardPayload(inputs: DashboardInputs) {
+    const {
+        profile,
+        meals,
+        water,
+        weight,
+        goals,
+        latestWeight,
+        activityRows,
+        days,
+        today,
+    } = inputs;
+    const tz = timezoneFromProfile(profile) ?? "UTC";
+    const weightUnit = preferredWeightUnitFromProfile(profile) ?? "kg";
+    const { startDate, endDate, weightStart } = dashboardWindow(today, days);
 
     // The same bucketing the MCP trend tools use, so a figure here and a
     // figure the assistant quotes cannot disagree.
@@ -158,6 +228,14 @@ export async function dashboardPayload(userId: string, days: number) {
         // Built field by field (dashboard-stats.ts), so the bucket's
         // mealTypes Set — which JSON.stringify renders as {} — never ships.
         daily: dayRows,
+        // The period's estimated change next to what the scale did. The
+        // weigh-ins cover max(days, 90), so every range has them all.
+        estimateVsScale: buildEstimateVsScale(
+            dayRows,
+            weighIns,
+            startDate,
+            endDate,
+        ),
         weights: weight.map((w) => ({
             // Local calendar day, resolved here: the page slicing the UTC
             // ISO string would file an evening weigh-in under tomorrow.

@@ -18,6 +18,7 @@ import {
     weightOn,
     weightTrend,
     ageOn,
+    KCAL_PER_GRAM,
     type BmiCategory,
     type BodyDetails,
     type WeighIn,
@@ -160,5 +161,126 @@ export function buildWeightStats(
         bmr_kcal: bmr,
         burn_today_kcal: bmr == null ? null : dailyBurn(bmr, todayActiveKcal),
         missing,
+    };
+}
+
+export interface EstimateVsScale {
+    /**
+     * "ok": both sides are known. "no_weighins": fewer than two weigh-ins on
+     * different dates inside the period. "no_estimate": the scale moved, but
+     * no day in the span has an estimated balance (no body details, or no
+     * meals logged), so there is nothing to compare it with.
+     */
+    status: "ok" | "no_weighins" | "no_estimate";
+    first_date: string | null;
+    last_date: string | null;
+    /** last_date − first_date, in days. */
+    span_days: number | null;
+    /** Complete days in [first_date, last_date) that carry a balance_g. */
+    covered_days: number | null;
+    /** What the scale did: last − first weigh-in, grams. */
+    actual_g: number | null;
+    /** Sum of balance_g over the covered days only. */
+    est_logged_g: number | null;
+    /** est_logged_g × span ÷ covered, only when some days are uncovered. */
+    est_scaled_g: number | null;
+    /** actual − estimate (the scaled one when present, else the logged one). */
+    gap_g: number | null;
+    /**
+     * gap × 7.7 ÷ span. POSITIVE means the burn estimate runs HIGH: the scale
+     * lost less (or gained more) than predicted, so the real burn is lower.
+     * REQUIREMENTS §4.11 writes the formula as −gap × 7.7 ÷ span but then
+     * says "positive → runs high"; only the sign used here satisfies both
+     * that sentence and its worked example, so the leading minus is a typo.
+     */
+    implied_kcal_per_day: number | null;
+    /** True when span ≥ 14 days and ≥ 70% of it is covered — only then is the
+     *  implied offset worth stating; shorter spans are water and glycogen. */
+    calibrated: boolean;
+}
+
+const CALIBRATE_MIN_SPAN = 14;
+const CALIBRATE_MIN_COVERAGE = 0.7;
+
+function dayDiff(a: string, b: string): number {
+    return Math.round(
+        (Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) /
+            86_400_000,
+    );
+}
+
+/**
+ * The estimated gain/loss over a period next to what the scale actually did.
+ *
+ * The span runs from the first to the last weigh-in inside [startDate,
+ * endDate]. The estimate covers days first ≤ d < last: a morning weigh-in on
+ * the last day precedes that day's eating, so that day belongs to the next
+ * span. Only complete days count (never in_progress), and only days that have
+ * a balance — an unlogged day is unknown, not a day of eating nothing.
+ *
+ * Every state returns the same complete literal, so the payload's shape never
+ * depends on the data.
+ */
+export function buildEstimateVsScale(
+    dayRows: Pick<DashboardDay, "date" | "balance_g" | "in_progress">[],
+    weighIns: WeighIn[],
+    startDate: string,
+    endDate: string,
+): EstimateVsScale {
+    const empty: EstimateVsScale = {
+        status: "no_weighins",
+        first_date: null,
+        last_date: null,
+        span_days: null,
+        covered_days: null,
+        actual_g: null,
+        est_logged_g: null,
+        est_scaled_g: null,
+        gap_g: null,
+        implied_kcal_per_day: null,
+        calibrated: false,
+    };
+    // Stable sort: same-day weigh-ins keep their logged order, so "first"
+    // is the earliest reading and "last" the latest.
+    const inside = weighIns
+        .filter((w) => w.date >= startDate && w.date <= endDate)
+        .sort((a, b) => a.date.localeCompare(b.date));
+    if (inside.length < 2) return empty;
+    const first = inside[0]!;
+    const last = inside[inside.length - 1]!;
+    const span = dayDiff(first.date, last.date);
+    if (span <= 0) return empty;
+
+    const actual = last.weight_g - first.weight_g;
+    let covered = 0;
+    let est = 0;
+    for (const r of dayRows) {
+        if (r.date < first.date || r.date >= last.date) continue;
+        if (r.in_progress || r.balance_g == null) continue;
+        covered += 1;
+        est += r.balance_g;
+    }
+    const base: EstimateVsScale = {
+        ...empty,
+        first_date: first.date,
+        last_date: last.date,
+        span_days: span,
+        covered_days: covered,
+        actual_g: actual,
+    };
+    if (covered === 0) return { ...base, status: "no_estimate" };
+
+    const scaled = covered < span ? Math.round((est * span) / covered) : null;
+    const gap = actual - (scaled ?? est);
+    return {
+        ...base,
+        status: "ok",
+        est_logged_g: est,
+        est_scaled_g: scaled,
+        gap_g: gap,
+        implied_kcal_per_day: Math.round((gap * KCAL_PER_GRAM) / span),
+        calibrated:
+            span >= CALIBRATE_MIN_SPAN &&
+            covered / span >= CALIBRATE_MIN_COVERAGE,
     };
 }
