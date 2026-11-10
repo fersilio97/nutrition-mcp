@@ -16,6 +16,9 @@
 //   ?delay=2000        delay every data response (shows the skeletons)
 //   ?fail=500|401      fail every data response
 //
+// Writes (Body form, "Log weight", meal edits) run the production validators
+// and are kept in memory per scenario; a page load with params forgets them.
+//
 // Login error states: email 429@test → 429, bad@test → 401.
 //
 // Never mounted by src/index.ts, and it never touches Supabase: the env vars
@@ -25,17 +28,20 @@
 process.env.SUPABASE_URL = "";
 process.env.SUPABASE_SECRET_KEY = "";
 
-import { bodyOf } from "../src/dashboard.js";
+import { bodyOf, checkMealPatch, checkWeightEntry } from "../src/dashboard.js";
 import {
     SCENARIOS,
     isScenario,
     previewPayload,
     scenarioTz,
+    scenarioWithEdits,
     buildScenario,
+    type PreviewEdits,
     type ScenarioName,
 } from "../src/dashboard-fixture.js";
-import { checkBodyPatch, type BodyDetails } from "../src/body.js";
-import { todayInTz } from "../src/tz.js";
+import { checkBodyPatch } from "../src/body.js";
+import { dateInTz, todayInTz } from "../src/tz.js";
+import type { Meal } from "../src/supabase.js";
 
 // Same string src/index.ts sends (src/dashboard-fixture.test.ts keeps the two
 // in step), so a CSP violation shows up here before it shows up in prod.
@@ -49,15 +55,19 @@ const state: {
     scenario: ScenarioName;
     delay: number;
     fail: 0 | 401 | 500;
-    // Body form saves, per scenario, in memory only.
-    body: Partial<Record<ScenarioName, BodyDetails>>;
-} = { scenario: "full", delay: 0, fail: 0, body: {} };
+    // Body saves, logged weigh-ins and meal edits, per scenario, in memory.
+    edits: Partial<Record<ScenarioName, PreviewEdits>>;
+} = { scenario: "full", delay: 0, fail: 0, edits: {} };
+let seq = 0;
+const edits = (): PreviewEdits => (state.edits[state.scenario] ??= {});
 
 const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), {
         status,
         headers: { "Content-Type": "application/json" },
     });
+const invalid = (error_description: string) =>
+    json({ error: "invalid_request", error_description }, 400);
 
 function pageHeaders(): HeadersInit {
     return {
@@ -80,9 +90,9 @@ function applyQuery(url: URL) {
         : 0;
     const fail = q.get("fail");
     state.fail = fail === "401" ? 401 : fail === "500" ? 500 : 0;
-    // Body form saves are forgotten too, so ?scenario=no-body always shows
+    // In-memory writes are forgotten too, so ?scenario=no-body always shows
     // the missing-details state it advertises.
-    state.body = {};
+    state.edits = {};
     console.log(
         `[preview] scenario=${state.scenario} delay=${state.delay} fail=${state.fail || "none"}`,
     );
@@ -154,13 +164,7 @@ const server = Bun.serve({
             const days = Number.isFinite(n)
                 ? Math.min(365, Math.max(1, n))
                 : 30;
-            return json(
-                previewPayload(
-                    state.scenario,
-                    days,
-                    state.body[state.scenario],
-                ),
-            );
+            return json(previewPayload(state.scenario, days, edits()));
         }
 
         if (req.method === "POST" && path === "/api/dashboard/body") {
@@ -169,20 +173,95 @@ const server = Bun.serve({
             if (!b) return json({ error: "invalid_request" }, 400);
             const tz = scenarioTz(state.scenario);
             const checked = checkBodyPatch(b, todayInTz(tz));
-            if (!checked.ok)
-                return json(
-                    {
-                        error: "invalid_request",
-                        error_description: checked.error,
-                    },
-                    400,
-                );
+            if (!checked.ok) return invalid(checked.error);
+            const e = edits();
             const current =
-                state.body[state.scenario] ??
+                e.body ??
                 bodyOf(buildScenario(state.scenario, todayInTz(tz)).profile);
-            const saved = { ...current, ...checked.patch };
-            state.body[state.scenario] = saved;
-            return json({ ok: true, body: saved });
+            e.body = { ...current, ...checked.patch };
+            return json({ ok: true, body: e.body });
+        }
+
+        // Same validator as production (checkWeightEntry); stored in memory.
+        if (req.method === "POST" && path === "/api/dashboard/weight") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const b = await readJson(req);
+            if (!b) return json({ error: "invalid_request" }, 400);
+            const tz = scenarioTz(state.scenario);
+            const fx = scenarioWithEdits(
+                state.scenario,
+                todayInTz(tz),
+                edits(),
+            );
+            const checked = checkWeightEntry(b, {
+                tz,
+                preferredUnit: fx.profile.preferred_weight_unit,
+                nowMs: Date.now(),
+            });
+            if (!checked.ok) return invalid(checked.error);
+            const at = checked.value.logged_at ?? new Date().toISOString();
+            const entry = {
+                id: `preview-w-${++seq}`,
+                user_id: fx.profile.user_id,
+                weight_g: checked.value.weight_g,
+                logged_at: at,
+                notes: checked.value.notes ?? null,
+                created_at: new Date().toISOString(),
+                idempotency_key: null,
+            };
+            (edits().weights ??= []).push(entry);
+            return json({
+                ok: true,
+                deduplicated: false,
+                entry: {
+                    id: entry.id,
+                    logged_at: at,
+                    date: dateInTz(at, tz),
+                    weight_g: entry.weight_g,
+                    notes: entry.notes,
+                },
+            });
+        }
+
+        // Same validator as production (checkMealPatch); stored in memory.
+        const mealMatch = /^\/api\/dashboard\/meals\/([^/]+)$/.exec(path);
+        if (req.method === "PATCH" && mealMatch) {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const b = await readJson(req);
+            if (!b) return json({ error: "invalid_request" }, 400);
+            const id = decodeURIComponent(mealMatch[1]!);
+            const tz = scenarioTz(state.scenario);
+            const fx = scenarioWithEdits(
+                state.scenario,
+                todayInTz(tz),
+                edits(),
+            );
+            const meal = fx.meals.find((m) => m.id === id);
+            if (!meal) return json({ error: "not_found" }, 404);
+            const checked = checkMealPatch(b, { tz, nowMs: Date.now() });
+            if (!checked.ok) return invalid(checked.error);
+            const e = edits();
+            e.mealPatches ??= {};
+            e.mealPatches[id] = {
+                ...e.mealPatches[id],
+                ...(checked.value as Partial<Meal>),
+            };
+            const saved = { ...meal, ...e.mealPatches[id] };
+            return json({
+                ok: true,
+                meal: {
+                    id: saved.id,
+                    logged_at: saved.logged_at,
+                    meal_type: saved.meal_type,
+                    description: saved.description,
+                    calories: saved.calories,
+                    protein_g: saved.protein_g,
+                    carbs_g: saved.carbs_g,
+                    fat_g: saved.fat_g,
+                    fiber_g: saved.fiber_g,
+                    sugar_g: saved.sugar_g,
+                },
+            });
         }
 
         return json({ error: "not_found" }, 404);

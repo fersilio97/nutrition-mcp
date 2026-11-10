@@ -5,11 +5,17 @@
 //
 //   BMR     Mifflin-St Jeor (1990) — the equation the Academy of Nutrition and
 //           Dietetics found most accurate of the common ones for adults.
-//   Burn    BMR × 1.2 (the "sedentary" multiplier: a desk day, no training)
-//           + that day's active kcal from the wearable. The user works
-//           remotely and trains, so the 1.2 covers the working day and the
-//           watch covers the workouts; a higher multiplier would count the
-//           workouts twice.
+//   Burn    BMR + that day's active kcal from the wearable (BASE_FACTOR = 1).
+//           The resting burn is the base, not BMR × 1.2: the user works
+//           remotely and on non-workout days often walks under 1,000 steps,
+//           so the "sedentary" 1.2 multiplier credited ~350 kcal/day of
+//           movement that never happened — and whatever movement does happen
+//           is already in the watch's active kcal, so a multiplier would
+//           count it twice. Resting + active is also exactly how Garmin
+//           splits its own total. If this runs LOW (the scale keeps losing
+//           more than predicted), the dashboard's "Estimate vs reality" card
+//           shows it as a negative kcal/day offset — that card, not a guessed
+//           multiplier, is how to calibrate.
 //   Balance (eaten − burned) ÷ 7.7 kcal per gram — the classic ~7,700 kcal per
 //           kg of body fat. Real day-to-day scale weight swings far more than
 //           this (water, glycogen, salt), which is why it is a trend aid, not a
@@ -17,7 +23,8 @@
 
 import type { BodySex } from "./supabase.js";
 
-export const SEDENTARY_FACTOR = 1.2;
+/** Multiplier on BMR for the day's base burn. 1 = resting only; see above. */
+export const BASE_FACTOR = 1.0;
 export const KCAL_PER_GRAM = 7.7;
 export const MIN_HEIGHT_CM = 50;
 export const MAX_HEIGHT_CM = 272;
@@ -81,9 +88,9 @@ export function bmrMifflin(
     return Math.round(base + (sex === "male" ? 5 : -161));
 }
 
-/** Estimated total burn for a day: BMR × sedentary factor + active kcal. */
+/** Estimated total burn for a day: resting (BMR × BASE_FACTOR) + active kcal. */
 export function dailyBurn(bmr: number, activeKcal: number | null): number {
-    return Math.round(bmr * SEDENTARY_FACTOR + (activeKcal ?? 0));
+    return Math.round(bmr * BASE_FACTOR + (activeKcal ?? 0));
 }
 
 /** Estimated grams gained (+) or lost (−) for a day's energy balance. */

@@ -111,6 +111,22 @@ const DISHES: Record<string, string[]> = {
     ],
 };
 
+/** A stable, uuid-shaped id from a readable one (FNV-1a, four seeds). The
+ *  edit endpoint 404s anything that is not a uuid, as production must, so
+ *  fixture meals need real-looking ids to be editable in the preview. */
+export function uuidOf(s: string): string {
+    let h = "";
+    for (let k = 0; k < 4; k++) {
+        let x = 0x811c9dc5 ^ k;
+        for (let i = 0; i < s.length; i++) {
+            x ^= s.charCodeAt(i);
+            x = Math.imul(x, 0x01000193);
+        }
+        h += (x >>> 0).toString(16).padStart(8, "0");
+    }
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
 function makeMeal(
     id: string,
     date: string,
@@ -127,7 +143,7 @@ function makeMeal(
     const cShare = 1 - pShare - fShare;
     const at = instant(date, hh, mi, tz);
     return {
-        id,
+        id: uuidOf(id),
         user_id: USER,
         logged_at: at,
         meal_type: type,
@@ -416,7 +432,7 @@ function calibrateScenario(
 
 /**
  * The rows production would have fetched for this window: meals, water and
- * activity in [startDate, endDate], weigh-ins in [weightStart, endDate] (all
+ * activity in [fetchStart, endDate], weigh-ins in [weightStart, endDate] (all
  * local dates in `tz`), and the newest weigh-in overall — exactly what the
  * Supabase range queries return. Without it a 120-day fixture would leak
  * weeks-old meals into days=7.
@@ -427,7 +443,7 @@ export function previewInputs(
     today: string,
 ): DashboardInputs {
     const tz = fx.profile.timezone ?? "UTC";
-    const { startDate, endDate, weightStart } = dashboardWindow(today, days);
+    const { endDate, weightStart, fetchStart } = dashboardWindow(today, days);
     const inRange = (iso: string, from: string) => {
         const d = dateInTz(iso, tz);
         return d >= from && d <= endDate;
@@ -437,28 +453,52 @@ export function previewInputs(
         .sort((a, b) => a.logged_at.localeCompare(b.logged_at));
     return {
         profile: fx.profile,
-        meals: fx.meals.filter((m) => inRange(m.logged_at, startDate)),
-        water: fx.water.filter((w) => inRange(w.logged_at, startDate)),
+        meals: fx.meals.filter((m) => inRange(m.logged_at, fetchStart)),
+        water: fx.water.filter((w) => inRange(w.logged_at, fetchStart)),
         weight: sortedWeight.filter((w) => inRange(w.logged_at, weightStart)),
         goals: fx.goals,
         latestWeight: sortedWeight.at(-1) ?? null,
         activityRows: fx.activity.filter(
-            (a) => a.date >= startDate && a.date <= endDate,
+            (a) => a.date >= fetchStart && a.date <= endDate,
         ),
         days,
         today,
     };
 }
 
+/** What the dev preview has "written" this session, held in its memory. */
+export interface PreviewEdits {
+    body?: BodyDetails;
+    /** Weigh-ins logged from the page's form. */
+    weights?: WeightEntry[];
+    /** Meal edits from the Meals tab, by meal id. */
+    mealPatches?: Record<string, Partial<Meal>>;
+}
+
+/** A scenario's rows with the preview's in-memory writes applied. */
+export function scenarioWithEdits(
+    name: ScenarioName,
+    today: string,
+    edits: PreviewEdits = {},
+): FixtureData {
+    const fx = buildScenario(name, today);
+    if (edits.body) fx.profile = { ...fx.profile, ...edits.body };
+    if (edits.weights?.length) fx.weight = [...fx.weight, ...edits.weights];
+    const patches = edits.mealPatches ?? {};
+    fx.meals = fx.meals.map((m) =>
+        patches[m.id] ? { ...m, ...patches[m.id] } : m,
+    );
+    return fx;
+}
+
 /** The /api/dashboard/data JSON the preview serves for a scenario. */
 export function previewPayload(
     name: ScenarioName,
     days: number,
-    bodyOverride?: BodyDetails,
+    edits: PreviewEdits = {},
 ) {
     const tz = scenarioTz(name);
     const today = todayInTz(tz);
-    const fx = buildScenario(name, today);
-    if (bodyOverride) fx.profile = { ...fx.profile, ...bodyOverride };
+    const fx = scenarioWithEdits(name, today, edits);
     return buildDashboardPayload(previewInputs(fx, days, today));
 }

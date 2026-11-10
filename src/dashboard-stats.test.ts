@@ -2,6 +2,7 @@ import { test, expect, describe } from "bun:test";
 import {
     buildDashboardDays,
     buildEstimateVsScale,
+    buildLast7,
     buildWeightStats,
 } from "./dashboard-stats.js";
 import { buildDailyBuckets } from "./insights.js";
@@ -84,10 +85,11 @@ describe("buildDashboardDays", () => {
             [{ date: "2026-11-01", weight_g: 80_000 }],
             "2026-11-09",
         );
-        // BMR 1768 (80 kg, 178 cm, 30 y, male) → 1768·1.2 + 300 = 2422.
-        expect(days[0]!.burn_kcal).toBe(2422);
-        // 2000 eaten − 2422 burned = −422 kcal → −55 g.
-        expect(days[0]!.balance_g).toBe(-55);
+        // BMR 1768 (80 kg, 178 cm, 30 y, male) → 1768 resting + 300 = 2068.
+        expect(days[0]!.bmr_kcal).toBe(1768);
+        expect(days[0]!.burn_kcal).toBe(2068);
+        // 2000 eaten − 2068 burned = −68 kcal → −9 g.
+        expect(days[0]!.balance_g).toBe(-9);
     });
 
     test("no meals → balance unknown, not a full day's deficit", () => {
@@ -145,7 +147,8 @@ describe("buildWeightStats", () => {
         // 5 kg at 500 g/week = 70 days after Oct 29.
         expect(s.projected_date).toBe("2027-01-07");
         expect(s.bmr_kcal).toBe(1768);
-        expect(s.burn_today_kcal).toBe(2322);
+        // Resting 1768 + 200 active.
+        expect(s.burn_today_kcal).toBe(1968);
         expect(s.missing).toEqual([]);
     });
 
@@ -329,5 +332,67 @@ describe("buildEstimateVsScale", () => {
         expect(Object.keys(s).sort()).toEqual(
             Object.keys(buildEstimateVsScale([], [], "a", "b")).sort(),
         );
+    });
+});
+
+describe("buildLast7", () => {
+    // Nov 1 … Nov 9 (today, in progress). `balances` per day; burn present
+    // unless noBurn.
+    const days = (balances: (number | null)[], noBurn = false) =>
+        balances.map((balance_g, i) => ({
+            date: `2026-11-0${i + 1}`,
+            balance_g,
+            burn_kcal: noBurn ? null : 2000,
+            in_progress: i === balances.length - 1,
+        }));
+
+    test("scale change in grams and the net estimate over the 7 complete days", () => {
+        // Window Nov 2 … Nov 9; complete days Nov 2 … Nov 8.
+        const r = buildLast7(
+            days([-999, -10, -20, null, -30, -40, -50, -60, -500]),
+            [
+                { date: "2026-10-30", weight_g: 85_000 }, // before the window
+                { date: "2026-11-02", weight_g: 84_000 },
+                { date: "2026-11-09", weight_g: 83_650 },
+            ],
+            "2026-11-09",
+        );
+        expect(r.from).toBe("2026-11-02");
+        expect(r.to).toBe("2026-11-09");
+        expect(r.weight_change_g).toBe(-350);
+        expect(r.weight_first_date).toBe("2026-11-02");
+        // Nov 1 is outside, Nov 5 unlogged, today in progress → 6 days.
+        expect(r.est_days).toBe(6);
+        expect(r.est_net_g).toBe(-210);
+        expect(r.has_burn).toBe(true);
+    });
+
+    test("one weigh-in (or two on one day) → no scale figure", () => {
+        for (const w of [
+            [{ date: "2026-11-05", weight_g: 84_000 }],
+            [
+                { date: "2026-11-05", weight_g: 84_000 },
+                { date: "2026-11-05", weight_g: 83_800 },
+            ],
+        ]) {
+            const r = buildLast7(
+                days([0, 0, 0, 0, 0, 0, 0, 0, 0]),
+                w,
+                "2026-11-09",
+            );
+            expect(r.weight_change_g).toBeNull();
+            expect(r.weight_first_date).toBeNull();
+        }
+    });
+
+    test("no body details → no estimate, and has_burn says why", () => {
+        const r = buildLast7(
+            days([null, null, null, null, null, null, null, null, null], true),
+            [],
+            "2026-11-09",
+        );
+        expect(r.est_net_g).toBeNull();
+        expect(r.est_days).toBe(0);
+        expect(r.has_burn).toBe(false);
     });
 });

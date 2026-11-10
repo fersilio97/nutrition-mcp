@@ -3994,7 +3994,7 @@ export function registerTools(
         {
             title: "Set Body Profile",
             description:
-                "Save the user's height, birth date and sex — used only for body-mass index (BMI), the healthy weight range, and the estimated resting/daily energy burn (Mifflin-St Jeor) shown on the dashboard's weight tracker and in its estimated gain/loss per day. Partial updates: omitted fields are kept, null clears one. Height is stored in cm; pass height_unit 'in' to give inches (convert feet+inches to total inches first, e.g. 5'10\" = 70). Sex only selects the equation's constant. Ask the user for these rather than guessing; if they decline one, leave it out.",
+                "Save the user's height, birth date and sex — used only for body-mass index (BMI), the healthy weight range, and the estimated daily energy burn — the resting burn (Mifflin-St Jeor BMR, no activity multiplier) plus the day's active calories from the wearable — shown on the dashboard's weight tracker and in its estimated gain/loss per day. Partial updates: omitted fields are kept, null clears one. Height is stored in cm; pass height_unit 'in' to give inches (convert feet+inches to total inches first, e.g. 5'10\" = 70). Sex only selects the equation's constant. Ask the user for these rather than guessing; if they decline one, leave it out.",
             annotations: {
                 readOnlyHint: false,
                 destructiveHint: false,

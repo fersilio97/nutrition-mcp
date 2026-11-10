@@ -40,7 +40,12 @@ import {
 import { Hono } from "hono";
 import { createActivitySyncRouter } from "./activity-sync.js";
 import { todayInTz } from "./tz.js";
-import { dashboardPayload, saveBodyDetails } from "./dashboard.js";
+import {
+    dashboardPayload,
+    logWeightFromDashboard,
+    saveBodyDetails,
+    updateMealFromDashboard,
+} from "./dashboard.js";
 import { previewPayload } from "./dashboard-fixture.js";
 import { McpServer, InMemoryTransport } from "@modelcontextprotocol/server";
 import * as actualSupabase from "./supabase.js";
@@ -1421,6 +1426,9 @@ function storedMeal(input: Record<string, unknown>): Meal {
     });
 }
 
+// A well-formed meal id the updateMeal stub treats as another user's.
+const NOT_MY_MEAL = "00000000-0000-4000-8000-00000000dead";
+
 const db = {
     profile: null as actualSupabase.Profile | null,
     goals: null as NutritionGoals | null,
@@ -1490,6 +1498,10 @@ mock.module("./supabase.js", () => ({
         id: string,
         fields: Record<string, unknown>,
     ) => {
+        // The real updateMeal looks the id up scoped by user_id and throws
+        // this when it is someone else's (or nobody's).
+        if (id === NOT_MY_MEAL)
+            throw new Error("Failed to update meal: meal not found");
         db.mealUpdates.push(fields);
         const saved = storedMeal({ ...fields, id });
         db.meals = [saved];
@@ -4909,6 +4921,124 @@ describe("dashboard API", () => {
         const realKeys = [...new Set(keys(real))].sort();
         expect(realKeys).toContain(".meals[].description");
         expect(realKeys).toContain(".estimateVsScale.implied_kcal_per_day");
+        expect(realKeys).toContain(".last7.weight_change_g");
+        expect(realKeys).toContain(".daily[].bmr_kcal");
         expect([...new Set(keys(preview))].sort()).toEqual(realKeys);
+    });
+
+    test("last7 does not depend on the selected range", async () => {
+        stage();
+        const a = (await dashboardPayload("u1", 1)) as any;
+        const b = (await dashboardPayload("u1", 90)) as any;
+        expect(a.last7).toEqual(b.last7);
+        expect(a.daily).toHaveLength(1);
+    });
+
+    describe("Log weight (POST /api/dashboard/weight)", () => {
+        test("kg with a local time: converted, resolved in the profile zone", async () => {
+            stage();
+            const r = await logWeightFromDashboard("u1", {
+                weight: "82.5",
+                unit: "kg",
+                // 07:30 EDT on Oct 20 = 11:30 UTC.
+                logged_at: "2026-10-20T07:30",
+                notes: "  morning, fasted ",
+            });
+            expect(r.status).toBe(200);
+            expect(db.weightInserted.at(-1)).toEqual({
+                weight_g: 82_500,
+                logged_at: "2026-10-20T11:30:00.000Z",
+                notes: "morning, fasted",
+            });
+            expect((r.json.entry as any).date).toBe("2026-10-20");
+        });
+
+        test("pounds are stored as grams; no time means now (log_weight's default)", async () => {
+            stage();
+            const r = await logWeightFromDashboard("u1", {
+                weight: 180,
+                unit: "lb",
+            });
+            expect(r.status).toBe(200);
+            expect(db.weightInserted.at(-1)).toEqual({ weight_g: 81_647 });
+        });
+
+        test("no unit falls back to the saved preference", async () => {
+            stage();
+            db.profile = { ...db.profile!, preferred_weight_unit: "lb" };
+            await logWeightFromDashboard("u1", { weight: 180 });
+            expect(db.weightInserted.at(-1)!.weight_g).toBe(81_647);
+        });
+
+        test("implausible, future, or non-numeric input is refused, nothing written", async () => {
+            stage();
+            for (const input of [
+                { weight: 5, unit: "kg" },
+                { weight: "abc", unit: "kg" },
+                { weight: 80, unit: "stone" },
+                { weight: 80, unit: "kg", logged_at: "2099-01-01T08:00" },
+                { weight: 80, unit: "kg", logged_at: "yesterday-ish" },
+            ]) {
+                const r = await logWeightFromDashboard("u1", input);
+                expect(r.status).toBe(400);
+                expect(typeof r.json.error_description).toBe("string");
+            }
+            expect(db.weightInserted).toEqual([]);
+        });
+    });
+
+    describe("Edit meal (PATCH /api/dashboard/meals/:id)", () => {
+        const ID = "3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b";
+
+        test("only the changed fields reach updateMeal; the time resolves in the profile zone", async () => {
+            stage();
+            const r = await updateMealFromDashboard("u1", ID, {
+                description: "  Chicken bowl, no rice ",
+                calories: "540",
+                fiber_g: 9,
+                // Logged at night, eaten at 12:40 EDT.
+                logged_at: "2026-10-20T12:40",
+            });
+            expect(r.status).toBe(200);
+            expect(db.mealUpdates.at(-1)).toEqual({
+                description: "Chicken bowl, no rice",
+                calories: 540,
+                fiber_g: 9,
+                logged_at: "2026-10-20T16:40:00.000Z",
+            });
+            expect((r.json.meal as any).id).toBe(ID);
+        });
+
+        test("update_meal's bounds, unknown keys, clearing and empty edits are refused", async () => {
+            stage();
+            for (const input of [
+                { calories: 20_001 },
+                { protein_g: -1 },
+                { fat_g: 5_001 },
+                { meal_type: "brunch" },
+                { description: "   " },
+                { calories: "" },
+                { alcohol_g: 10 },
+                { logged_at: "2099-01-01T12:00" },
+                {},
+            ]) {
+                const r = await updateMealFromDashboard("u1", ID, input);
+                expect(r.status).toBe(400);
+            }
+            expect(db.mealUpdates).toEqual([]);
+        });
+
+        test("someone else's meal, or a non-uuid id, is a 404", async () => {
+            stage();
+            const r = await updateMealFromDashboard("u1", NOT_MY_MEAL, {
+                calories: 500,
+            });
+            expect(r.status).toBe(404);
+            const bad = await updateMealFromDashboard("u1", "m1", {
+                calories: 500,
+            });
+            expect(bad.status).toBe(404);
+            expect(db.mealUpdates).toEqual([]);
+        });
     });
 });

@@ -43,7 +43,10 @@ export interface DashboardDay {
     goal_protein_g: number | null;
     goal_carbs_g: number | null;
     goal_fat_g: number | null;
-    /** Estimated total burn (BMR × 1.2 + active), or null without body data. */
+    /** That day's resting burn (Mifflin-St Jeor BMR from the weight in effect
+     *  that day — so it moves as weight does), or null without body data. */
+    bmr_kcal: number | null;
+    /** Estimated total burn (resting + active), or null without body data. */
     burn_kcal: number | null;
     /** Estimated grams gained (+) / lost (−). Null on a day with no meals —
      *  an unlogged day is unknown, not a day of eating nothing. */
@@ -81,6 +84,7 @@ export function buildDashboardDays(
             goal_protein_g: g?.daily_protein_g || null,
             goal_carbs_g: g?.daily_carbs_g || null,
             goal_fat_g: g?.daily_fat_g || null,
+            bmr_kcal: bmr,
             burn_kcal: burn,
             balance_g:
                 burn != null && b.meals.length > 0
@@ -283,4 +287,70 @@ export function buildEstimateVsScale(
             span >= CALIBRATE_MIN_SPAN &&
             covered / span >= CALIBRATE_MIN_COVERAGE,
     };
+}
+
+/** The Today tab's two 7-day figures. Fixed window, never the chart range. */
+export interface Last7 {
+    /** today − 7: a weekly weigh-in on the same weekday still lands inside. */
+    from: string;
+    /** today. */
+    to: string;
+    /** The scale: last − first weigh-in in [from, to]; null with fewer than
+     *  two weigh-ins on different dates. */
+    weight_change_g: number | null;
+    weight_first_date: string | null;
+    weight_last_date: string | null;
+    /** Sum of balance_g over the complete logged days in [from, today − 1]
+     *  — the Trends "Net est. change" definition over a fixed week. Null when
+     *  no such day has a balance. */
+    est_net_g: number | null;
+    /** How many complete days carried a balance (0–7). */
+    est_days: number;
+    /** Whether any day in the window has an estimated burn at all; false
+     *  means body details are missing, not that nothing was eaten. */
+    has_burn: boolean;
+}
+
+export const LAST7_DAYS = 7;
+
+/**
+ * `dayRows` must reach back to today − 7 (buildDashboardPayload widens its
+ * internal window for this), so the figures do not depend on the range the
+ * Trends tab happens to show.
+ */
+export function buildLast7(
+    dayRows: Pick<
+        DashboardDay,
+        "date" | "balance_g" | "burn_kcal" | "in_progress"
+    >[],
+    weighIns: WeighIn[],
+    today: string,
+): Last7 {
+    const from = shiftDay(today, -LAST7_DAYS);
+    // The scale side is exactly the Estimate-vs-reality span logic.
+    const scale = buildEstimateVsScale(dayRows, weighIns, from, today);
+    const week = dayRows.filter(
+        (r) => r.date >= from && r.date < today && !r.in_progress,
+    );
+    const logged = week.filter((r) => r.balance_g != null);
+    return {
+        from,
+        to: today,
+        weight_change_g: scale.actual_g,
+        weight_first_date: scale.first_date,
+        weight_last_date: scale.last_date,
+        est_net_g: logged.length
+            ? logged.reduce((a, r) => a + r.balance_g!, 0)
+            : null,
+        est_days: logged.length,
+        has_burn: dayRows.some(
+            (r) => r.date >= from && r.date <= today && r.burn_kcal != null,
+        ),
+    };
+}
+
+function shiftDay(date: string, n: number): string {
+    const d = new Date(`${date}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
 }
