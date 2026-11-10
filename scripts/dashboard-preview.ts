@@ -8,8 +8,9 @@
 // buildDashboardPayload. Sign in with any email and password.
 //
 // Query parameters on the PAGE url pick what the API serves next. A page load
-// that carries any of them resets the others to their defaults; a load with
-// none keeps the current state (single-user dev tool, held in memory):
+// that carries any of them resets the others to their defaults and forgets
+// any Body form saves; a load with none keeps the current state (single-user
+// dev tool, held in memory):
 //
 //   ?scenario=full|over-goal|no-body|no-goals|empty|lb|calibrate
 //   ?delay=2000        delay every data response (shows the skeletons)
@@ -79,6 +80,9 @@ function applyQuery(url: URL) {
         : 0;
     const fail = q.get("fail");
     state.fail = fail === "401" ? 401 : fail === "500" ? 500 : 0;
+    // Body form saves are forgotten too, so ?scenario=no-body always shows
+    // the missing-details state it advertises.
+    state.body = {};
     console.log(
         `[preview] scenario=${state.scenario} delay=${state.delay} fail=${state.fail || "none"}`,
     );

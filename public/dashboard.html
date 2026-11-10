@@ -2571,8 +2571,14 @@
                         "aria-label",
                         dark ? "Switch to light theme" : "Switch to dark theme",
                     );
-                    $("theme-btn").querySelector(".i-moon").hidden = dark;
-                    $("theme-btn").querySelector(".i-sun").hidden = !dark;
+                    // SVGElement has no `hidden` property; assigning one
+                    // would only set an expando, so toggle the attribute.
+                    $("theme-btn")
+                        .querySelector(".i-moon")
+                        .toggleAttribute("hidden", dark);
+                    $("theme-btn")
+                        .querySelector(".i-sun")
+                        .toggleAttribute("hidden", !dark);
                 }
                 $("theme-btn").addEventListener("click", function () {
                     const next = isDark() ? "light" : "dark";
@@ -4816,8 +4822,13 @@
                             store(KEY, token);
                             $("password").value = "";
                             showApp();
-                            selectTab("today", { fromHash: true });
-                            $("tab-today").focus();
+                            // A deep link (#body) survives signing in;
+                            // otherwise this lands on Today.
+                            const want = location.hash.slice(1);
+                            const tab =
+                                TABS.indexOf(want) >= 0 ? want : "today";
+                            selectTab(tab, { fromHash: true });
+                            $("tab-" + tab).focus();
                             refresh();
                         })
                         .catch(function () {
