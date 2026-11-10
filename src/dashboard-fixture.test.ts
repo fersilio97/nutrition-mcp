@@ -23,34 +23,62 @@ const payloadAt = (
         previewInputs(buildScenario(name, today), days, today),
     );
 
+// These build whole synthetic scenarios (hundreds of Intl-formatted
+// timestamps). Normally ~100 ms each, but a machine under load once stalled
+// one past bun's 5 s default and failed it with no assertion message (seen
+// with TZ=Pacific/Kiritimati during a full run; 165 ms when rerun alone). The
+// scenario cache removes most of the work; this keeps a slow box from
+// failing a correct test.
+const HEAVY_MS = 30_000;
+
 describe("preview fixture windows", () => {
     for (const name of SCENARIOS)
         for (const days of [1, 7, 30, 90, 365])
-            test(`${name}, days=${days}: rows stay inside the window`, () => {
-                const tz = scenarioTz(name);
-                const d = payloadAt(name, days);
-                expect(d.daily).toHaveLength(days);
-                expect(d.daily.at(-1)!.in_progress).toBe(true);
-                expect(d.daily.at(-1)!.date).toBe(TODAY);
-                expect(d.daily.slice(0, -1).some((r) => r.in_progress)).toBe(
-                    false,
-                );
-                for (const m of d.meals) {
-                    const day = dateInTz(m.logged_at, tz);
-                    expect(day >= d.startDate && day <= d.endDate).toBe(true);
-                }
-                for (const w of d.weights)
+            test(
+                `${name}, days=${days}: rows stay inside the window`,
+                () => {
+                    const tz = scenarioTz(name);
+                    const d = payloadAt(name, days);
+                    expect(d.daily).toHaveLength(days);
+                    expect(d.daily.at(-1)!.in_progress).toBe(true);
+                    expect(d.daily.at(-1)!.date).toBe(TODAY);
                     expect(
-                        w.date >= d.weightWindowStart && w.date <= d.endDate,
-                    ).toBe(true);
-            });
+                        d.daily.slice(0, -1).some((r) => r.in_progress),
+                    ).toBe(false);
+                    for (const m of d.meals) {
+                        const day = dateInTz(m.logged_at, tz);
+                        expect(day >= d.startDate && day <= d.endDate).toBe(
+                            true,
+                        );
+                    }
+                    for (const w of d.weights)
+                        expect(
+                            w.date >= d.weightWindowStart &&
+                                w.date <= d.endDate,
+                        ).toBe(true);
+                },
+                HEAVY_MS,
+            );
 
-    test("the real-today path the server uses also holds", () => {
-        for (const name of SCENARIOS) {
-            const d = previewPayload(name, 30);
-            expect(d.daily).toHaveLength(30);
-            expect(d.daily.at(-1)!.in_progress).toBe(true);
-        }
+    test(
+        "the real-today path the server uses also holds",
+        () => {
+            for (const name of SCENARIOS) {
+                const d = previewPayload(name, 30);
+                expect(d.daily).toHaveLength(30);
+                expect(d.daily.at(-1)!.in_progress).toBe(true);
+            }
+        },
+        HEAVY_MS,
+    );
+
+    test("the scenario cache hands out copies: edits never leak into it", () => {
+        const a = buildScenario("full", TODAY);
+        a.meals = [];
+        a.profile = { ...a.profile, height_cm: null };
+        const b = buildScenario("full", TODAY);
+        expect(b.meals.length).toBeGreaterThan(0);
+        expect(b.profile.height_cm).toBe(178);
     });
 });
 

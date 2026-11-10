@@ -264,11 +264,29 @@ function weightRow(
     };
 }
 
+// Generating a scenario formats ~1,000 timestamps through Intl; a test file
+// asks for the same (scenario, day) dozens of times. Cached per pair, small.
+const scenarioCache = new Map<string, FixtureData>();
+const SCENARIO_CACHE_MAX = 32;
+
 /**
  * All of a scenario's rows, generated backwards from `today` (the local date
- * in the scenario's timezone).
+ * in the scenario's timezone). Returns a shallow copy of a cached build, so a
+ * caller may reassign its fields (scenarioWithEdits does) without touching
+ * the cache; the arrays themselves must not be mutated in place.
  */
 export function buildScenario(name: ScenarioName, today: string): FixtureData {
+    const key = `${name}|${today}`;
+    let fx = scenarioCache.get(key);
+    if (!fx) {
+        fx = generateScenario(name, today);
+        if (scenarioCache.size >= SCENARIO_CACHE_MAX) scenarioCache.clear();
+        scenarioCache.set(key, fx);
+    }
+    return { ...fx };
+}
+
+function generateScenario(name: ScenarioName, today: string): FixtureData {
     const tz = scenarioTz(name);
     const profile = profileFor(name);
     if (name === "empty")
