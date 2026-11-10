@@ -1392,6 +1392,135 @@
                 color: var(--ink);
             }
 
+            /* ---------- Body ---------- */
+            .w-hero {
+                display: grid;
+                gap: var(--s2);
+            }
+            .card h3.micro {
+                font-size: var(--t-micro);
+                font-weight: 600;
+                line-height: 1.35;
+            }
+            .field label {
+                font-size: var(--t-small);
+                font-weight: 600;
+            }
+            .w-now {
+                display: flex;
+                align-items: baseline;
+                flex-wrap: wrap;
+                gap: var(--s1) var(--s3);
+            }
+            .w-now b {
+                font-size: var(--t-hero);
+                line-height: 1;
+                font-weight: 700;
+                letter-spacing: -0.02em;
+            }
+            .w-now .unit {
+                font-size: var(--t-h2);
+                color: var(--muted);
+                font-weight: 500;
+                margin-left: -6px;
+            }
+            .w-now .when {
+                margin-left: auto;
+                color: var(--muted);
+                font-size: var(--t-small);
+            }
+            .w-line {
+                margin: 0;
+                font-variant-numeric: tabular-nums;
+            }
+            .w-line .muted {
+                color: var(--muted);
+            }
+            .body-grid {
+                display: grid;
+                gap: var(--s4);
+            }
+            .body-grid > .col {
+                display: grid;
+                gap: var(--s4);
+                align-content: start;
+                min-width: 0;
+            }
+            @media (min-width: 481px) and (max-width: 1023px) {
+                .stats.three {
+                    grid-template-columns: repeat(3, minmax(0, 1fr));
+                }
+            }
+            @media (min-width: 1024px) {
+                .body-grid {
+                    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+                    align-items: start;
+                }
+                .body-grid > .col:first-child {
+                    order: 0;
+                }
+            }
+            details.body-box > summary {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--s3);
+                min-height: 44px;
+                margin: calc(-1 * var(--s2)) 0;
+                font-size: var(--t-h2);
+                font-weight: 650;
+                cursor: pointer;
+                list-style: none;
+                border-radius: var(--r-sm);
+            }
+            details.body-box > summary::-webkit-details-marker {
+                display: none;
+            }
+            details.body-box > summary::after {
+                content: "";
+                width: 9px;
+                height: 9px;
+                margin-right: 6px;
+                border-right: 2px solid var(--muted);
+                border-bottom: 2px solid var(--muted);
+                transform: rotate(45deg);
+                transition: transform 0.15s var(--ease);
+            }
+            details.body-box[open] > summary::after {
+                transform: rotate(-135deg);
+            }
+            .body-form {
+                display: grid;
+                gap: var(--s4);
+                margin-top: var(--s4);
+            }
+            .pair {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 84px;
+                gap: var(--s2);
+            }
+            select.input {
+                padding-right: var(--s2);
+            }
+            .form-foot {
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: var(--s3);
+            }
+            .b-status {
+                font-size: var(--t-small);
+                font-weight: 600;
+                color: var(--muted);
+                transition: opacity 0.4s linear;
+            }
+            .b-status.err {
+                color: var(--over);
+            }
+            .b-status.fade {
+                opacity: 0;
+            }
+
             /* ---------- Trends ---------- */
             .stack {
                 display: grid;
@@ -2599,9 +2728,8 @@
                     selectTab("body");
                     const box = $("body-box");
                     if (box) {
-                        bodyBoxProgrammatic = true;
+                        // The user asked for it: their toggle, not ours.
                         box.open = true;
-                        bodyBoxProgrammatic = false;
                         box.scrollIntoView({ block: "start" });
                         $("b-height").focus();
                     }
@@ -3721,8 +3849,553 @@
                 };
 
                 /* ================= BODY ================= */
+                const BMI_LABEL = {
+                    underweight: "Underweight",
+                    healthy: "Healthy range",
+                    overweight: "Overweight",
+                    obese: "Obese",
+                };
+                // Form state that must outlive a re-render (range change,
+                // refetch after save): open/closed, whether the user has
+                // toggled it, unsaved input, and the status line.
+                let bodyTouched = false;
+                let bodyOpen = false;
+                let bodyDraft = null;
+                let bodyStatus = { text: "", cls: "" };
+                let bodyStatusTimer = 0;
+                const detailsMissing = () =>
+                    data.weightStats.missing.some((m) => m !== "weight");
+
+                function targetFoot(s, unit) {
+                    if (s.to_target_g === 0) return "At target";
+                    if (s.projected_date)
+                        return (
+                            "At this rate: " +
+                            longDay(s.projected_date) +
+                            " (est.)"
+                        );
+                    if (s.weekly_rate_g != null)
+                        return "Current trend is not heading there";
+                    return "Target " + wfmt(s.target_g, unit) + " " + unit;
+                }
+                function bodyStats(s, unit) {
+                    let h = "";
+                    h +=
+                        s.bmi != null
+                            ? stat(
+                                  "BMI",
+                                  s.bmi.toFixed(1),
+                                  "",
+                                  BMI_LABEL[s.bmi_category],
+                              )
+                            : s.height_cm == null
+                              ? stat("BMI", "—", "", ADD_BODY, true)
+                              : stat("BMI", "—", "", "Needs a weigh-in", true);
+                    h +=
+                        s.healthy_min_g != null
+                            ? stat(
+                                  "Healthy range",
+                                  wfmt(s.healthy_min_g, unit) +
+                                      "–" +
+                                      wfmt(s.healthy_max_g, unit),
+                                  unit,
+                                  "BMI 18.5–24.9 at " +
+                                      Number(s.height_cm).toFixed(0) +
+                                      " cm",
+                              )
+                            : stat("Healthy range", "—", "", ADD_BODY, true);
+                    h +=
+                        s.change_g != null
+                            ? stat(
+                                  "Change",
+                                  fmtSignedDec(toUnit(s.change_g, unit)),
+                                  unit,
+                                  "over " +
+                                      s.trend_days +
+                                      " days · " +
+                                      fmtSignedDec(
+                                          toUnit(s.weekly_rate_g, unit),
+                                          2,
+                                      ) +
+                                      " " +
+                                      unit +
+                                      "/week",
+                              )
+                            : stat(
+                                  "Change",
+                                  "—",
+                                  "",
+                                  "Needs 2+ weigh-ins on different days",
+                                  true,
+                              );
+                    if (s.target_g != null)
+                        h += stat(
+                            "To target",
+                            s.to_target_g != null
+                                ? fmtSignedDec(toUnit(s.to_target_g, unit))
+                                : wfmt(s.target_g, unit),
+                            unit,
+                            targetFoot(s, unit),
+                        );
+                    h +=
+                        s.bmr_kcal != null
+                            ? stat(
+                                  "Resting burn (est.)",
+                                  fmt(s.bmr_kcal),
+                                  "kcal",
+                                  "BMR · Mifflin-St Jeor" +
+                                      (s.age != null ? " · age " + s.age : ""),
+                              )
+                            : stat(
+                                  "Resting burn (est.)",
+                                  "—",
+                                  "",
+                                  ADD_BODY,
+                                  true,
+                              );
+                    h +=
+                        s.burn_today_kcal != null
+                            ? stat(
+                                  "Est. burn today",
+                                  fmt(s.burn_today_kcal),
+                                  "kcal",
+                                  "BMR × 1.2 + today’s active kcal",
+                              )
+                            : stat("Est. burn today", "—", "", ADD_BODY, true);
+                    return '<div class="stats three">' + h + "</div>";
+                }
+                function weightHero(s, unit) {
+                    if (s.latest_g == null)
+                        return '<section class="card hero" aria-labelledby="h-w"><h3 id="h-w" class="sr-only">Current weight</h3><p class="empty">No weigh-ins yet. Ask Claude to log your weight.</p></section>';
+                    const change =
+                        s.change_g != null
+                            ? "<b>" +
+                              fmtSignedDec(toUnit(s.change_g, unit)) +
+                              " " +
+                              unit +
+                              '</b> <span class="muted">over ' +
+                              s.trend_days +
+                              " days · " +
+                              fmtSignedDec(toUnit(s.weekly_rate_g, unit), 2) +
+                              " " +
+                              unit +
+                              "/week</span>"
+                            : '<span class="muted">Needs 2+ weigh-ins on different days for a trend</span>';
+                    let target = "";
+                    if (s.target_g != null) {
+                        target =
+                            s.to_target_g === 0
+                                ? "<b>At target</b> (" +
+                                  wfmt(s.target_g, unit) +
+                                  " " +
+                                  unit +
+                                  ")"
+                                : "<b>" +
+                                  wfmt(Math.abs(s.to_target_g), unit) +
+                                  " " +
+                                  unit +
+                                  "</b> to target " +
+                                  wfmt(s.target_g, unit) +
+                                  ' <span class="muted">· ' +
+                                  (s.projected_date
+                                      ? "est. " +
+                                        esc(longDay(s.projected_date)) +
+                                        " at this rate"
+                                      : s.weekly_rate_g != null
+                                        ? "current trend is not heading there"
+                                        : "needs a trend") +
+                                  "</span>";
+                    }
+                    return (
+                        '<section class="card hero w-hero" aria-labelledby="h-w"><h3 id="h-w" class="micro">Current weight</h3><div class="w-now"><b>' +
+                        wfmt(s.latest_g, unit) +
+                        '</b><span class="unit">' +
+                        unit +
+                        '</span><span class="when">Logged ' +
+                        esc(shortDay(s.latest_date)) +
+                        '</span></div><p class="w-line">' +
+                        change +
+                        "</p>" +
+                        (target ? '<p class="w-line">' + target + "</p>" : "") +
+                        "</section>"
+                    );
+                }
+                function bodyFormHtml() {
+                    return (
+                        '<section class="card"><details class="body-box" id="body-box"' +
+                        (bodyOpen ? " open" : "") +
+                        '><summary>Body details</summary><p class="note">Used only for BMI, your healthy weight range and the estimated daily burn (Mifflin-St Jeor × 1.2 for a desk day, plus your workouts’ active calories).</p>' +
+                        '<form id="body-form" class="body-form" novalidate>' +
+                        '<div class="field"><label for="b-height">Height</label><span class="pair"><input class="input" id="b-height" type="number" inputmode="decimal" step="0.1" min="20" max="272" /><select class="input" id="b-unit" aria-label="Height unit"><option value="cm">cm</option><option value="in">in</option></select></span></div>' +
+                        '<label class="field" for="b-birth">Birth date<input class="input" id="b-birth" type="date" /></label>' +
+                        '<label class="field" for="b-sex">Sex<select class="input" id="b-sex"><option value="">—</option><option value="male">Male</option><option value="female">Female</option></select></label>' +
+                        '<div class="form-foot"><button type="submit" class="btn primary" id="b-save">Save</button><span class="b-status ' +
+                        bodyStatus.cls +
+                        '" id="b-status" role="status">' +
+                        esc(bodyStatus.text) +
+                        "</span></div></form></details></section>"
+                    );
+                }
+                function fillBodyForm() {
+                    const body = data.body;
+                    const d = bodyDraft;
+                    const unit = d
+                        ? d.unit
+                        : data.weightUnit === "lb"
+                          ? "in"
+                          : "cm";
+                    $("b-unit").value = unit;
+                    $("b-height").value = d
+                        ? d.height
+                        : body.height_cm == null
+                          ? ""
+                          : unit === "in"
+                            ? (body.height_cm / 2.54).toFixed(1)
+                            : String(body.height_cm);
+                    $("b-birth").value = d ? d.birth : body.birth_date || "";
+                    $("b-sex").value = d ? d.sex : body.sex || "";
+                    // Open it when something is missing, so the ask is
+                    // visible — unless the user has toggled it themselves.
+                    if (
+                        detailsMissing() &&
+                        !bodyTouched &&
+                        !$("body-box").open
+                    ) {
+                        // The toggle event fires async; its handler
+                        // consumes this flag, so it is set only when a
+                        // toggle will actually follow.
+                        bodyBoxProgrammatic = true;
+                        $("body-box").open = true;
+                        bodyOpen = true;
+                    }
+                }
+                function setBodyStatus(text, cls) {
+                    clearTimeout(bodyStatusTimer);
+                    bodyStatus = { text: text, cls: cls || "" };
+                    const st = $("b-status");
+                    if (st) {
+                        st.className = "b-status " + bodyStatus.cls;
+                        st.textContent = text;
+                    }
+                }
+                function wireBodyForm() {
+                    const box = $("body-box");
+                    box.addEventListener("toggle", function () {
+                        bodyOpen = box.open;
+                        if (bodyBoxProgrammatic) bodyBoxProgrammatic = false;
+                        else bodyTouched = true;
+                    });
+                    $("body-form").addEventListener("input", function () {
+                        bodyDraft = {
+                            height: $("b-height").value,
+                            unit: $("b-unit").value,
+                            birth: $("b-birth").value,
+                            sex: $("b-sex").value,
+                        };
+                    });
+                    $("body-form").addEventListener("submit", function (ev) {
+                        ev.preventDefault();
+                        const btn = $("b-save");
+                        const h = $("b-height").value.trim();
+                        btn.disabled = true;
+                        setBodyStatus("Saving…");
+                        fetch("/api/dashboard/body", {
+                            method: "POST",
+                            headers: {
+                                Authorization: "Bearer " + token,
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                                height: h === "" ? null : Number(h),
+                                height_unit: $("b-unit").value,
+                                birth_date: $("b-birth").value || null,
+                                sex: $("b-sex").value || null,
+                            }),
+                        })
+                            .then(function (r) {
+                                return r
+                                    .json()
+                                    .catch(function () {
+                                        return {};
+                                    })
+                                    .then(function (b) {
+                                        return {
+                                            ok: r.ok,
+                                            status: r.status,
+                                            body: b,
+                                        };
+                                    });
+                            })
+                            .then(function (res) {
+                                if ($("b-save")) $("b-save").disabled = false;
+                                if (res.status === 401) return signOut();
+                                if (!res.ok) {
+                                    setBodyStatus(
+                                        (res.body &&
+                                            res.body.error_description) ||
+                                            "Could not save.",
+                                        "err",
+                                    );
+                                    return;
+                                }
+                                bodyDraft = null;
+                                setBodyStatus("Saved.");
+                                bodyStatusTimer = setTimeout(function () {
+                                    const st = $("b-status");
+                                    if (st) st.classList.add("fade");
+                                    bodyStatusTimer = setTimeout(function () {
+                                        setBodyStatus("");
+                                    }, 450);
+                                }, 4000);
+                                refresh();
+                            })
+                            .catch(function () {
+                                if ($("b-save")) $("b-save").disabled = false;
+                                setBodyStatus(
+                                    "Could not reach the server.",
+                                    "err",
+                                );
+                            });
+                    });
+                }
+
                 RENDER.body = function () {
-                    $("body-body").innerHTML = '<div class="card">Body</div>';
+                    const s = data.weightStats;
+                    const unit = data.weightUnit;
+                    const pts = data.weights.length;
+                    const windowDays =
+                        dayDiff(data.weightWindowStart, data.endDate) + 1;
+                    $("body-body").innerHTML =
+                        '<div class="stack">' +
+                        (detailsMissing()
+                            ? '<div class="notice"><span><b>Missing details.</b> Add your height, birth date and sex to see BMI and estimated burn.</span></div>'
+                            : "") +
+                        weightHero(s, unit) +
+                        '<div class="body-grid"><div class="col">' +
+                        bodyStats(s, unit) +
+                        bodyFormHtml() +
+                        '</div><div class="col"><section class="card" aria-labelledby="h-wchart"><div class="card-head"><div><h3 id="h-wchart">Weight · since ' +
+                        esc(shortDay(data.weightWindowStart)) +
+                        '</h3><p class="note">' +
+                        (pts
+                            ? plural(pts, "weigh-in") +
+                              " since " +
+                              esc(longDay(data.weightWindowStart)) +
+                              ", in " +
+                              unit +
+                              "."
+                            : "No weigh-ins in the last " +
+                              windowDays +
+                              " days.") +
+                        "</p></div></div>" +
+                        (pts
+                            ? legend(
+                                  [[LG.dotline(), "Weight"]]
+                                      .concat(
+                                          s.target_g != null
+                                              ? [[LG.line(true), "Target"]]
+                                              : [],
+                                      )
+                                      .concat(
+                                          s.healthy_min_g != null
+                                              ? [
+                                                    [
+                                                        LG.bar("m-band"),
+                                                        "Healthy BMI range",
+                                                    ],
+                                                ]
+                                              : [],
+                                      ),
+                              ) + '<div class="plot" id="weight-plot"></div>'
+                            : '<p class="empty">No weigh-ins yet. Ask Claude to log your weight.</p>') +
+                        "</section></div></div></div>";
+                    fillBodyForm();
+                    wireBodyForm();
+                };
+
+                // Time-scaled, not index-scaled: weigh-ins are irregular, and
+                // even spacing would make a two-week gap look like a day.
+                CHARTS.body = function () {
+                    const host = $("weight-plot");
+                    if (!host || !host.clientWidth) return;
+                    const unit = data.weightUnit;
+                    const s = data.weightStats;
+                    const pts = data.weights
+                        .map((w) => ({
+                            date: w.date,
+                            v: toUnit(w.weight_g, unit),
+                        }))
+                        .sort((a, b) => (a.date < b.date ? -1 : 1));
+                    const first = pts[0];
+                    const last = pts[pts.length - 1];
+                    const c = chartSvg(
+                        host,
+                        isDesktop() ? 300 : 240,
+                        "Body weight since " +
+                            shortDay(data.weightWindowStart) +
+                            ": " +
+                            first.v.toFixed(1) +
+                            " " +
+                            unit +
+                            " on " +
+                            shortDay(first.date) +
+                            " to " +
+                            last.v.toFixed(1) +
+                            " " +
+                            unit +
+                            " on " +
+                            shortDay(last.date) +
+                            (s.target_g != null
+                                ? ", target " +
+                                  wfmt(s.target_g, unit) +
+                                  " " +
+                                  unit
+                                : "") +
+                            ". Use the arrow keys to read each weigh-in.",
+                    );
+                    const svg = c.svg;
+                    const plotW = c.w - PAD.l - PAD.r;
+                    const base = c.h - PAD.b;
+                    const plotH = base - PAD.t;
+                    const vals = pts.map((p) => p.v);
+                    if (s.target_g != null) vals.push(toUnit(s.target_g, unit));
+                    let lo = Math.min.apply(null, vals);
+                    let hi = Math.max.apply(null, vals);
+                    const padY = (hi - lo) * 0.2 || 1;
+                    lo -= padY;
+                    hi += padY;
+                    const t0 = parseDay(data.weightWindowStart).getTime();
+                    const t1 = parseDay(data.endDate).getTime();
+                    const xAt = (iso) =>
+                        PAD.l +
+                        (t1 === t0
+                            ? plotW / 2
+                            : ((parseDay(iso).getTime() - t0) / (t1 - t0)) *
+                              plotW);
+                    const yAt = (v) => base - ((v - lo) / (hi - lo)) * plotH;
+                    if (s.healthy_min_g != null) {
+                        const a = Math.max(lo, toUnit(s.healthy_min_g, unit));
+                        const b = Math.min(hi, toUnit(s.healthy_max_g, unit));
+                        if (b > a)
+                            svg.appendChild(
+                                svgEl("rect", {
+                                    x: PAD.l,
+                                    y: yAt(b),
+                                    width: plotW,
+                                    height: yAt(a) - yAt(b),
+                                    class: "m-band",
+                                }),
+                            );
+                    }
+                    for (let i = 0; i <= 3; i++) {
+                        const v = lo + ((hi - lo) / 3) * i;
+                        svg.appendChild(
+                            svgEl("line", {
+                                x1: PAD.l,
+                                x2: PAD.l + plotW,
+                                y1: yAt(v),
+                                y2: yAt(v),
+                                class: "gridline",
+                            }),
+                        );
+                        svgText(
+                            svg,
+                            PAD.l - 8,
+                            yAt(v) + 4,
+                            v.toFixed(1),
+                            "ax",
+                            "end",
+                        );
+                    }
+                    if (s.target_g != null) {
+                        const ty = yAt(toUnit(s.target_g, unit));
+                        svg.appendChild(
+                            svgEl("line", {
+                                x1: PAD.l,
+                                x2: PAD.l + plotW,
+                                y1: ty,
+                                y2: ty,
+                                class: "m-target",
+                            }),
+                        );
+                        svgText(
+                            svg,
+                            PAD.l + plotW,
+                            ty - 7,
+                            "Target " + wfmt(s.target_g, unit),
+                            "goal-lbl",
+                            "end",
+                        );
+                    }
+                    svg.appendChild(
+                        svgEl("path", {
+                            d: pts
+                                .map(
+                                    (p, i) =>
+                                        (i ? "L" : "M") +
+                                        xAt(p.date) +
+                                        "," +
+                                        yAt(p.v),
+                                )
+                                .join(" "),
+                            class: "m-wline",
+                        }),
+                    );
+                    const r = pts.length > 60 ? 2.5 : 4;
+                    pts.forEach(function (p) {
+                        svg.appendChild(
+                            svgEl("circle", {
+                                cx: xAt(p.date),
+                                cy: yAt(p.v),
+                                r: r,
+                                class: "m-wdot",
+                            }),
+                        );
+                    });
+                    [data.weightWindowStart, data.endDate].forEach(
+                        function (iso, k) {
+                            svgText(
+                                svg,
+                                k ? PAD.l + plotW : PAD.l,
+                                c.h - 8,
+                                shortDay(iso),
+                                "ax",
+                                k ? "end" : "start",
+                            );
+                        },
+                    );
+                    inspect(
+                        svg,
+                        pts.map(function (p) {
+                            const rows = [
+                                [
+                                    "s-accent",
+                                    "Weight",
+                                    p.v.toFixed(1) + " " + unit,
+                                    1,
+                                ],
+                            ];
+                            if (s.height_cm)
+                                rows.push([
+                                    null,
+                                    "BMI",
+                                    (
+                                        (unit === "lb"
+                                            ? p.v * 0.45359237
+                                            : p.v) /
+                                        Math.pow(s.height_cm / 100, 2)
+                                    ).toFixed(1),
+                                ]);
+                            const t = tipContent(longDay(p.date), rows);
+                            return {
+                                x: xAt(p.date),
+                                html: t.html,
+                                text: t.text,
+                            };
+                        }),
+                        PAD.t,
+                        base,
+                    );
                 };
 
                 /* ================= MEALS ================= */
@@ -3786,7 +4459,6 @@
                     renderBanners();
                     renderRangeHeads();
                     renderHeader();
-                    if (typeof fillBodyForm === "function") fillBodyForm();
                     paint();
                 }
 
