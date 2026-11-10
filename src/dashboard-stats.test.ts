@@ -4,6 +4,8 @@ import {
     buildEstimateVsScale,
     buildLast7,
     buildWeightStats,
+    granularityFor,
+    groupDays,
 } from "./dashboard-stats.js";
 import { buildDailyBuckets } from "./insights.js";
 import type { Meal, NutritionGoals } from "./supabase.js";
@@ -342,6 +344,8 @@ describe("buildLast7", () => {
         balances.map((balance_g, i) => ({
             date: `2026-11-0${i + 1}`,
             balance_g,
+            // 10 kcal per gram here, so the kcal sums are easy to read.
+            balance_kcal: balance_g == null ? null : balance_g * 10,
             burn_kcal: noBurn ? null : 2000,
             in_progress: i === balances.length - 1,
         }));
@@ -364,6 +368,9 @@ describe("buildLast7", () => {
         // Nov 1 is outside, Nov 5 unlogged, today in progress → 6 days.
         expect(r.est_days).toBe(6);
         expect(r.est_net_g).toBe(-210);
+        // Same 6 days in kcal: the net, and the average per day.
+        expect(r.est_net_kcal).toBe(-2100);
+        expect(r.est_avg_kcal).toBe(-350);
         expect(r.has_burn).toBe(true);
     });
 
@@ -394,5 +401,138 @@ describe("buildLast7", () => {
         expect(r.est_net_g).toBeNull();
         expect(r.est_days).toBe(0);
         expect(r.has_burn).toBe(false);
+        expect(r.est_net_kcal).toBeNull();
+        expect(r.est_avg_kcal).toBeNull();
+    });
+});
+
+describe("balance_kcal on each day", () => {
+    test("eaten − burn in kcal, null exactly when balance_g is", () => {
+        const buckets = buildDailyBuckets(
+            [meal("2026-11-08T12:00:00Z", 2000)],
+            [],
+            "2026-11-08",
+            "2026-11-09",
+            "UTC",
+        );
+        const days = buildDashboardDays(
+            buckets,
+            new Map([["2026-11-08", 300]]),
+            goals(),
+            body,
+            [{ date: "2026-11-01", weight_g: 80_000 }],
+            "2026-11-09",
+        );
+        // 2000 eaten − (1768 + 300) = −68 kcal → −9 g.
+        expect(days[0]!.balance_kcal).toBe(-68);
+        expect(days[0]!.balance_g).toBe(-9);
+        // Nov 9: nothing eaten → both unknown.
+        expect(days[1]!.balance_kcal).toBeNull();
+        expect(days[1]!.balance_g).toBeNull();
+    });
+});
+
+describe("groupDays", () => {
+    // A row per day from `start`, the last one today (in progress).
+    // `eaten` null = an unlogged day.
+    const row = (date: string, eaten: number | null, inProgress = false) => ({
+        date,
+        calories: eaten ?? 0,
+        protein_g: eaten == null ? 0 : 100,
+        carbs_g: eaten == null ? 0 : 200,
+        fat_g: eaten == null ? 0 : 60,
+        fiber_g: eaten == null ? 0 : 25,
+        mealCount: eaten == null ? 0 : 3,
+        goal_calories: 2000,
+        bmr_kcal: 1700,
+        active_kcal: 300,
+        burn_kcal: 2000,
+        balance_g:
+            eaten == null || inProgress
+                ? eaten == null
+                    ? null
+                    : -100
+                : Math.round((eaten - 2000) / 7.7),
+        balance_kcal: eaten == null ? null : eaten - 2000,
+        in_progress: inProgress,
+    });
+    const range = (start: string, eats: (number | null)[]) =>
+        eats.map((e, i) => {
+            const d = new Date(`${start}T00:00:00Z`);
+            d.setUTCDate(d.getUTCDate() + i);
+            return row(d.toISOString().slice(0, 10), e, i === eats.length - 1);
+        });
+
+    test("granularity follows the range: 7 → day, 30 → week, 365 → month", () => {
+        expect(granularityFor(7)).toBe("day");
+        expect(granularityFor(30)).toBe("week");
+        expect(granularityFor(365)).toBe("month");
+    });
+
+    test("daily: one bar per day, today included as it stands", () => {
+        const b = groupDays(
+            range("2026-11-03", [1800, null, 2200, 1500, 1900, 2100, 900]),
+            "day",
+        );
+        expect(b).toHaveLength(7);
+        expect(b[1]!.calories).toBeNull(); // unlogged: no bar, not zero
+        expect(b[1]!.goal_calories).toBe(2000); // the goal line stays
+        expect(b[6]!.calories).toBe(900);
+        expect(b[6]!.partial).toBe(true);
+        // Today's balance is never counted while it runs.
+        expect(b[6]!.balance_g_sum).toBeNull();
+    });
+
+    test("weekly: 4 blocks of 7 ending today, averages per logged day", () => {
+        // 30 days Oct 12 … Nov 10; weeks Oct 14–20, 21–27, Oct 28–Nov 3, Nov 4–10.
+        const eats: (number | null)[] = Array(30).fill(2100);
+        eats[8] = null; // Oct 20 unlogged, inside week 1
+        for (let i = 9; i < 16; i++) eats[i] = null; // Oct 21–27: an empty week
+        eats[29] = 500; // today, in progress
+        const b = groupDays(range("2026-10-12", eats), "week");
+        expect(b.map((x) => [x.start, x.end])).toEqual([
+            ["2026-10-14", "2026-10-20"],
+            ["2026-10-21", "2026-10-27"],
+            ["2026-10-28", "2026-11-03"],
+            ["2026-11-04", "2026-11-10"],
+        ]);
+        // Week 1: 6 of 7 days logged; the unlogged day does not drag the avg.
+        expect(b[0]!.days).toBe(7);
+        expect(b[0]!.logged_days).toBe(6);
+        expect(b[0]!.calories).toBe(2100);
+        // The sum over the logged complete days, and the per-day average.
+        expect(b[0]!.balance_kcal_sum).toBe(600);
+        expect(b[0]!.balance_kcal).toBe(100);
+        expect(b[0]!.balance_days).toBe(6);
+        // An empty week draws no bar but keeps its reference lines.
+        expect(b[1]!.logged_days).toBe(0);
+        expect(b[1]!.calories).toBeNull();
+        expect(b[1]!.balance_g_sum).toBeNull();
+        expect(b[1]!.burn_kcal).toBe(2000);
+        expect(b[1]!.bmr_kcal! + b[1]!.active_kcal!).toBe(b[1]!.burn_kcal!);
+        // The current week: today's 500 kcal does not drag the average.
+        expect(b[3]!.partial).toBe(true);
+        expect(b[3]!.logged_days).toBe(6);
+        expect(b[3]!.calories).toBe(2100);
+    });
+
+    test("monthly: the last 12 calendar months, the current one partial", () => {
+        // 365 days ending 2026-11-10 start 2025-11-11: Dec 2025 … Nov 2026.
+        const eats: (number | null)[] = Array(365).fill(2000);
+        const b = groupDays(range("2025-11-11", eats), "month");
+        expect(b).toHaveLength(12);
+        expect(b[0]!.start).toBe("2025-12-01");
+        expect(b[0]!.end).toBe("2025-12-31");
+        expect(b[0]!.days).toBe(31);
+        expect(b[11]!.start).toBe("2026-11-01");
+        expect(b[11]!.end).toBe("2026-11-10");
+        expect(b[11]!.partial).toBe(true);
+        expect(b[10]!.partial).toBe(false);
+        // February 2026 has 28 days.
+        expect(b[2]!.days).toBe(28);
+    });
+
+    test("no rows → no bars", () => {
+        expect(groupDays([], "week")).toEqual([]);
     });
 });

@@ -109,6 +109,13 @@ const DISHES: Record<string, string[]> = {
         "Skyr with honey",
         "Handful of mixed nuts",
     ],
+    treat: [
+        "Pizza night — 3 slices pepperoni",
+        "Birthday cake and prosecco",
+        "Two IPAs and nachos at the bar",
+        "Tiramisu after dinner out",
+        "Party snacks: chips, dip, mini sausage rolls",
+    ],
 };
 
 /** A stable, uuid-shaped id from a readable one (FNV-1a, four seeds). The
@@ -327,7 +334,10 @@ export function buildScenario(name: ScenarioName, today: string): FixtureData {
                 ),
             );
         } else {
-            if (rnd() < 0.1) continue; // ~10% unlogged days
+            // ~10% unlogged days — never inside over-goal's forced week, so
+            // its "5 of the last 7 over" does not depend on the PRNG stream.
+            const forcedWeek = name === "over-goal" && k <= 6;
+            if (rnd() < 0.1 && !forcedWeek) continue;
             // over-goal: 4 of the 6 days before today are over (5 of 7 with
             // today). Elsewhere ~20% of days run over.
             const roll = rnd();
@@ -339,7 +349,26 @@ export function buildScenario(name: ScenarioName, today: string): FixtureData {
                 ? goal + 80 + rnd() * 420
                 : goal - 60 - rnd() * 480;
             const count = 2 + Math.floor(rnd() * 3);
-            meals.push(...dayMeals(date, total, count, rnd, tz, `m-${date}`));
+            // About one evening in eight is a treat (pizza, party, drinks
+            // out) — on its own row, as the user logs it. Kept out of the
+            // last week so over-goal's "5 of the last 7" stays exact.
+            const treat = k > 7 && rnd() < 0.12 ? 350 + rnd() * 450 : 0;
+            meals.push(
+                ...dayMeals(date, total - treat, count, rnd, tz, `m-${date}`),
+            );
+            if (treat)
+                meals.push(
+                    makeMeal(
+                        `t-${date}`,
+                        date,
+                        21,
+                        15,
+                        "treat",
+                        treat,
+                        rnd,
+                        tz,
+                    ),
+                );
         }
 
         // Water: two to four drinks a day.

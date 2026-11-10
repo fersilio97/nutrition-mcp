@@ -51,6 +51,9 @@ export interface DashboardDay {
     /** Estimated grams gained (+) / lost (−). Null on a day with no meals —
      *  an unlogged day is unknown, not a day of eating nothing. */
     balance_g: number | null;
+    /** The same balance in kcal: eaten − est. burn (rounded). Null exactly
+     *  when balance_g is. */
+    balance_kcal: number | null;
     /** True for today: the day is still running, so its balance is partial. */
     in_progress: boolean;
 }
@@ -89,6 +92,10 @@ export function buildDashboardDays(
             balance_g:
                 burn != null && b.meals.length > 0
                     ? balanceGrams(b.calories, burn)
+                    : null,
+            balance_kcal:
+                burn != null && b.meals.length > 0
+                    ? Math.round(b.calories - burn)
                     : null,
             in_progress: b.date === today,
         };
@@ -304,6 +311,9 @@ export interface Last7 {
      *  — the Trends "Net est. change" definition over a fixed week. Null when
      *  no such day has a balance. */
     est_net_g: number | null;
+    /** The same days' balance in kcal: the sum, and the average per day. */
+    est_net_kcal: number | null;
+    est_avg_kcal: number | null;
     /** How many complete days carried a balance (0–7). */
     est_days: number;
     /** Whether any day in the window has an estimated burn at all; false
@@ -321,7 +331,7 @@ export const LAST7_DAYS = 7;
 export function buildLast7(
     dayRows: Pick<
         DashboardDay,
-        "date" | "balance_g" | "burn_kcal" | "in_progress"
+        "date" | "balance_g" | "balance_kcal" | "burn_kcal" | "in_progress"
     >[],
     weighIns: WeighIn[],
     today: string,
@@ -333,6 +343,7 @@ export function buildLast7(
         (r) => r.date >= from && r.date < today && !r.in_progress,
     );
     const logged = week.filter((r) => r.balance_g != null);
+    const netKcal = logged.reduce((a, r) => a + (r.balance_kcal ?? 0), 0);
     return {
         from,
         to: today,
@@ -341,6 +352,10 @@ export function buildLast7(
         weight_last_date: scale.last_date,
         est_net_g: logged.length
             ? logged.reduce((a, r) => a + r.balance_g!, 0)
+            : null,
+        est_net_kcal: logged.length ? netKcal : null,
+        est_avg_kcal: logged.length
+            ? Math.round(netKcal / logged.length)
             : null,
         est_days: logged.length,
         has_burn: dayRows.some(
@@ -353,4 +368,167 @@ function shiftDay(date: string, n: number): string {
     const d = new Date(`${date}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() + n);
     return d.toISOString().slice(0, 10);
+}
+
+// ---------- Trends grouping ----------
+
+export type Granularity = "day" | "week" | "month";
+
+/** The chart grouping for a range: 7 days → daily bars, 30 → weekly, a year
+ *  → monthly. Hand-edited ?days= values fall into the nearest band. */
+export function granularityFor(days: number): Granularity {
+    if (days <= 14) return "day";
+    if (days <= 60) return "week";
+    return "month";
+}
+
+/**
+ * One bar of the Trends charts. Every per-day figure is an AVERAGE PER LOGGED
+ * DAY (a day with meals), so a week with two unlogged days is not dragged
+ * toward zero. A bucket with no logged days has null figures and draws no bar.
+ */
+export interface TrendBucket {
+    start: string;
+    end: string;
+    /** Calendar days in the bucket (within the range). */
+    days: number;
+    /** Days whose figures count: logged (mealCount > 0) and, for weekly and
+     *  monthly bars, complete — today joins its bucket once it ends. */
+    logged_days: number;
+    /** The bucket contains today (still running); for months, the current
+     *  month. Drawn dimmed and labelled "so far". */
+    partial: boolean;
+    calories: number | null;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+    fiber_g: number | null;
+    /** Reference levels: averaged over the logged days; with none logged,
+     *  over every day that has one, so the goal and burn lines stay
+     *  continuous across an empty week. */
+    goal_calories: number | null;
+    bmr_kcal: number | null;
+    active_kcal: number | null;
+    burn_kcal: number | null;
+    /** Average daily balance over the logged complete days that have one. */
+    balance_kcal: number | null;
+    balance_g: number | null;
+    /** Sum of the balance over those days — the body-change band's bar. */
+    balance_g_sum: number | null;
+    balance_kcal_sum: number | null;
+    /** How many days the balance figures cover. */
+    balance_days: number;
+}
+
+type GroupRow = Pick<
+    DashboardDay,
+    | "date"
+    | "calories"
+    | "protein_g"
+    | "carbs_g"
+    | "fat_g"
+    | "fiber_g"
+    | "mealCount"
+    | "goal_calories"
+    | "bmr_kcal"
+    | "active_kcal"
+    | "burn_kcal"
+    | "balance_g"
+    | "balance_kcal"
+    | "in_progress"
+>;
+
+const avgOf = (xs: number[]): number | null =>
+    xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null;
+
+function bucketOf(
+    rows: GroupRow[],
+    start: string,
+    end: string,
+    granularity: Granularity,
+): TrendBucket {
+    // A daily bar shows today as it stands (dimmed); a weekly or monthly
+    // average would be dragged down by a half-eaten day, so there today
+    // counts only once it has ended.
+    const counted = rows.filter(
+        (r) => r.mealCount > 0 && (granularity === "day" || !r.in_progress),
+    );
+    const ref = counted.length ? counted : rows;
+    const pick = (list: GroupRow[], f: (r: GroupRow) => number | null) =>
+        list.map(f).filter((v): v is number => v != null);
+    const withBurn = (r: GroupRow) => r.burn_kcal != null;
+    const balanced = rows.filter((r) => !r.in_progress && r.balance_g != null);
+    const sumG = balanced.reduce((a, r) => a + r.balance_g!, 0);
+    const sumK = balanced.reduce((a, r) => a + (r.balance_kcal ?? 0), 0);
+    return {
+        start,
+        end,
+        days: rows.length,
+        logged_days: counted.length,
+        partial: rows.some((r) => r.in_progress),
+        calories: avgOf(pick(counted, (r) => r.calories)),
+        protein_g: avgOf(pick(counted, (r) => r.protein_g)),
+        carbs_g: avgOf(pick(counted, (r) => r.carbs_g)),
+        fat_g: avgOf(pick(counted, (r) => r.fat_g)),
+        fiber_g: avgOf(pick(counted, (r) => r.fiber_g)),
+        goal_calories: avgOf(pick(ref, (r) => r.goal_calories)),
+        bmr_kcal: avgOf(pick(ref, (r) => r.bmr_kcal)),
+        // Active averaged over the same days as burn (no record = 0), so
+        // resting + active adds up to the burn shown.
+        active_kcal: avgOf(
+            pick(ref.filter(withBurn), (r) => r.active_kcal ?? 0),
+        ),
+        burn_kcal: avgOf(pick(ref, (r) => r.burn_kcal)),
+        balance_kcal: avgOf(pick(balanced, (r) => r.balance_kcal)),
+        balance_g: avgOf(pick(balanced, (r) => r.balance_g)),
+        balance_g_sum: balanced.length ? sumG : null,
+        balance_kcal_sum: balanced.length ? sumK : null,
+        balance_days: balanced.length,
+    };
+}
+
+/**
+ * The Trends bars for a range. `rows` are the range's daily rows (ascending,
+ * ending today). Daily: one bucket per day. Weekly: consecutive 7-day blocks
+ * ending today, as many whole weeks as the range holds (4 for 30 days).
+ * Monthly: calendar months, newest = the current (partial) month, at most 12,
+ * each only if the range reaches its first day.
+ */
+export function groupDays(
+    rows: GroupRow[],
+    granularity: Granularity,
+): TrendBucket[] {
+    if (!rows.length) return [];
+    const end = rows[rows.length - 1]!.date;
+    const between = (a: string, b: string) =>
+        rows.filter((r) => r.date >= a && r.date <= b);
+    if (granularity === "day")
+        return rows.map((r) => bucketOf([r], r.date, r.date, "day"));
+    if (granularity === "week") {
+        const weeks = Math.max(1, Math.floor(rows.length / 7));
+        const out: TrendBucket[] = [];
+        for (let k = weeks - 1; k >= 0; k--) {
+            const e = shiftDay(end, -7 * k);
+            const s = shiftDay(e, -6);
+            out.push(bucketOf(between(s, e), s, e, "week"));
+        }
+        return out;
+    }
+    const first = rows[0]!.date;
+    const out: TrendBucket[] = [];
+    let y = Number(end.slice(0, 4));
+    let m = Number(end.slice(5, 7));
+    for (let i = 0; i < 12; i++) {
+        const s = `${y}-${String(m).padStart(2, "0")}-01`;
+        if (i > 0 && s < first) break;
+        const last = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+        const e = last < end ? last : end;
+        out.unshift(bucketOf(between(s, e), s, e, "month"));
+        m -= 1;
+        if (m === 0) {
+            m = 12;
+            y -= 1;
+        }
+    }
+    return out;
 }

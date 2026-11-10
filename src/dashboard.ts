@@ -63,6 +63,8 @@ import {
     buildEstimateVsScale,
     buildLast7,
     buildWeightStats,
+    granularityFor,
+    groupDays,
     LAST7_DAYS,
 } from "./dashboard-stats.js";
 
@@ -279,6 +281,11 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         // Today's two 7-day figures, from the widened rows: fixed to the
         // last week whatever the selected range.
         last7: buildLast7(allRows, weighIns, endDate),
+        // The Trends charts' bars: daily for 7 days, weekly for 30, monthly
+        // for a year — averages per logged day (dashboard-stats.ts).
+        // `daily` above is unchanged and still feeds the tiles and Today.
+        granularity: granularityFor(days),
+        trendBuckets: groupDays(dayRows, granularityFor(days)),
         weights: weight.map((w) => ({
             // Local calendar day, resolved here: the page slicing the UTC
             // ISO string would file an evening weigh-in under tomorrow.

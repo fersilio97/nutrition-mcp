@@ -64,6 +64,20 @@ describe("preview scenarios say what they claim", () => {
         expect(d.daily.filter((r) => r.mealCount === 0).length).toBeGreaterThan(
             0,
         );
+        // A few treats, so the fifth meal type is reviewable in the preview.
+        expect(d.meals.some((m) => m.meal_type === "treat")).toBe(true);
+    });
+
+    test("trend buckets per range: 7 daily, 4 weekly, 12 monthly", () => {
+        expect(payloadAt("full", 7).trendBuckets).toHaveLength(7);
+        const w = payloadAt("full", 30);
+        expect(w.granularity).toBe("week");
+        expect(w.trendBuckets).toHaveLength(4);
+        expect(w.trendBuckets.at(-1)!.end).toBe(TODAY);
+        const m = payloadAt("full", 365);
+        expect(m.granularity).toBe("month");
+        expect(m.trendBuckets).toHaveLength(12);
+        expect(m.trendBuckets.at(-1)!.partial).toBe(true);
     });
 
     test("over-goal: today is 300 over and 5 of the last 7 days are over", () => {
