@@ -196,7 +196,8 @@
             }
             button,
             input,
-            select {
+            select,
+            textarea {
                 font: inherit;
                 color: inherit;
             }
@@ -1775,10 +1776,107 @@
                     color: var(--ink);
                     font-weight: 600;
                 }
+                .meals-table td.e {
+                    order: 6;
+                    margin-left: auto;
+                }
+                /* The edit row continues the meal's card. */
+                .meals-table tr.edit-row {
+                    padding: 0 var(--s4) var(--s4);
+                    background: var(--surface);
+                    border: 1px solid var(--border);
+                    border-top: 0;
+                    box-shadow: var(--shadow-card);
+                }
+                .meals-table tr.edit-row.last {
+                    border-radius: 0 0 var(--r-md) var(--r-md);
+                }
+                .meals-table tr.edit-row td {
+                    padding: 0;
+                    border: 0;
+                }
             }
             @media (min-width: 1024px) {
                 .meals-table td.mac b {
                     font-weight: 400;
+                }
+                .meals-table td.e {
+                    padding-top: 2px;
+                    padding-bottom: 2px;
+                }
+                .meals-table tr.edit-row td {
+                    padding: var(--s2) var(--s3) var(--s4);
+                    border-bottom: 1px solid var(--grid);
+                    background: var(--surface-2);
+                }
+            }
+            .btn-edit {
+                min-height: 36px;
+                min-width: 44px;
+                padding: 0 var(--s3);
+                border: 1px solid var(--control);
+                border-radius: var(--r-sm);
+                background: var(--surface);
+                color: var(--ink);
+                font-size: var(--t-small);
+                font-weight: 600;
+            }
+            .btn-edit:hover {
+                background: var(--surface-2);
+            }
+            .btn-edit[aria-expanded="true"] {
+                background: var(--accent-soft);
+                border-color: var(--accent);
+            }
+            @media (pointer: coarse) {
+                .btn-edit {
+                    min-height: 44px;
+                }
+            }
+            .meals-table tr.meal.editing td {
+                border-bottom-color: transparent;
+            }
+            .me-form {
+                display: grid;
+                gap: var(--s3) var(--s4);
+                padding-top: var(--s3);
+                border-top: 1px dashed var(--border);
+            }
+            .me-form .field {
+                margin: 0;
+            }
+            .me-form textarea.input {
+                height: auto;
+                min-height: 64px;
+                padding: var(--s2) var(--s3);
+                resize: vertical;
+                line-height: 1.4;
+            }
+            .me-nums {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: var(--s3);
+            }
+            .me-form .note {
+                margin: 0;
+            }
+            .meal-flash {
+                margin-bottom: var(--s3);
+            }
+            @media (min-width: 700px) {
+                .me-form {
+                    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(
+                            0,
+                            1.2fr
+                        );
+                }
+                .me-nums,
+                .me-form .form-foot,
+                .me-form .note {
+                    grid-column: 1 / -1;
+                }
+                .me-nums {
+                    grid-template-columns: repeat(6, minmax(0, 1fr));
                 }
             }
 
@@ -5058,6 +5156,219 @@
                 };
 
                 /* ================= MEALS ================= */
+                /* ---------- meal edit (Meals tab) ---------- */
+                // One meal at a time. State survives re-renders (a refetch,
+                // a range change) so a half-finished edit is not lost.
+                let mealEditId = null;
+                let mealDraft = null;
+                let mealFlash = "";
+                let mealFlashTimer = 0;
+                const MEAL_NUMS = [
+                    ["calories", "kcal", 1],
+                    ["protein_g", "Protein g", 0.1],
+                    ["carbs_g", "Carbs g", 0.1],
+                    ["fat_g", "Fat g", 0.1],
+                    ["fiber_g", "Fiber g", 0.1],
+                    ["sugar_g", "Sugar g", 0.1],
+                ];
+                const numStr = (v) => (v == null ? "" : String(v));
+                function mealValues(m) {
+                    const v = {
+                        description: m.description || "",
+                        meal_type: m.meal_type || "",
+                        logged_at: localInputValue(m.logged_at),
+                    };
+                    MEAL_NUMS.forEach(function (n) {
+                        v[n[0]] = numStr(m[n[0]]);
+                    });
+                    return v;
+                }
+                function mealEditForm(m) {
+                    const v = mealDraft || mealValues(m);
+                    const types = ["breakfast", "lunch", "dinner", "snack"];
+                    return (
+                        '<form id="me-form" class="me-form" novalidate aria-label="Edit meal">' +
+                        '<label class="field me-desc" for="me-description">Description<textarea class="input" id="me-description" rows="2" maxlength="2000">' +
+                        esc(v.description) +
+                        "</textarea></label>" +
+                        '<label class="field" for="me-type">Meal<select class="input" id="me-type">' +
+                        (v.meal_type ? "" : '<option value="">—</option>') +
+                        types
+                            .map(function (t) {
+                                return (
+                                    '<option value="' +
+                                    t +
+                                    '"' +
+                                    (v.meal_type === t ? " selected" : "") +
+                                    ">" +
+                                    mealTypeLabel(t) +
+                                    "</option>"
+                                );
+                            })
+                            .join("") +
+                        "</select></label>" +
+                        '<label class="field" for="me-at">Eaten at<input class="input" id="me-at" type="datetime-local" value="' +
+                        esc(v.logged_at) +
+                        '" /></label>' +
+                        '<div class="me-nums">' +
+                        MEAL_NUMS.map(function (n) {
+                            return (
+                                '<label class="field" for="me-' +
+                                n[0] +
+                                '">' +
+                                n[1] +
+                                '<input class="input" id="me-' +
+                                n[0] +
+                                '" type="number" inputmode="decimal" min="0" step="' +
+                                n[2] +
+                                '" value="' +
+                                esc(v[n[0]]) +
+                                '" /></label>'
+                            );
+                        }).join("") +
+                        "</div>" +
+                        '<div class="form-foot"><button type="submit" class="btn primary" id="me-save">Save changes</button><button type="button" class="btn" id="me-cancel">Cancel</button><span class="b-status" id="me-status" role="status"></span></div>' +
+                        '<p class="note">Times are in ' +
+                        esc(data.timezone) +
+                        ". Only the fields you change are saved.</p></form>"
+                    );
+                }
+                function readMealForm() {
+                    const v = {
+                        description: $("me-description").value,
+                        meal_type: $("me-type").value,
+                        logged_at: $("me-at").value,
+                    };
+                    MEAL_NUMS.forEach(function (n) {
+                        v[n[0]] = $("me-" + n[0]).value;
+                    });
+                    return v;
+                }
+                // Only what differs from the meal as listed. A number left
+                // as it was is not sent even if it was blank; a value the
+                // user blanks IS sent, and the server says it can't clear.
+                function mealChanges(m, v) {
+                    const was = mealValues(m);
+                    const out = {};
+                    if (v.description.trim() !== was.description.trim())
+                        out.description = v.description;
+                    if (v.meal_type && v.meal_type !== was.meal_type)
+                        out.meal_type = v.meal_type;
+                    if (v.logged_at && v.logged_at !== was.logged_at)
+                        out.logged_at = v.logged_at;
+                    MEAL_NUMS.forEach(function (n) {
+                        const now = v[n[0]].trim();
+                        const before = was[n[0]];
+                        if (now === before) return;
+                        if (
+                            now !== "" &&
+                            before !== "" &&
+                            Number(now) === Number(before)
+                        )
+                            return;
+                        out[n[0]] = now === "" ? "" : Number(now);
+                    });
+                    return out;
+                }
+                function closeMealEdit(focusId) {
+                    mealEditId = null;
+                    mealDraft = null;
+                    contentDirty.meals = true;
+                    paint();
+                    if (focusId) {
+                        const b = document.querySelector(
+                            '#meals-body [data-edit="' + focusId + '"]',
+                        );
+                        if (b) b.focus();
+                    }
+                }
+                $("meals-body").addEventListener("click", function (ev) {
+                    const ed = ev.target.closest("[data-edit]");
+                    if (ed) {
+                        const id = ed.dataset.edit;
+                        if (mealEditId === id) return closeMealEdit(id);
+                        mealEditId = id;
+                        mealDraft = null;
+                        contentDirty.meals = true;
+                        paint();
+                        const d = $("me-description");
+                        if (d) d.focus();
+                        return;
+                    }
+                    if (ev.target.closest("#me-cancel"))
+                        closeMealEdit(mealEditId);
+                });
+                $("meals-body").addEventListener("input", function (ev) {
+                    if (ev.target.closest("#me-form"))
+                        mealDraft = readMealForm();
+                });
+                $("meals-body").addEventListener("submit", function (ev) {
+                    if (!ev.target.closest("#me-form")) return;
+                    ev.preventDefault();
+                    const id = mealEditId;
+                    const meal = data.meals.filter((m) => m.id === id)[0];
+                    if (!meal) return;
+                    const changes = mealChanges(meal, readMealForm());
+                    const st = $("me-status");
+                    st.className = "b-status";
+                    if (!Object.keys(changes).length) {
+                        st.textContent = "Nothing changed.";
+                        return;
+                    }
+                    $("me-save").disabled = true;
+                    st.textContent = "Saving…";
+                    writeJson(
+                        "PATCH",
+                        "/api/dashboard/meals/" + encodeURIComponent(id),
+                        changes,
+                    )
+                        .then(function (res) {
+                            if ($("me-save")) $("me-save").disabled = false;
+                            if (!res.ok) {
+                                const s = $("me-status");
+                                if (s) {
+                                    s.className = "b-status err";
+                                    s.textContent =
+                                        res.status === 404
+                                            ? "This meal no longer exists."
+                                            : (res.body &&
+                                                  res.body.error_description) ||
+                                              "Could not save.";
+                                }
+                                return;
+                            }
+                            mealEditId = null;
+                            mealDraft = null;
+                            mealFlash =
+                                "Saved " +
+                                mealTypeLabel(
+                                    res.body.meal.meal_type,
+                                ).toLowerCase() +
+                                " · " +
+                                shortDay(localDate(res.body.meal.logged_at)) +
+                                ", " +
+                                localTime(res.body.meal.logged_at) +
+                                ".";
+                            clearTimeout(mealFlashTimer);
+                            mealFlashTimer = setTimeout(function () {
+                                mealFlash = "";
+                                const f = document.querySelector(".meal-flash");
+                                if (f) f.remove();
+                            }, 6000);
+                            // Totals, charts and Today all move with it.
+                            refresh();
+                        })
+                        .catch(function (err) {
+                            if (err && err.message === "unauthorized") return;
+                            if ($("me-save")) $("me-save").disabled = false;
+                            const s = $("me-status");
+                            if (s) {
+                                s.className = "b-status err";
+                                s.textContent = "Could not reach the server.";
+                            }
+                        });
+                });
+
                 RENDER.meals = function () {
                     const meals = data.meals;
                     if (!meals.length) {
@@ -5113,7 +5424,7 @@
                                 " · Fib " +
                                 fmt(sum(g.meals, "fiber_g"));
                             return (
-                                '<tbody><tr class="day"><th colspan="9" scope="colgroup">' +
+                                '<tbody><tr class="day"><th colspan="10" scope="colgroup">' +
                                 esc(day) +
                                 partial +
                                 '<span class="tot">' +
@@ -5121,11 +5432,12 @@
                                 "</span></th></tr>" +
                                 g.meals
                                     .map(function (m, i) {
+                                        const editing = mealEditId === m.id;
+                                        const last = i === g.meals.length - 1;
                                         return (
                                             '<tr class="meal' +
-                                            (i === g.meals.length - 1
-                                                ? " last"
-                                                : "") +
+                                            (last && !editing ? " last" : "") +
+                                            (editing ? " editing" : "") +
                                             '"><td class="t">' +
                                             esc(localTime(m.logged_at)) +
                                             '</td><td class="ty">' +
@@ -5144,7 +5456,26 @@
                                                     "</b></td>"
                                                 );
                                             }).join("") +
-                                            "</tr>"
+                                            '<td class="e"><button type="button" class="btn-edit" data-edit="' +
+                                            esc(m.id) +
+                                            '" aria-expanded="' +
+                                            editing +
+                                            '"' +
+                                            (editing
+                                                ? ' aria-controls="me-form"'
+                                                : "") +
+                                            ' aria-label="Edit ' +
+                                            esc(mealTypeLabel(m.meal_type)) +
+                                            ", " +
+                                            esc(localTime(m.logged_at)) +
+                                            '">Edit</button></td></tr>' +
+                                            (editing
+                                                ? '<tr class="edit-row' +
+                                                  (last ? " last" : "") +
+                                                  '"><td colspan="10">' +
+                                                  mealEditForm(m) +
+                                                  "</td></tr>"
+                                                : "")
                                         );
                                     })
                                     .join("") +
@@ -5153,7 +5484,12 @@
                         })
                         .join("");
                     $("meals-body").innerHTML =
-                        '<div class="card meals-wrap"><table class="meals-table"><caption class="sr-only">Meals in this range, grouped by day, newest first</caption><thead><tr><th scope="col">Time</th><th scope="col">Meal</th><th scope="col">Description</th><th scope="col" class="n">kcal</th><th scope="col" class="n">P</th><th scope="col" class="n">C</th><th scope="col" class="n">F</th><th scope="col" class="n">Fib</th><th scope="col" class="n">Sug</th></tr></thead>' +
+                        (mealFlash
+                            ? '<p class="lw-flash meal-flash" role="status">' +
+                              esc(mealFlash) +
+                              "</p>"
+                            : "") +
+                        '<div class="card meals-wrap"><table class="meals-table"><caption class="sr-only">Meals in this range, grouped by day, newest first</caption><thead><tr><th scope="col">Time</th><th scope="col">Meal</th><th scope="col">Description</th><th scope="col" class="n">kcal</th><th scope="col" class="n">P</th><th scope="col" class="n">C</th><th scope="col" class="n">F</th><th scope="col" class="n">Fib</th><th scope="col" class="n">Sug</th><th scope="col"><span class="sr-only">Edit</span></th></tr></thead>' +
                         body +
                         '</table><p class="meals-foot">Showing the ' +
                         plural(
