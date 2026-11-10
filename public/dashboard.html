@@ -1140,6 +1140,257 @@
             }
 
             /* ===== panel-specific styles are added below ===== */
+
+            /* ---------- Today ---------- */
+            .today-grid {
+                display: grid;
+                gap: var(--s4);
+            }
+            .today-grid > .col {
+                display: grid;
+                gap: var(--s4);
+                align-content: start;
+                min-width: 0;
+            }
+            @media (min-width: 1024px) {
+                .today-grid {
+                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                }
+            }
+            .hero-in {
+                display: grid;
+                justify-items: center;
+                gap: var(--s4);
+            }
+            @media (min-width: 700px) {
+                .hero-in {
+                    grid-template-columns: auto minmax(0, 1fr);
+                    justify-items: stretch;
+                    align-items: center;
+                    gap: var(--s6);
+                }
+            }
+            .ring {
+                position: relative;
+                width: 168px;
+                height: 168px;
+            }
+            .ring svg {
+                width: 100%;
+                height: 100%;
+                display: block;
+            }
+            @media (max-width: 480px) {
+                .ring {
+                    width: 148px;
+                    height: 148px;
+                }
+            }
+            .ring-track {
+                fill: none;
+                stroke: var(--surface-2);
+            }
+            .ring-arc {
+                fill: none;
+                stroke: var(--kcal);
+                stroke-linecap: round;
+                transition: stroke-dashoffset 500ms var(--ease);
+            }
+            .ring-over {
+                fill: none;
+                stroke: url(#hatch-over);
+                stroke-linecap: butt;
+                transition: stroke-dashoffset 500ms var(--ease);
+            }
+            .ring-c {
+                position: absolute;
+                inset: 0;
+                display: grid;
+                place-content: center;
+                text-align: center;
+            }
+            .ring-c b {
+                font-size: var(--t-hero);
+                line-height: 1;
+                font-weight: 700;
+                letter-spacing: -0.02em;
+            }
+            .ring-c span {
+                margin-top: 4px;
+                font-size: var(--t-small);
+                color: var(--muted);
+            }
+            .ring-foot {
+                margin: 0;
+                text-align: center;
+                font-size: var(--t-body);
+            }
+            @media (min-width: 700px) {
+                .ring-foot {
+                    text-align: left;
+                }
+            }
+            .ring-foot .basis {
+                display: block;
+                margin-top: 2px;
+                color: var(--muted);
+                font-size: var(--t-small);
+            }
+            .trio {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                margin-top: var(--s4);
+                border-top: 1px solid var(--border);
+                width: 100%;
+            }
+            .trio > div {
+                padding: var(--s3) var(--s2) 0;
+                min-width: 0;
+            }
+            .trio > div:first-child {
+                padding-left: 0;
+            }
+            @media (min-width: 481px) {
+                .trio > div + div {
+                    padding-left: var(--s4);
+                }
+                .ring-foot {
+                    font-size: 17px;
+                }
+            }
+            .trio > div + div {
+                border-left: 1px solid var(--border);
+            }
+            .trio .figure {
+                margin-top: 4px;
+                font-size: 22px;
+                line-height: 1.1;
+                font-weight: 680;
+                letter-spacing: -0.02em;
+                font-variant-numeric: tabular-nums;
+                display: flex;
+                align-items: center;
+                white-space: nowrap;
+            }
+            .trio .figure small {
+                margin-left: 3px;
+                font-size: var(--t-small);
+                font-weight: 500;
+                color: var(--muted);
+                letter-spacing: 0;
+            }
+            .trio .figure.missing {
+                color: var(--subtle);
+            }
+            .trio .foot {
+                margin-top: 4px;
+                font-size: var(--t-micro);
+                color: var(--muted);
+                line-height: 1.35;
+            }
+            @media (max-width: 380px) {
+                .trio .figure {
+                    font-size: 19px;
+                }
+            }
+            .nutrients {
+                display: grid;
+                gap: var(--s3);
+                margin: 0;
+                padding: 0;
+                list-style: none;
+            }
+            .nutrients li {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                gap: 6px var(--s3);
+                align-items: baseline;
+            }
+            .nutrients .name {
+                font-weight: 600;
+                display: inline-flex;
+                align-items: center;
+            }
+            .nutrients .val {
+                font-variant-numeric: tabular-nums;
+                color: var(--muted);
+                font-size: var(--t-small);
+                display: inline-flex;
+                gap: var(--s2);
+                align-items: center;
+            }
+            .nutrients .val b {
+                color: var(--ink);
+                font-weight: 650;
+            }
+            .track {
+                grid-column: 1 / -1;
+                height: 8px;
+                border-radius: var(--r-pill);
+                background: var(--surface-2);
+                overflow: hidden;
+            }
+            .track i {
+                display: block;
+                height: 100%;
+                width: 0;
+                border-radius: var(--r-pill);
+                transition: width 400ms var(--ease);
+            }
+            .card-head .link-btn {
+                margin-top: -10px;
+                white-space: nowrap;
+            }
+            .meal-list {
+                margin: 0;
+                padding: 0;
+                list-style: none;
+            }
+            .meal-list > li {
+                padding: var(--s3) 0;
+                border-top: 1px solid var(--border);
+            }
+            .meal-list > li:first-child {
+                border-top: 0;
+                padding-top: 0;
+            }
+            .m1 {
+                display: flex;
+                align-items: baseline;
+                gap: var(--s2);
+            }
+            .m-time {
+                font-variant-numeric: tabular-nums;
+                color: var(--muted);
+                font-size: var(--t-small);
+            }
+            .m-type {
+                font-weight: 650;
+                flex: 1;
+                min-width: 0;
+            }
+            .m-kcal {
+                font-variant-numeric: tabular-nums;
+                font-weight: 650;
+                white-space: nowrap;
+            }
+            .m-desc {
+                margin: 2px 0 0;
+                overflow-wrap: anywhere;
+            }
+            .m-mac {
+                margin: 4px 0 0;
+                font-size: var(--t-small);
+                color: var(--muted);
+                font-variant-numeric: tabular-nums;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 2px var(--s3);
+            }
+            .m-mac b {
+                font-weight: 600;
+                color: var(--ink);
+            }
         </style>
     </head>
     <body>
@@ -1472,6 +1723,9 @@
                 // on resize. Only the visible panel is ever painted.
                 const contentDirty = {};
                 const chartsDirty = {};
+                // Set while the page (not the user) opens Body details, so
+                // the auto-open does not count as the user's own toggle.
+                let bodyBoxProgrammatic = false;
 
                 /* ---------- storage (try/catch: private windows) ---------- */
                 function store(k, v) {
@@ -2136,9 +2390,493 @@
                     }
                 });
 
+                /* ================= shared pieces ================= */
+                const isOver = (r) =>
+                    !!r.goal_calories && r.calories > r.goal_calories;
+                const anyLogged = (rows) => rows.some((r) => r.mealCount > 0);
+                const hasBurn = () => data.daily.some((r) => r.burn_kcal);
+                function plural(n, one, many) {
+                    return n + " " + (n === 1 ? one : many || one + "s");
+                }
+                // Every field of the old calories tooltip, plus "Over by".
+                function calTip(r) {
+                    const rows = [
+                        ["s-kcal", "Eaten", fmt(r.calories) + " kcal", 1],
+                    ];
+                    if (r.goal_calories)
+                        rows.push([null, "Goal", fmt(r.goal_calories)]);
+                    if (r.active_kcal)
+                        rows.push([
+                            null,
+                            "incl. active",
+                            "+" + fmt(r.active_kcal),
+                        ]);
+                    if (isOver(r))
+                        rows.push([
+                            null,
+                            "Over by",
+                            fmt(r.calories - r.goal_calories) + " kcal",
+                            1,
+                        ]);
+                    if (r.burn_kcal)
+                        rows.push(["s-burn", "Est. burn", fmt(r.burn_kcal)]);
+                    if (r.balance_g != null)
+                        rows.push([
+                            null,
+                            "Est. change",
+                            fmtSigned(r.balance_g) + " g",
+                        ]);
+                    rows.push([null, "Meals", String(r.mealCount)]);
+                    return tipContent(
+                        longDay(r.date) + (r.in_progress ? " · so far" : ""),
+                        rows,
+                    );
+                }
+                function mealTypeLabel(t) {
+                    if (!t) return "Meal";
+                    return t.charAt(0).toUpperCase() + t.slice(1);
+                }
+                const nz = (v) => (v == null ? "—" : fmt(v));
+                function mealItem(m) {
+                    return (
+                        '<li><div class="m1"><span class="m-time">' +
+                        esc(localTime(m.logged_at)) +
+                        '</span><span class="m-type">' +
+                        esc(mealTypeLabel(m.meal_type)) +
+                        '</span><span class="m-kcal">' +
+                        nz(m.calories) +
+                        ' <span class="m-time">kcal</span></span></div><p class="m-desc">' +
+                        esc(m.description) +
+                        '</p><p class="m-mac"><span>P <b>' +
+                        nz(m.protein_g) +
+                        "</b></span><span>C <b>" +
+                        nz(m.carbs_g) +
+                        "</b></span><span>F <b>" +
+                        nz(m.fat_g) +
+                        "</b></span><span>Fib <b>" +
+                        nz(m.fiber_g) +
+                        "</b></span><span>Sug <b>" +
+                        nz(m.sugar_g) +
+                        "</b></span></p></li>"
+                    );
+                }
+                // Calorie bars against each day's goal: --kcal up to the
+                // goal, a hatched segment above it. Returns the bar layout.
+                function calBars(svg, rows, x0, plotW, yAt, base, lay) {
+                    rows.forEach(function (r, i) {
+                        if (r.calories <= 0) return;
+                        const x = x0 + lay.bw * i + (lay.bw - lay.barW) / 2;
+                        const w = lay.barW;
+                        const rad = Math.min(4, w / 2);
+                        const g = isOver(r) ? r.goal_calories : null;
+                        const cls = r.in_progress ? " dim" : "";
+                        if (g == null) {
+                            svg.appendChild(
+                                svgEl("path", {
+                                    d: barPath(
+                                        x,
+                                        yAt(r.calories),
+                                        w,
+                                        base - yAt(r.calories),
+                                        rad,
+                                    ),
+                                    class: "m-kcal" + cls,
+                                }),
+                            );
+                        } else {
+                            svg.appendChild(
+                                svgEl("path", {
+                                    d: rectPath(x, yAt(g), w, base - yAt(g)),
+                                    class: "m-kcal" + cls,
+                                }),
+                            );
+                            svg.appendChild(
+                                svgEl("path", {
+                                    d: barPath(
+                                        x,
+                                        yAt(r.calories),
+                                        w,
+                                        yAt(g) - yAt(r.calories),
+                                        rad,
+                                    ),
+                                    class: "m-over" + cls,
+                                }),
+                            );
+                        }
+                    });
+                }
+                function goBodyDetails() {
+                    selectTab("body");
+                    const box = $("body-box");
+                    if (box) {
+                        bodyBoxProgrammatic = true;
+                        box.open = true;
+                        bodyBoxProgrammatic = false;
+                        box.scrollIntoView({ block: "start" });
+                        $("b-height").focus();
+                    }
+                }
+                document.addEventListener("click", function (ev) {
+                    const t =
+                        ev.target.closest && ev.target.closest("[data-go]");
+                    if (!t) return;
+                    if (t.dataset.go === "body-details") goBodyDetails();
+                    else selectTab(t.dataset.go);
+                });
+                const ADD_BODY =
+                    '<button type="button" class="link-btn" data-go="body-details">Add body details</button>';
+
                 /* ================= TODAY ================= */
+                const RING = 168;
+                const RING_SW = 14;
+                const RING_R = (RING - RING_SW) / 2;
+                const RING_C = 2 * Math.PI * RING_R;
+
+                function ringHtml(t) {
+                    const eaten = t.calories || 0;
+                    const goal = t.goal_calories;
+                    const p = goal ? Math.min(eaten / goal, 1) : 0;
+                    const overP =
+                        goal && eaten > goal
+                            ? Math.min((eaten - goal) / goal, 1)
+                            : 0;
+                    const label = goal
+                        ? fmt(eaten) +
+                          " of " +
+                          fmt(goal) +
+                          " kcal eaten today, " +
+                          (eaten <= goal
+                              ? fmt(goal - eaten) + " left"
+                              : fmt(eaten - goal) + " over")
+                        : fmt(eaten) + " kcal eaten today, no calorie goal set";
+                    const c = RING / 2;
+                    const arc = function (cls, frac) {
+                        return frac > 0
+                            ? '<circle class="' +
+                                  cls +
+                                  '" cx="' +
+                                  c +
+                                  '" cy="' +
+                                  c +
+                                  '" r="' +
+                                  RING_R +
+                                  '" stroke-width="' +
+                                  RING_SW +
+                                  '" stroke-dasharray="' +
+                                  RING_C +
+                                  '" stroke-dashoffset="' +
+                                  RING_C +
+                                  '" data-to="' +
+                                  RING_C * (1 - frac) +
+                                  '" transform="rotate(-90 ' +
+                                  c +
+                                  " " +
+                                  c +
+                                  ')"/>'
+                            : "";
+                    };
+                    return (
+                        '<div class="ring" role="img" aria-label="' +
+                        esc(label) +
+                        '"><svg viewBox="0 0 ' +
+                        RING +
+                        " " +
+                        RING +
+                        '" aria-hidden="true"><circle class="ring-track" cx="' +
+                        c +
+                        '" cy="' +
+                        c +
+                        '" r="' +
+                        RING_R +
+                        '" stroke-width="' +
+                        RING_SW +
+                        '"/>' +
+                        arc("ring-arc", p) +
+                        arc("ring-over", overP) +
+                        '</svg><div class="ring-c" aria-hidden="true"><b>' +
+                        fmt(eaten) +
+                        "</b><span>" +
+                        (goal ? "of " + fmt(goal) + " kcal" : "kcal eaten") +
+                        "</span></div></div>"
+                    );
+                }
+                function ringFoot(t) {
+                    const eaten = t.calories || 0;
+                    const goal = t.goal_calories;
+                    if (!goal)
+                        return "No calorie goal set — ask Claude to set one.";
+                    const basis = t.active_kcal
+                        ? ' <span class="basis">Goal: ' +
+                          fmt(goal - t.active_kcal) +
+                          " base + " +
+                          fmt(t.active_kcal) +
+                          " active kcal</span>"
+                        : "";
+                    return eaten <= goal
+                        ? "<b>" +
+                              fmt(goal - eaten) +
+                              " kcal left</b> of " +
+                              fmt(goal) +
+                              basis
+                        : '<span class="over-text">▲ ' +
+                              fmt(eaten - goal) +
+                              " kcal over</span> " +
+                              fmt(goal) +
+                              basis;
+                }
+                function trioCell(label, figure, unit, foot, opts) {
+                    opts = opts || {};
+                    return (
+                        '<div><div class="micro">' +
+                        label +
+                        '</div><div class="figure' +
+                        (opts.missing ? " missing" : "") +
+                        '">' +
+                        (opts.sw
+                            ? '<i class="sw dot ' + opts.sw + '"></i>'
+                            : "") +
+                        figure +
+                        (unit ? "<small>" + unit + "</small>" : "") +
+                        '</div><div class="foot">' +
+                        foot +
+                        "</div></div>"
+                    );
+                }
+                function trioHtml(t) {
+                    const burnKnown = t.burn_kcal != null;
+                    let change;
+                    if (!burnKnown)
+                        change = trioCell("Est. change", "—", "", ADD_BODY, {
+                            missing: true,
+                        });
+                    else if (!t.mealCount || t.balance_g == null)
+                        change = trioCell(
+                            "Est. change",
+                            "—",
+                            "",
+                            "Nothing logged yet",
+                            {
+                                missing: true,
+                            },
+                        );
+                    else
+                        change = trioCell(
+                            "Est. change",
+                            fmtSigned(t.balance_g),
+                            "g",
+                            "so far · estimate",
+                            { sw: t.balance_g >= 0 ? "s-gain" : "s-loss" },
+                        );
+                    return (
+                        '<div class="trio">' +
+                        trioCell(
+                            "Eaten",
+                            fmt(t.calories),
+                            "kcal",
+                            plural(t.mealCount, "meal"),
+                        ) +
+                        (burnKnown
+                            ? trioCell(
+                                  "Est. burn",
+                                  fmt(t.burn_kcal),
+                                  "kcal",
+                                  "full day · estimate",
+                              )
+                            : trioCell("Est. burn", "—", "", ADD_BODY, {
+                                  missing: true,
+                              })) +
+                        change +
+                        "</div>"
+                    );
+                }
+                function nutrientRow(name, sw, value, goal, unit) {
+                    const v = value || 0;
+                    const over = goal && v > goal;
+                    return (
+                        '<li><span class="name"><i class="sw ' +
+                        sw +
+                        '"></i>' +
+                        name +
+                        '</span><span class="val"><span><b>' +
+                        fmt(v) +
+                        "</b>" +
+                        (goal ? " / " + fmt(goal) : "") +
+                        " " +
+                        unit +
+                        "</span>" +
+                        (over ? '<span class="chip over">over</span>' : "") +
+                        "</span>" +
+                        (goal
+                            ? '<span class="track" aria-hidden="true"><i class="' +
+                              sw +
+                              '" data-w="' +
+                              Math.min(100, (v / goal) * 100) +
+                              '"></i></span>'
+                            : "") +
+                        "</li>"
+                    );
+                }
+                function todayMeals() {
+                    return data.meals
+                        .filter(function (m) {
+                            try {
+                                return localDate(m.logged_at) === data.endDate;
+                            } catch (e) {
+                                return false;
+                            }
+                        })
+                        .sort((a, b) => (a.logged_at < b.logged_at ? -1 : 1));
+                }
+
                 RENDER.today = function () {
-                    $("today-body").innerHTML = '<div class="card">Today</div>';
+                    const t = data.daily[data.daily.length - 1];
+                    const g = data.goals;
+                    const meals = todayMeals();
+                    $("today-body").innerHTML =
+                        '<div class="today-grid"><div class="col">' +
+                        '<section class="card hero" aria-labelledby="h-ring"><h3 id="h-ring" class="sr-only">Calories today</h3><div class="hero-in">' +
+                        ringHtml(t) +
+                        '<p class="ring-foot">' +
+                        ringFoot(t) +
+                        "</p></div>" +
+                        trioHtml(t) +
+                        "</section>" +
+                        '<section class="card" aria-labelledby="h-nut"><div class="card-head"><div><h3 id="h-nut">Nutrients</h3><p class="note">Today against your goals' +
+                        (t.active_kcal
+                            ? ", adjusted for active calories"
+                            : "") +
+                        '.</p></div></div><ul class="nutrients">' +
+                        nutrientRow(
+                            "Protein",
+                            "s-protein",
+                            t.protein_g,
+                            t.goal_protein_g,
+                            "g",
+                        ) +
+                        nutrientRow(
+                            "Carbs",
+                            "s-carbs",
+                            t.carbs_g,
+                            t.goal_carbs_g,
+                            "g",
+                        ) +
+                        nutrientRow(
+                            "Fat",
+                            "s-fat",
+                            t.fat_g,
+                            t.goal_fat_g,
+                            "g",
+                        ) +
+                        nutrientRow(
+                            "Fiber",
+                            "s-fiber",
+                            t.fiber_g,
+                            g && g.fiber_g,
+                            "g",
+                        ) +
+                        "</ul></section></div>" +
+                        '<div class="col">' +
+                        '<section class="card" aria-labelledby="h-strip"><div class="card-head"><div><h3 id="h-strip">Last 7 days</h3><p class="note">Calories per day, with each day’s goal as a tick.</p></div><button type="button" class="link-btn" data-go="trends">See trends ›</button></div><div class="plot" id="strip-plot"></div></section>' +
+                        '<section class="card" aria-labelledby="h-meals-today"><div class="card-head"><div><h3 id="h-meals-today">Today’s meals</h3>' +
+                        (meals.length
+                            ? '<p class="note">' +
+                              plural(meals.length, "meal") +
+                              " · " +
+                              fmt(t.calories) +
+                              " kcal</p>"
+                            : "") +
+                        "</div></div>" +
+                        (meals.length
+                            ? '<ul class="meal-list">' +
+                              meals.map(mealItem).join("") +
+                              "</ul>"
+                            : '<p class="empty">Nothing logged yet today. Tell Claude what you ate and it will show up here.</p>') +
+                        "</section></div></div>";
+                    // Sweep the ring and grow the bars from zero.
+                    requestAnimationFrame(function () {
+                        requestAnimationFrame(function () {
+                            document
+                                .querySelectorAll("#today-body [data-to]")
+                                .forEach(function (c) {
+                                    c.setAttribute(
+                                        "stroke-dashoffset",
+                                        c.dataset.to,
+                                    );
+                                });
+                            document
+                                .querySelectorAll("#today-body .track i")
+                                .forEach(function (i) {
+                                    i.style.width = i.dataset.w + "%";
+                                });
+                        });
+                    });
+                };
+
+                CHARTS.today = function () {
+                    const host = $("strip-plot");
+                    if (!host || !host.clientWidth) return;
+                    const rows = data.daily.slice(-7);
+                    const logged = rows.filter((r) => r.mealCount > 0).length;
+                    const c = chartSvg(
+                        host,
+                        132,
+                        "Calories for the last 7 days: " +
+                            plural(logged, "day") +
+                            " logged, " +
+                            rows.filter(isOver).length +
+                            " over goal. Use the arrow keys to read each day.",
+                    );
+                    const svg = c.svg;
+                    const top = 8;
+                    const base = c.h - 24;
+                    const peak = Math.max.apply(
+                        null,
+                        rows.map((r) =>
+                            Math.max(r.calories, r.goal_calories || 0),
+                        ),
+                    );
+                    const maxY = niceMax(Math.max(peak, 500) * 1.05);
+                    const yAt = (v) => base - (v / maxY) * (base - top);
+                    const lay = bandLayout(rows.length, c.w);
+                    lay.barW = Math.min(lay.barW, 40);
+                    svg.appendChild(
+                        svgEl("line", {
+                            x1: 0,
+                            x2: c.w,
+                            y1: base,
+                            y2: base,
+                            class: "gridline",
+                        }),
+                    );
+                    calBars(svg, rows, 0, c.w, yAt, base, lay);
+                    const cols = [];
+                    rows.forEach(function (r, i) {
+                        const cx = lay.bw * (i + 0.5);
+                        if (r.goal_calories) {
+                            const half = lay.barW / 2 + 4;
+                            svg.appendChild(
+                                svgEl("line", {
+                                    x1: cx - half,
+                                    x2: cx + half,
+                                    y1: yAt(r.goal_calories),
+                                    y2: yAt(r.goal_calories),
+                                    class: "m-tick",
+                                }),
+                            );
+                        }
+                        svgText(
+                            svg,
+                            cx,
+                            c.h - 6,
+                            parseDay(r.date).toLocaleDateString(undefined, {
+                                weekday: "narrow",
+                            }),
+                            r.in_progress ? "lbl" : "ax",
+                        );
+                        const tc = calTip(r);
+                        cols.push({ x: cx, html: tc.html, text: tc.text });
+                    });
+                    inspect(svg, cols, top, base);
                 };
 
                 /* ================= TRENDS ================= */
