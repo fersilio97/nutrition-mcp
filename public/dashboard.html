@@ -1521,6 +1521,184 @@
                 opacity: 0;
             }
 
+            /* ---------- Meals ---------- */
+            /* One table. At ≥1024 it is a table; below, each day's tbody
+               is a card and each row a wrapping flex line, so nothing
+               ever scrolls sideways and descriptions wrap in full. */
+            .meals-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-variant-numeric: tabular-nums;
+            }
+            .meals-table th,
+            .meals-table td {
+                text-align: left;
+                vertical-align: top;
+                padding: var(--s2) var(--s3);
+            }
+            .meals-table .n {
+                text-align: right;
+                white-space: nowrap;
+            }
+            .meals-table thead th {
+                font-size: var(--t-micro);
+                font-weight: 600;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: var(--muted);
+                border-bottom: 1px solid var(--border);
+            }
+            .meals-table tr.day th {
+                padding-top: var(--s5);
+                font-size: var(--t-micro);
+                font-weight: 650;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: var(--ink);
+                border-bottom: 1px solid var(--border);
+            }
+            .meals-table tr.day .tot {
+                float: right;
+                font-weight: 600;
+                color: var(--muted);
+                letter-spacing: 0;
+                text-transform: none;
+                font-size: var(--t-small);
+            }
+            .meals-table tr.day .tot b {
+                color: var(--ink);
+            }
+            .meals-table tr.meal td {
+                border-bottom: 1px solid var(--grid);
+            }
+            .meals-table td.ty {
+                font-weight: 650;
+                white-space: nowrap;
+            }
+            .meals-table td.t {
+                color: var(--muted);
+                white-space: nowrap;
+            }
+            .meals-table td.d {
+                overflow-wrap: anywhere;
+                min-width: 12em;
+            }
+            .meals-table td.k {
+                font-weight: 650;
+            }
+            .partial {
+                font-weight: 500;
+                text-transform: none;
+                letter-spacing: 0;
+                color: var(--warn);
+            }
+            .meals-foot {
+                margin: var(--s4) 0 0;
+                text-align: center;
+                font-size: var(--t-small);
+                color: var(--muted);
+            }
+            @media (max-width: 1023px) {
+                .meals-wrap.card {
+                    background: none;
+                    border: 0;
+                    box-shadow: none;
+                    padding: 0;
+                }
+                .meals-table,
+                .meals-table tbody,
+                .meals-table tr,
+                .meals-table th,
+                .meals-table td {
+                    display: block;
+                }
+                .meals-table thead {
+                    position: absolute;
+                    width: 1px;
+                    height: 1px;
+                    overflow: hidden;
+                    clip: rect(0 0 0 0);
+                }
+                .meals-table tbody {
+                    margin-bottom: var(--s4);
+                }
+                .meals-table tr.day th {
+                    padding: var(--s2) var(--s1);
+                    border: 0;
+                }
+                .meals-table tr.day .tot {
+                    float: none;
+                    display: block;
+                    margin-top: 2px;
+                }
+                .meals-table tr.meal {
+                    display: flex;
+                    flex-wrap: wrap;
+                    align-items: baseline;
+                    gap: 2px var(--s3);
+                    padding: var(--s3) var(--s4);
+                    background: var(--surface);
+                    border: 1px solid var(--border);
+                    border-top-width: 0;
+                    box-shadow: var(--shadow-card);
+                }
+                .meals-table tr.day + tr.meal {
+                    border-top-width: 1px;
+                    border-radius: var(--r-md) var(--r-md) 0 0;
+                }
+                .meals-table tr.meal.last {
+                    border-radius: 0 0 var(--r-md) var(--r-md);
+                }
+                .meals-table tr.day + tr.meal.last {
+                    border-radius: var(--r-md);
+                }
+                .meals-table tr.meal td {
+                    padding: 0;
+                    border: 0;
+                }
+                .meals-table td.t {
+                    order: 1;
+                    font-size: var(--t-small);
+                }
+                .meals-table td.ty {
+                    order: 2;
+                    flex: 1;
+                }
+                .meals-table td.k {
+                    order: 3;
+                }
+                .meals-table td.k::after {
+                    content: " kcal";
+                    font-weight: 400;
+                    color: var(--muted);
+                    font-size: var(--t-small);
+                }
+                .meals-table td.d {
+                    order: 4;
+                    flex-basis: 100%;
+                    min-width: 0;
+                    margin: 2px 0 4px;
+                }
+                .meals-table td.mac {
+                    order: 5;
+                    font-size: var(--t-small);
+                    color: var(--muted);
+                    text-align: left;
+                }
+                .meals-table td.mac::before {
+                    content: attr(data-l) " ";
+                }
+                .meals-table td.mac b {
+                    color: var(--ink);
+                    font-weight: 600;
+                }
+            }
+            @media (min-width: 1024px) {
+                .meals-table td.mac b {
+                    font-weight: 400;
+                }
+            }
+
             /* ---------- Trends ---------- */
             .stack {
                 display: grid;
@@ -2994,7 +3172,12 @@
                         ) +
                         "</ul></section></div>" +
                         '<div class="col">' +
-                        '<section class="card" aria-labelledby="h-strip"><div class="card-head"><div><h3 id="h-strip">Last 7 days</h3><p class="note">Calories per day, with each day’s goal as a tick.</p></div><button type="button" class="link-btn" data-go="trends">See trends ›</button></div><div class="plot" id="strip-plot"></div></section>' +
+                        '<section class="card" aria-labelledby="h-strip"><div class="card-head"><div><h3 id="h-strip">Last 7 days</h3><p class="note">Calories per day, with each day’s goal as a tick.</p></div><button type="button" class="link-btn" data-go="trends">See trends ›</button></div>' +
+                        (anyLogged(data.daily.slice(-7)) ||
+                        data.daily.slice(-7).some((r) => r.goal_calories)
+                            ? '<div class="plot" id="strip-plot"></div>'
+                            : '<p class="empty">Nothing logged in the last 7 days.</p>') +
+                        "</section>" +
                         '<section class="card" aria-labelledby="h-meals-today"><div class="card-head"><div><h3 id="h-meals-today">Today’s meals</h3>' +
                         (meals.length
                             ? '<p class="note">' +
@@ -4400,7 +4583,111 @@
 
                 /* ================= MEALS ================= */
                 RENDER.meals = function () {
-                    $("meals-body").innerHTML = '<div class="card">Meals</div>';
+                    const meals = data.meals;
+                    if (!meals.length) {
+                        $("meals-body").innerHTML =
+                            '<div class="card"><p class="empty">No meals logged in this range.</p></div>';
+                        return;
+                    }
+                    // Group by local day in the PROFILE timezone, newest first
+                    // (the API already sorts newest first).
+                    const groups = [];
+                    const byDay = {};
+                    meals.forEach(function (m) {
+                        const d = localDate(m.logged_at);
+                        if (!byDay[d]) {
+                            byDay[d] = { date: d, meals: [] };
+                            groups.push(byDay[d]);
+                        }
+                        byDay[d].meals.push(m);
+                    });
+                    const capped = meals.length >= 50;
+                    const sum = (list, k) =>
+                        list.reduce((a, m) => a + (m[k] || 0), 0);
+                    const MAC = [
+                        ["protein_g", "P"],
+                        ["carbs_g", "C"],
+                        ["fat_g", "F"],
+                        ["fiber_g", "Fib"],
+                        ["sugar_g", "Sug"],
+                    ];
+                    const body = groups
+                        .map(function (g, gi) {
+                            const day = parseDay(g.date).toLocaleDateString(
+                                undefined,
+                                {
+                                    weekday: "short",
+                                    month: "short",
+                                    day: "numeric",
+                                },
+                            );
+                            const partial =
+                                capped && gi === groups.length - 1
+                                    ? ' <span class="partial">(partial — older meals not shown)</span>'
+                                    : "";
+                            const tot =
+                                "<b>" +
+                                fmt(sum(g.meals, "calories")) +
+                                " kcal</b> · P " +
+                                fmt(sum(g.meals, "protein_g")) +
+                                " · C " +
+                                fmt(sum(g.meals, "carbs_g")) +
+                                " · F " +
+                                fmt(sum(g.meals, "fat_g")) +
+                                " · Fib " +
+                                fmt(sum(g.meals, "fiber_g"));
+                            return (
+                                '<tbody><tr class="day"><th colspan="9" scope="colgroup">' +
+                                esc(day) +
+                                partial +
+                                '<span class="tot">' +
+                                tot +
+                                "</span></th></tr>" +
+                                g.meals
+                                    .map(function (m, i) {
+                                        return (
+                                            '<tr class="meal' +
+                                            (i === g.meals.length - 1
+                                                ? " last"
+                                                : "") +
+                                            '"><td class="t">' +
+                                            esc(localTime(m.logged_at)) +
+                                            '</td><td class="ty">' +
+                                            esc(mealTypeLabel(m.meal_type)) +
+                                            '</td><td class="d">' +
+                                            esc(m.description) +
+                                            '</td><td class="n k">' +
+                                            nz(m.calories) +
+                                            "</td>" +
+                                            MAC.map(function (x) {
+                                                return (
+                                                    '<td class="n mac" data-l="' +
+                                                    x[1] +
+                                                    '"><b>' +
+                                                    nz(m[x[0]]) +
+                                                    "</b></td>"
+                                                );
+                                            }).join("") +
+                                            "</tr>"
+                                        );
+                                    })
+                                    .join("") +
+                                "</tbody>"
+                            );
+                        })
+                        .join("");
+                    $("meals-body").innerHTML =
+                        '<div class="card meals-wrap"><table class="meals-table"><caption class="sr-only">Meals in this range, grouped by day, newest first</caption><thead><tr><th scope="col">Time</th><th scope="col">Meal</th><th scope="col">Description</th><th scope="col" class="n">kcal</th><th scope="col" class="n">P</th><th scope="col" class="n">C</th><th scope="col" class="n">F</th><th scope="col" class="n">Fib</th><th scope="col" class="n">Sug</th></tr></thead>' +
+                        body +
+                        '</table><p class="meals-foot">Showing the ' +
+                        plural(
+                            meals.length,
+                            "most recent meal",
+                            "most recent meals",
+                        ) +
+                        " in this range" +
+                        (capped ? " — the dashboard lists at most 50." : ".") +
+                        "</p></div>";
                 };
 
                 /* ---------- data ---------- */
