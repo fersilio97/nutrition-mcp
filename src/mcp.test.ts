@@ -1733,6 +1733,31 @@ describe("write-tool numeric bounds", () => {
         expect(MAX_GOAL_G).toBe(9999.99);
     });
 
+    // "treat" is the fifth meal type (party food, pizza night, dessert,
+    // drinks out). Needs the 20261111120000_treat_meal_type migration.
+    test("log_meal and update_meal accept meal_type 'treat', and reject unknown types", async () => {
+        await withTools(null, async (call) => {
+            const r = await call("log_meal", {
+                description: "Pizza night",
+                meal_type: "treat",
+                calories: 900,
+            });
+            expect(r.isError).toBeFalsy();
+            expect(db.inserted.at(-1)!.meal_type).toBe("treat");
+            const u = await call("update_meal", {
+                id: "3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b",
+                meal_type: "treat",
+            });
+            expect(u.isError).toBeFalsy();
+            expect(db.mealUpdates.at(-1)!.meal_type).toBe("treat");
+            const bad = await call("log_meal", {
+                description: "Brunch",
+                meal_type: "brunch",
+            });
+            expect(bad.isError).toBe(true);
+        });
+    });
+
     // Was: -1 sailed through Zod, hit the migration's `check (fiber_g >= 0)`
     // and surfaced a raw Postgres constraint error to the model.
     test("log_meal rejects a negative gram figure before touching the DB", async () => {
@@ -4989,6 +5014,15 @@ describe("dashboard API", () => {
 
     describe("Edit meal (PATCH /api/dashboard/meals/:id)", () => {
         const ID = "3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b";
+
+        test("a meal can be re-filed as a treat", async () => {
+            stage();
+            const r = await updateMealFromDashboard("u1", ID, {
+                meal_type: "treat",
+            });
+            expect(r.status).toBe(200);
+            expect(db.mealUpdates.at(-1)).toEqual({ meal_type: "treat" });
+        });
 
         test("only the changed fields reach updateMeal; the time resolves in the profile zone", async () => {
             stage();

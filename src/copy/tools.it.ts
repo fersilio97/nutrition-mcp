@@ -92,7 +92,7 @@ export const TOOLS_IT: ToolsDoc = {
                 "Registra cosa hai mangiato con calorie e macro — più fibre, zuccheri totali, alcol e caffeina quando i numeri sono disponibili. Descrivilo con parole tue — l'IA stima i valori, chiede la dimensione della porzione quando non è chiara, e può recuperare prima i dati dell'etichetta da un codice a barre o dal web.",
             params: {
                 description: "Cosa è stato mangiato",
-                meal_type: "colazione, pranzo, cena o spuntino",
+                meal_type: "colazione, pranzo, cena, spuntino o sfizio",
                 calories: "Calorie totali",
                 protein_g: "Proteine in grammi",
                 carbs_g: "Carboidrati in grammi",

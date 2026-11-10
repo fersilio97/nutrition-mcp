@@ -107,6 +107,15 @@ export interface WidgetStrings {
         noMealsContributed: string;
         /** Fallback name for a meal with no description. */
         untitledMeal: string;
+        /** Display names for the five meal types (the DB stores the English
+         *  keys). "treat" is party food, a pizza night, dessert, drinks out. */
+        mealTypes: {
+            breakfast: string;
+            lunch: string;
+            dinner: string;
+            snack: string;
+            treat: string;
+        };
         /** The "+ N more" line at the end of a capped meal list. Placeholder: {n}. */
         moreMeals: PluralForms;
     };
@@ -418,6 +427,13 @@ export const WIDGET_STRINGS_EN: WidgetStrings = {
         closeBreakdown: "Close breakdown",
         noMealsContributed: "No logged meals contributed {label}.",
         untitledMeal: "Untitled meal",
+        mealTypes: {
+            breakfast: "Breakfast",
+            lunch: "Lunch",
+            dinner: "Dinner",
+            snack: "Snack",
+            treat: "Treat",
+        },
         moreMeals: {
             one: "+ {n} smaller meal",
             other: "+ {n} smaller meals",

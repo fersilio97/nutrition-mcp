@@ -242,7 +242,8 @@
                 if (data.date) bits.push(esc(shortDate(data.date)));
                 if (meal && meal.description) {
                     bits.push(esc(meal.description));
-                    if (meal.meal_type) bits.push(esc(meal.meal_type));
+                    if (meal.meal_type)
+                        bits.push(esc(mealTypeLabel(meal.meal_type)));
                 }
                 const sub = bits.join(" · ");
                 const added =

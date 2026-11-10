@@ -664,7 +664,7 @@ export function computeMealPatterns(
     ];
 
     // Meal-type presence rates (only counting logged days)
-    const mealTypes = ["breakfast", "lunch", "dinner", "snack"];
+    const mealTypes = ["breakfast", "lunch", "dinner", "snack", "treat"];
     const presenceLines: string[] = [];
     for (const t of mealTypes) {
         const withType = logged.filter((b) => b.mealTypes.has(t));

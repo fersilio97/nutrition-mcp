@@ -55,7 +55,7 @@ import {
     MAX_PLAUSIBLE_WEIGHT_G,
     type WeightUnit,
 } from "./units.js";
-import { MAX_CALORIES, MAX_MACRO_G } from "./import.js";
+import { MAX_CALORIES, MAX_MACRO_G, MEAL_TYPE_VALUES } from "./import.js";
 import { authenticateBearer, rateLimitAuth } from "./middleware.js";
 import { checkBodyPatch, type BodyDetails, type WeighIn } from "./body.js";
 import {
@@ -445,7 +445,8 @@ export async function logWeightFromDashboard(
     };
 }
 
-const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"] as const;
+// update_meal's own list (src/import.ts), "treat" included.
+const MEAL_TYPES: readonly string[] = MEAL_TYPE_VALUES;
 // update_meal's own bounds (src/import.ts, re-exported by src/mcp.ts).
 const MEAL_NUMBER_BOUNDS: Record<string, number> = {
     calories: MAX_CALORIES,
@@ -480,10 +481,10 @@ export function checkMealPatch(
                 };
             patch.description = raw.trim();
         } else if (key === "meal_type") {
-            if (!MEAL_TYPES.includes(raw as (typeof MEAL_TYPES)[number]))
+            if (typeof raw !== "string" || !MEAL_TYPES.includes(raw))
                 return {
                     ok: false,
-                    error: "meal_type must be breakfast, lunch, dinner or snack.",
+                    error: `meal_type must be one of: ${MEAL_TYPES.join(", ")}.`,
                 };
             patch.meal_type = raw as string;
         } else if (key in MEAL_NUMBER_BOUNDS) {

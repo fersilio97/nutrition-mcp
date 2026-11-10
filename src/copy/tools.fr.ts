@@ -94,7 +94,8 @@ export const TOOLS_FR: ToolsDoc = {
                 "Enregistre ce que tu as mangé avec les calories et les macros — plus les fibres, le sucre total, l'alcool et la caféine quand les chiffres sont disponibles. Décris-le en langage courant — l'IA estime les chiffres, demande la taille de la portion quand ce n'est pas clair, et peut d'abord récupérer les données d'une étiquette via un code-barres ou le web.",
             params: {
                 description: "Ce qui a été mangé",
-                meal_type: "petit-déjeuner, déjeuner, dîner ou collation",
+                meal_type:
+                    "petit-déjeuner, déjeuner, dîner, collation ou plaisir",
                 calories: "Calories totales",
                 protein_g: "Protéines en grammes",
                 carbs_g: "Glucides en grammes",

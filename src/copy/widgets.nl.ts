@@ -31,6 +31,13 @@ export const WIDGET_STRINGS_NL: WidgetStrings = {
         closeBreakdown: "Overzicht sluiten",
         noMealsContributed: "Geen gelogde maaltijden droegen bij aan {label}.",
         untitledMeal: "Naamloze maaltijd",
+        mealTypes: {
+            breakfast: "Ontbijt",
+            lunch: "Lunch",
+            dinner: "Diner",
+            snack: "Snack",
+            treat: "Traktatie",
+        },
         moreMeals: {
             one: "+ {n} kleinere maaltijd",
             other: "+ {n} kleinere maaltijden",

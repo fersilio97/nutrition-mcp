@@ -31,6 +31,13 @@ export const WIDGET_STRINGS_JA: WidgetStrings = {
         closeBreakdown: "内訳を閉じる",
         noMealsContributed: "{label}に該当する食事の記録がありません。",
         untitledMeal: "無題の食事",
+        mealTypes: {
+            breakfast: "朝食",
+            lunch: "昼食",
+            dinner: "夕食",
+            snack: "間食",
+            treat: "ご褒美",
+        },
         moreMeals: {
             one: "他 {n} 件の少量の食事",
             other: "他 {n} 件の少量の食事",

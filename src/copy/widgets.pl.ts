@@ -32,6 +32,13 @@ export const WIDGET_STRINGS_PL: WidgetStrings = {
         noMealsContributed:
             "Żaden zapisany posiłek nie wniósł wartości {label}.",
         untitledMeal: "Posiłek bez nazwy",
+        mealTypes: {
+            breakfast: "Śniadanie",
+            lunch: "Obiad",
+            dinner: "Kolacja",
+            snack: "Przekąska",
+            treat: "Przysmak",
+        },
         moreMeals: {
             one: "+ {n} mniejszy posiłek",
             other: "+ {n} mniejszych posiłków",

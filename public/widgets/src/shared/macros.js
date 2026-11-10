@@ -159,6 +159,12 @@ function macroLabel(m) {
     return (T.macros.labels && T.macros.labels[m.key]) || m.label;
 }
 
+// A meal type's display name in the widget's locale ("treat" → "Genuss").
+// The DB stores the English key; an unknown key is shown as stored.
+function mealTypeLabel(type) {
+    return (T.macros.mealTypes && T.macros.mealTypes[type]) || type;
+}
+
 // Grams of pure ethanol per standard drink. Mirrors src/alcohol.ts (NIAAA:
 // 14 g per US drink; NHS: one unit is 10 mL of ethanol = 7.893 g).
 // Hand-copied rather than pulled in with @inlinets because src/widgets.test.ts
@@ -605,7 +611,7 @@ function mealList(m, meals) {
             const sub = meal.date
                 ? esc(String(meal.date).slice(5))
                 : meal.meal_type
-                  ? esc(meal.meal_type)
+                  ? esc(mealTypeLabel(meal.meal_type))
                   : "";
             return `
         <li class="md-row">

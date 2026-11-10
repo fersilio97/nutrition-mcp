@@ -62,12 +62,30 @@ const MAX_FUTURE_MS = 48 * 3600 * 1000;
 /** Rounding slack when reconciling the caller's kcal control total. */
 const KCAL_TOLERANCE_FRACTION = 0.005;
 
-const MEAL_TYPES: readonly MealType[] = [
+/**
+ * Every meal type, in display order — the one list log_meal, update_meal,
+ * the importer and the dashboard all validate against. It must match the
+ * meals_meal_type_check constraint (supabase/migrations/…_treat_meal_type.sql).
+ */
+export const MEAL_TYPE_VALUES = [
     "breakfast",
     "lunch",
     "dinner",
     "snack",
-];
+    "treat",
+] as const satisfies readonly MealType[];
+const MEAL_TYPES: readonly MealType[] = MEAL_TYPE_VALUES;
+
+/** Words exports and people use for an indulgence → "treat". Exact matches
+ *  only: a cell like "cheat" means the slot, "cheese" does not. */
+const TREAT_ALIASES = new Set([
+    "treats",
+    "cheat",
+    "cheat meal",
+    "cheat day",
+    "party",
+    "party food",
+]);
 
 /** Values real exports use to mean "no value" (Lose It! writes the string n/a). */
 const BLANK_TOKENS = new Set(["", "-", "--", "n/a", "na", "null", "none"]);
@@ -479,8 +497,9 @@ export function normalizeMealType(raw: string | undefined): MealType | null {
     }
     if (v === "snacks") return "snack";
     if (v === "breakfasts") return "breakfast";
+    if (TREAT_ALIASES.has(v)) return "treat";
     // Everything else (FatSecret's "other", Cronometer's user-invented group
-    // names) folds into snack — the DB CHECK constraint allows only the four.
+    // names) folds into snack — the DB CHECK constraint allows only the five.
     return "snack";
 }
 

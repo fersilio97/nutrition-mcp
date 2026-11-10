@@ -89,7 +89,7 @@ export const TOOLS_ES: ToolsDoc = {
                 "Registra lo que comiste con calorías y macros, además de fibra, azúcares totales, alcohol y cafeína cuando tengas esos datos. Descríbelo en lenguaje natural: la IA estima las cifras, pregunta por el tamaño de la porción cuando no está claro, y puede obtener antes los datos de la etiqueta a partir de un código de barras o de la web.",
             params: {
                 description: "Qué comiste",
-                meal_type: "desayuno, almuerzo, cena o snack",
+                meal_type: "desayuno, almuerzo, cena, snack o capricho",
                 calories: "Calorías totales",
                 protein_g: "Proteína en gramos",
                 carbs_g: "Carbohidratos en gramos",

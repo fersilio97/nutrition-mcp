@@ -103,6 +103,7 @@ import {
     MAX_MACRO_G,
     MAX_ALCOHOL_G,
     MAX_CAFFEINE_MG,
+    MEAL_TYPE_VALUES,
     type BulkImportArgs,
 } from "./import.js";
 import { normalizeBarcode, lookupBarcode, formatFoodResult } from "./foods.js";
@@ -252,6 +253,12 @@ type AlcoholDisplay = DrinkUnit | null;
 // duplicated with a test that grepped the other file to catch drift; sharing
 // one declaration removes the drift instead of detecting it.
 export { MAX_CALORIES, MAX_MACRO_G, MAX_ALCOHOL_G, MAX_CAFFEINE_MG };
+
+// log_meal / update_meal's meal_type. "treat" exists so an indulgence is not
+// filed as a meal it wasn't (a pizza night as "dinner", a party plate as
+// "snack"), which would skew meal-pattern stats.
+const MEAL_TYPE_DESCRIPTION =
+    "Type of meal: breakfast, lunch, dinner, snack, or treat. Use 'treat' for indulgences outside the usual meals — party food, a pizza night, dessert, drinks or bar food out — rather than folding them into dinner or snack. Always ask the user if not provided.";
 // nutrition_goals stores every gram target as numeric(6,2), so anything from
 // 10000 up is a Postgres "numeric field overflow" rather than a saved goal.
 export const MAX_GOAL_G = 9_999.99;
@@ -761,7 +768,7 @@ const IMPORT_ROW_SCHEMA = z.object({
         .string()
         .optional()
         .describe(
-            "breakfast, lunch, dinner or snack. Case-insensitive; unrecognized values become snack. Omit when the source has no meal column and it will be inferred from the time.",
+            "breakfast, lunch, dinner, snack or treat. Case-insensitive; 'cheat', 'cheat meal' and 'party' map to treat, and other unrecognized values become snack. Omit when the source has no meal column and it will be inferred from the time.",
         ),
     calories: z.coerce.number().optional(),
     protein_g: z.coerce.number().optional(),
@@ -1464,10 +1471,8 @@ export function registerTools(
             inputSchema: z.object({
                 description: z.string().describe("What was eaten"),
                 meal_type: z
-                    .enum(["breakfast", "lunch", "dinner", "snack"])
-                    .describe(
-                        "Type of meal (breakfast, lunch, dinner, or snack). Always ask the user if not provided.",
-                    ),
+                    .enum(MEAL_TYPE_VALUES)
+                    .describe(MEAL_TYPE_DESCRIPTION),
                 // Bounded in the schema, not the handler — see the MAX_*
                 // constants for why this tool differs from bulk_import_meals.
                 calories: z.coerce
@@ -3160,8 +3165,9 @@ export function registerTools(
                 id: z.string().describe("UUID of the meal to update"),
                 description: z.string().optional(),
                 meal_type: z
-                    .enum(["breakfast", "lunch", "dinner", "snack"])
-                    .optional(),
+                    .enum(MEAL_TYPE_VALUES)
+                    .optional()
+                    .describe(MEAL_TYPE_DESCRIPTION),
                 // Same bounds, and the same reasoning, as log_meal.
                 calories: z.coerce.number().min(0).max(MAX_CALORIES).optional(),
                 protein_g: z.coerce.number().min(0).max(MAX_MACRO_G).optional(),

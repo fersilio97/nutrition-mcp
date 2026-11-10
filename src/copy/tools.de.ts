@@ -86,7 +86,8 @@ export const TOOLS_DE: ToolsDoc = {
                 "Erfasse, was du gegessen hast, mit Kalorien und Makros — plus Ballaststoffe, Gesamtzucker, Alkohol und Koffein, wenn die Zahlen vorliegen. Beschreib es in normaler Sprache — die KI schätzt die Zahlen, fragt bei Unklarheit nach der Portionsgröße und kann vorab Angaben von einem Barcode oder aus dem Web holen.",
             params: {
                 description: "Was gegessen wurde",
-                meal_type: "Frühstück, Mittagessen, Abendessen oder Snack",
+                meal_type:
+                    "Frühstück, Mittagessen, Abendessen, Snack oder Genuss",
                 calories: "Kalorien insgesamt",
                 protein_g: "Protein in Gramm",
                 carbs_g: "Kohlenhydrate in Gramm",

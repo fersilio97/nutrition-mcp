@@ -31,6 +31,13 @@ export const WIDGET_STRINGS_IT: WidgetStrings = {
         closeBreakdown: "Chiudi il dettaglio",
         noMealsContributed: "Nessun pasto registrato ha contribuito a {label}.",
         untitledMeal: "Pasto senza titolo",
+        mealTypes: {
+            breakfast: "Colazione",
+            lunch: "Pranzo",
+            dinner: "Cena",
+            snack: "Spuntino",
+            treat: "Sfizio",
+        },
         moreMeals: {
             one: "+ {n} pasto più piccolo",
             other: "+ {n} pasti più piccoli",

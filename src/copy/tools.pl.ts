@@ -80,7 +80,7 @@ export const TOOLS_PL: ToolsDoc = {
                 "Zapisz, co zjadłeś/aś, wraz z kaloriami i makroskładnikami — a także błonnikiem, cukrami ogółem, alkoholem i kofeiną, jeśli te wartości są dostępne. Opisz to zwykłym językiem — AI szacuje wartości, dopytuje o wielkość porcji, gdy nie jest jasna, i może wcześniej pobrać dane z etykiety na podstawie kodu kreskowego albo z internetu.",
             params: {
                 description: "Co zostało zjedzone",
-                meal_type: "śniadanie, obiad, kolacja lub przekąska",
+                meal_type: "śniadanie, obiad, kolacja, przekąska lub przysmak",
                 calories: "Łączna liczba kalorii",
                 protein_g: "Białko w gramach",
                 carbs_g: "Węglowodany w gramach",

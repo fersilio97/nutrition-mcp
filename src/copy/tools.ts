@@ -643,7 +643,7 @@ const TOOLS_EN: ToolsDoc = {
                 "Log what you ate with calories and macros — plus fiber, total sugar, alcohol and caffeine when the numbers are there. Describe it in plain language — the AI estimates the numbers, asks about portion size when it's unclear, and can pull label data from a barcode or the web first.",
             params: {
                 description: "What was eaten",
-                meal_type: "breakfast, lunch, dinner or snack",
+                meal_type: "breakfast, lunch, dinner, snack or treat",
                 calories: "Total calories",
                 protein_g: "Protein in grams",
                 carbs_g: "Carbohydrates in grams",

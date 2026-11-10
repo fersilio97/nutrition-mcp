@@ -87,7 +87,7 @@ export const TOOLS_NL: ToolsDoc = {
                 "Log wat je hebt gegeten met calorieën en macro's — plus vezels, totale suikers, alcohol en cafeïne wanneer die cijfers bekend zijn. Omschrijf het in gewone taal — de AI schat de cijfers, vraagt naar de portiegrootte als dat onduidelijk is, en kan eerst labelgegevens ophalen via een barcode of het web.",
             params: {
                 description: "Wat er is gegeten",
-                meal_type: "ontbijt, lunch, diner of snack",
+                meal_type: "ontbijt, lunch, diner, snack of traktatie",
                 calories: "Totaal aantal calorieën",
                 protein_g: "Eiwit in gram",
                 carbs_g: "Koolhydraten in gram",

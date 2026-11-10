@@ -200,6 +200,22 @@ test("normalizeMealType treats blank-ish source cells as absent, not snack", () 
     expect(normalizeMealType("Second breakfast")).toBe("snack"); // Cronometer
 });
 
+test("normalizeMealType maps treat and its everyday words to 'treat'", () => {
+    for (const v of [
+        "treat",
+        "Treats",
+        "cheat",
+        "Cheat Meal",
+        "cheat day",
+        "Party",
+        "party food",
+    ])
+        expect(normalizeMealType(v)).toBe("treat");
+    // Exact words only: a dish name that merely contains one is not a treat.
+    expect(normalizeMealType("cheese")).toBe("snack");
+    expect(normalizeMealType("partying")).toBe("snack");
+});
+
 test("inferMealType uses local-time cutoffs", () => {
     const at = (local: string) =>
         inferMealType(

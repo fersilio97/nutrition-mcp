@@ -126,7 +126,9 @@ export interface Meal {
 
 export interface MealInput {
     description: string;
-    meal_type: "breakfast" | "lunch" | "dinner" | "snack";
+    // "treat": party food, a pizza night, dessert, drinks out. Needs the
+    // 20261111120000_treat_meal_type migration's widened CHECK constraint.
+    meal_type: "breakfast" | "lunch" | "dinner" | "snack" | "treat";
     calories?: number;
     protein_g?: number;
     carbs_g?: number;

@@ -31,6 +31,13 @@ export const WIDGET_STRINGS_UK: WidgetStrings = {
         closeBreakdown: "Закрити деталізацію",
         noMealsContributed: "Жодна із зареєстрованих страв не містить {label}.",
         untitledMeal: "Страва без назви",
+        mealTypes: {
+            breakfast: "Сніданок",
+            lunch: "Обід",
+            dinner: "Вечеря",
+            snack: "Перекус",
+            treat: "Ласощі",
+        },
         moreMeals: {
             one: "+ ще {n} менша страва",
             other: "+ ще {n} менших страв",
