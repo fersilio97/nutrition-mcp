@@ -975,6 +975,37 @@
                 stroke: var(--burn);
                 stroke-width: 2;
             }
+            /* Resting burn: dashed (a modelled level, not a measurement). */
+            .m-rest {
+                fill: none;
+                stroke: var(--burn);
+                stroke-width: 2;
+                stroke-dasharray: 5 3;
+                stroke-linejoin: round;
+            }
+            .m-active {
+                stroke: var(--burn);
+                stroke-linecap: round;
+            }
+            .m-halo {
+                stroke: var(--surface);
+                stroke-linecap: round;
+            }
+            .s-rest {
+                background: repeating-linear-gradient(
+                    90deg,
+                    var(--burn) 0 4px,
+                    transparent 4px 6px
+                );
+                height: 3px;
+                border-radius: 1px;
+            }
+            .s-active {
+                background: var(--burn);
+                width: 4px;
+                margin-left: 3px;
+                margin-right: 9px;
+            }
             .m-band {
                 fill: var(--accent-soft);
             }
@@ -2333,6 +2364,10 @@
                         '"/></svg>',
                     ring: () =>
                         '<svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" class="m-burn"/></svg>',
+                    rest: () =>
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="m-rest"/></svg>',
+                    active: () =>
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="7" y1="2" x2="7" y2="12" class="m-active" style="stroke-width:3px"/></svg>',
                     dotline: () =>
                         '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="m-wline"/><circle cx="7" cy="7" r="3.5" class="m-wdot"/></svg>',
                 };
@@ -2798,6 +2833,13 @@
                     !!r.goal_calories && r.calories > r.goal_calories;
                 const anyLogged = (rows) => rows.some((r) => r.mealCount > 0);
                 const hasBurn = () => data.daily.some((r) => r.burn_kcal);
+                // Whether the Calories chart draws the active kcal as its own
+                // segment. Past 90 days a bar is ~1px at phone width and the
+                // segments become noise, so only the total is marked there.
+                const SPLIT_BURN_MAX_DAYS = 90;
+                const splitBurn = (rows) =>
+                    rows.length <= SPLIT_BURN_MAX_DAYS &&
+                    rows.some((r) => r.bmr_kcal != null && r.active_kcal);
                 function plural(n, one, many) {
                     return n + " " + (n === 1 ? one : many || one + "s");
                 }
@@ -2821,8 +2863,21 @@
                             fmt(r.calories - r.goal_calories) + " kcal",
                             1,
                         ]);
-                    if (r.burn_kcal)
-                        rows.push(["s-burn", "Est. burn", fmt(r.burn_kcal)]);
+                    if (r.burn_kcal) {
+                        if (r.bmr_kcal != null) {
+                            rows.push(["s-rest", "Resting", fmt(r.bmr_kcal)]);
+                            rows.push([
+                                "s-active",
+                                "Active",
+                                "+" + fmt(r.active_kcal || 0),
+                            ]);
+                        }
+                        rows.push([
+                            "s-burn",
+                            "Est. burn total",
+                            fmt(r.burn_kcal),
+                        ]);
+                    }
                     if (r.balance_g != null)
                         rows.push([
                             null,
@@ -3082,7 +3137,14 @@
                                   "Est. burn",
                                   fmt(t.burn_kcal),
                                   "kcal",
-                                  "full day · estimate",
+                                  // The new model's split, so the figure
+                                  // explains itself: resting + active.
+                                  t.bmr_kcal != null
+                                      ? fmt(t.bmr_kcal) +
+                                            " resting + " +
+                                            fmt(t.active_kcal || 0) +
+                                            " active · est."
+                                      : "full day · estimate",
                               )
                             : trioCell("Est. burn", "—", "", ADD_BODY, {
                                   missing: true,
@@ -3519,7 +3581,7 @@
                                       ? "high"
                                       : "low") +
                                   ".") +
-                            ' <span style="color:var(--muted)">(It assumes BMR × 1.2 + your watch’s active kcal.)</span>';
+                            ' <span style="color:var(--muted)">(It assumes your resting burn + your watch’s active kcal; a “low” reading means you burn more than that.)</span>';
                     }
                     return (
                         head +
@@ -3573,7 +3635,27 @@
                                     : [],
                             )
                             .concat(
-                                hasBurn() ? [[LG.ring(), "Est. burn"]] : [],
+                                hasBurn()
+                                    ? [
+                                          [
+                                              LG.rest(),
+                                              "Resting burn (changes with weight)",
+                                          ],
+                                      ]
+                                          .concat(
+                                              splitBurn(rows)
+                                                  ? [
+                                                        [
+                                                            LG.active(),
+                                                            "Workout / active",
+                                                        ],
+                                                    ]
+                                                  : [],
+                                          )
+                                          .concat([
+                                              [LG.ring(), "Est. burn (total)"],
+                                          ])
+                                    : [],
                             ),
                     );
                     const done = s.done;
@@ -3596,6 +3678,14 @@
                               fmt(data.goals.calories) +
                               " kcal baseline plus that day’s active calories from your watch; the part of a bar above it is hatched."
                             : "No calorie goal set.") +
+                        (hasBurn()
+                            ? " Est. burn is your resting burn (dashed) plus the day’s workout / active kcal" +
+                              (splitBurn(rows)
+                                  ? " (the blue segment up to the ring)."
+                                  : rows.length > SPLIT_BURN_MAX_DAYS
+                                    ? "; over this long a range only the total ring is marked — the tooltip has the split."
+                                    : ".")
+                            : "") +
                         "</p></div></div>" +
                         (any
                             ? calLegend +
@@ -3734,8 +3824,57 @@
                         svg.appendChild(
                             svgEl("path", { d: d, class: "goal-line" }),
                         );
+                    // Burn as resting base + workout: a dashed resting line
+                    // (it moves as weight does), and the active kcal as a
+                    // segment from it up to the total ring.
+                    let rest = "";
+                    rows.forEach(function (r, i) {
+                        if (r.bmr_kcal == null) return;
+                        const prev = rows[i - 1];
+                        rest +=
+                            (prev && prev.bmr_kcal != null ? "L" : "M") +
+                            (PAD.l + lay.bw * (i + 0.5)) +
+                            "," +
+                            yAt(r.bmr_kcal);
+                    });
+                    if (rest && rows.length > 1)
+                        svg.appendChild(
+                            svgEl("path", { d: rest, class: "m-rest" }),
+                        );
+                    if (splitBurn(rows) && lay.bw >= 3) {
+                        const w = Math.max(1.5, Math.min(4, lay.barW * 0.3));
+                        rows.forEach(function (r, i) {
+                            if (r.bmr_kcal == null || !r.active_kcal) return;
+                            const x = PAD.l + lay.bw * (i + 0.5);
+                            const seg = {
+                                x1: x,
+                                x2: x,
+                                y1: yAt(r.bmr_kcal),
+                                y2: yAt(r.burn_kcal),
+                            };
+                            const halo = svgEl("line", seg);
+                            halo.setAttribute("class", "m-halo");
+                            halo.style.strokeWidth = w + 3 + "px";
+                            svg.appendChild(halo);
+                            const a = svgEl("line", seg);
+                            a.setAttribute(
+                                "class",
+                                "m-active" + (r.in_progress ? " dim" : ""),
+                            );
+                            a.style.strokeWidth = w + "px";
+                            svg.appendChild(a);
+                        });
+                    }
+                    // Sized by the real column width, so a phone gets
+                    // smaller rings and the active segment stays visible.
                     const rr =
-                        rows.length <= 31 ? 4 : rows.length <= 90 ? 2.5 : 1.5;
+                        lay.bw >= 16
+                            ? 4
+                            : lay.bw >= 8
+                              ? 3
+                              : lay.bw >= 3
+                                ? 2.5
+                                : 1.5;
                     rows.forEach(function (r, i) {
                         if (!r.burn_kcal) return;
                         const ci = svgEl("circle", {
@@ -4148,7 +4287,7 @@
                                   "Est. burn today",
                                   fmt(s.burn_today_kcal),
                                   "kcal",
-                                  "BMR × 1.2 + today’s active kcal",
+                                  "Resting burn + today’s active kcal",
                               )
                             : stat("Est. burn today", "—", "", ADD_BODY, true);
                     return '<div class="stats three">' + h + "</div>";
@@ -4213,7 +4352,7 @@
                     return (
                         '<section class="card"><details class="body-box" id="body-box"' +
                         (bodyOpen ? " open" : "") +
-                        '><summary>Body details</summary><p class="note">Used only for BMI, your healthy weight range and the estimated daily burn (Mifflin-St Jeor × 1.2 for a desk day, plus your workouts’ active calories).</p>' +
+                        '><summary>Body details</summary><p class="note">Used only for BMI, your healthy weight range and the estimated daily burn (your resting burn from Mifflin-St Jeor, plus your watch’s active calories).</p>' +
                         '<form id="body-form" class="body-form" novalidate>' +
                         '<div class="field"><label for="b-height">Height</label><span class="pair"><input class="input" id="b-height" type="number" inputmode="decimal" step="0.1" min="20" max="272" /><select class="input" id="b-unit" aria-label="Height unit"><option value="cm">cm</option><option value="in">in</option></select></span></div>' +
                         '<label class="field" for="b-birth">Birth date<input class="input" id="b-birth" type="date" /></label>' +
