@@ -2491,7 +2491,6 @@
                 white-space: nowrap;
             }
             .meals-table tr.day .tot b {
-                margin-right: 0.3em;
                 font-family: var(--font-display);
                 font-weight: 700;
                 font-size: var(--fs-row);
@@ -5759,38 +5758,19 @@
                         return "Current trend is not heading there";
                     return "Target " + wfmt(s.target_g, unit) + " " + unit;
                 }
+                // The Weight label's rows, each with its explanation (or the
+                // action that would fill it) indented under it.
                 function bodyStats(s, unit) {
+                    const u = unitSm(unit);
+                    const kcal = unitSm("kcal");
+                    const miss = (label, foot) =>
+                        factsRow(label, "—", foot, { missing: true });
                     let h = "";
                     h +=
-                        s.bmi != null
-                            ? stat(
-                                  "BMI",
-                                  s.bmi.toFixed(1),
-                                  "",
-                                  BMI_LABEL[s.bmi_category],
-                              )
-                            : s.height_cm == null
-                              ? stat("BMI", "—", "", ADD_BODY, true)
-                              : stat("BMI", "—", "", "Needs a weigh-in", true);
-                    h +=
-                        s.healthy_min_g != null
-                            ? stat(
-                                  "Healthy range",
-                                  wfmt(s.healthy_min_g, unit) +
-                                      "–" +
-                                      wfmt(s.healthy_max_g, unit),
-                                  unit,
-                                  "BMI 18.5–24.9 at " +
-                                      Number(s.height_cm).toFixed(0) +
-                                      " cm",
-                              )
-                            : stat("Healthy range", "—", "", ADD_BODY, true);
-                    h +=
                         s.change_g != null
-                            ? stat(
+                            ? factsRow(
                                   "Change",
-                                  fmtSignedDec(toUnit(s.change_g, unit)),
-                                  unit,
+                                  fmtSignedDec(toUnit(s.change_g, unit)) + u,
                                   "over " +
                                       s.trend_days +
                                       " days · " +
@@ -5802,48 +5782,64 @@
                                       unit +
                                       "/week",
                               )
-                            : stat(
+                            : miss(
                                   "Change",
-                                  "—",
-                                  "",
                                   "Needs 2+ weigh-ins on different days",
-                                  true,
                               );
                     if (s.target_g != null)
-                        h += stat(
+                        h += factsRow(
                             "To target",
-                            s.to_target_g != null
+                            (s.to_target_g != null
                                 ? fmtSignedDec(toUnit(s.to_target_g, unit))
-                                : wfmt(s.target_g, unit),
-                            unit,
+                                : wfmt(s.target_g, unit)) + u,
                             targetFoot(s, unit),
                         );
                     h +=
+                        s.bmi != null
+                            ? factsRow(
+                                  "BMI",
+                                  s.bmi.toFixed(1) +
+                                      '<span class="cat">' +
+                                      BMI_LABEL[s.bmi_category] +
+                                      "</span>",
+                              )
+                            : miss(
+                                  "BMI",
+                                  s.height_cm == null
+                                      ? ADD_BODY
+                                      : "Needs a weigh-in",
+                              );
+                    h +=
+                        s.healthy_min_g != null
+                            ? factsRow(
+                                  "Healthy range",
+                                  wfmt(s.healthy_min_g, unit) +
+                                      "–" +
+                                      wfmt(s.healthy_max_g, unit) +
+                                      u,
+                                  "BMI 18.5–24.9 at " +
+                                      Number(s.height_cm).toFixed(0) +
+                                      " cm",
+                              )
+                            : miss("Healthy range", ADD_BODY);
+                    h +=
                         s.bmr_kcal != null
-                            ? stat(
+                            ? factsRow(
                                   "Resting burn (est.)",
-                                  fmt(s.bmr_kcal),
-                                  "kcal",
+                                  fmt(s.bmr_kcal) + kcal,
                                   "BMR · Mifflin-St Jeor" +
                                       (s.age != null ? " · age " + s.age : ""),
                               )
-                            : stat(
-                                  "Resting burn (est.)",
-                                  "—",
-                                  "",
-                                  ADD_BODY,
-                                  true,
-                              );
+                            : miss("Resting burn (est.)", ADD_BODY);
                     h +=
                         s.burn_today_kcal != null
-                            ? stat(
+                            ? factsRow(
                                   "Est. burn today",
-                                  fmt(s.burn_today_kcal),
-                                  "kcal",
+                                  fmt(s.burn_today_kcal) + kcal,
                                   "Resting burn + today’s active kcal",
                               )
-                            : stat("Est. burn today", "—", "", ADD_BODY, true);
-                    return '<div class="stats three">' + h + "</div>";
+                            : miss("Est. burn today", ADD_BODY);
+                    return '<dl class="facts-rows">' + h + "</dl>";
                 }
                 // "+ Log weight": form state that must survive a re-render
                 // (the refetch after a save, a range change).
@@ -5868,7 +5864,7 @@
                         u +
                         "</option>";
                     return (
-                        '<form id="lw-form" class="lw-form" novalidate aria-label="Log a weigh-in">' +
+                        '<form id="lw-form" class="lw-form" novalidate aria-label="Log a weigh-in"><div class="form-grid">' +
                         '<div class="field"><label for="lw-weight">Weight</label><span class="pair"><input class="input" id="lw-weight" type="number" inputmode="decimal" step="0.1" min="0" value="' +
                         esc(d.weight) +
                         '" /><select class="input" id="lw-unit" aria-label="Weight unit">' +
@@ -5878,22 +5874,20 @@
                         '<label class="field" for="lw-at">When<input class="input" id="lw-at" type="datetime-local" value="' +
                         esc(d.at) +
                         '" /></label>' +
-                        '<label class="field lw-note" for="lw-note">Note (optional)<input class="input" id="lw-note" type="text" maxlength="1000" placeholder="e.g. morning, fasted" value="' +
+                        '<label class="field wide" for="lw-note">Note (optional)<input class="input" id="lw-note" type="text" maxlength="1000" placeholder="e.g. morning, fasted" value="' +
                         esc(d.note) +
-                        '" /></label>' +
+                        '" /></label></div>' +
                         '<div class="form-foot lw-foot"><button type="submit" class="btn primary" id="lw-save">Save weigh-in</button><button type="button" class="btn" id="lw-cancel">Cancel</button><span class="b-status" id="lw-status" role="status"></span></div>' +
-                        '<p class="note lw-hint">Time is in ' +
+                        '<p class="form-hint">Time is in ' +
                         esc(data.timezone) +
                         ". Same rules as asking Claude to log it.</p></form>"
                     );
                 }
-                function weightHeadHtml(title, srOnly) {
+                function weightHeadHtml(title) {
                     return (
-                        '<div class="w-head"><h3 id="h-w" class="' +
-                        (srOnly ? "sr-only" : "micro") +
-                        '">' +
+                        '<div class="facts-title"><h3 id="h-w">' +
                         title +
-                        '</h3><button type="button" class="btn" id="lw-open" aria-expanded="' +
+                        '</h3><button type="button" class="btn btn-sm" id="lw-open" aria-expanded="' +
                         lwOpen +
                         '" aria-controls="lw-form"' +
                         (lwOpen ? " hidden" : "") +
@@ -6007,79 +6001,44 @@
                             });
                     });
                 }
+                // The Body tab's hero: a "Weight" Facts panel.
                 function weightHero(s, unit) {
-                    if (s.latest_g == null)
-                        return (
-                            '<section class="card hero w-hero" aria-labelledby="h-w">' +
-                            weightHeadHtml("Current weight", false) +
-                            (lwOpen ? logWeightHtml() : "") +
-                            '<p class="empty">No weigh-ins yet. Log one here, or ask Claude to log your weight.</p></section>'
-                        );
-                    const change =
-                        s.change_g != null
-                            ? "<b>" +
-                              fmtSignedDec(toUnit(s.change_g, unit)) +
-                              " " +
-                              unit +
-                              '</b> <span class="muted">over ' +
-                              s.trend_days +
-                              " days · " +
-                              fmtSignedDec(toUnit(s.weekly_rate_g, unit), 2) +
-                              " " +
-                              unit +
-                              "/week</span>"
-                            : '<span class="muted">Needs 2+ weigh-ins on different days for a trend</span>';
-                    let target = "";
-                    if (s.target_g != null) {
-                        target =
-                            s.to_target_g === 0
-                                ? "<b>At target</b> (" +
-                                  wfmt(s.target_g, unit) +
-                                  " " +
-                                  unit +
-                                  ")"
-                                : "<b>" +
-                                  wfmt(Math.abs(s.to_target_g), unit) +
-                                  " " +
-                                  unit +
-                                  "</b> to target " +
-                                  wfmt(s.target_g, unit) +
-                                  ' <span class="muted">· ' +
-                                  (s.projected_date
-                                      ? "est. " +
-                                        esc(longDay(s.projected_date)) +
-                                        " at this rate"
-                                      : s.weekly_rate_g != null
-                                        ? "current trend is not heading there"
-                                        : "needs a trend") +
-                                  "</span>";
-                    }
+                    const has = s.latest_g != null;
                     return (
-                        '<section class="card hero w-hero" aria-labelledby="h-w">' +
-                        weightHeadHtml("Current weight", false) +
-                        '<div class="w-now"><b>' +
-                        wfmt(s.latest_g, unit) +
-                        '</b><span class="unit">' +
+                        '<section class="facts w-facts rv" aria-labelledby="h-w">' +
+                        weightHeadHtml("Weight") +
+                        '<p class="facts-serving"><span>Serving size <b>you, in ' +
                         unit +
-                        '</span><span class="when">Logged ' +
-                        esc(shortDay(s.latest_date)) +
-                        '</span></div><p class="w-line">' +
-                        change +
+                        "</b></span>" +
+                        (has
+                            ? '<span class="tag">logged ' +
+                              esc(shortDay(s.latest_date)) +
+                              "</span>"
+                            : "") +
                         "</p>" +
-                        (target ? '<p class="w-line">' + target + "</p>" : "") +
                         (lwOpen ? logWeightHtml() : "") +
-                        "</section>"
+                        (has
+                            ? '<div class="facts-cal w-now"><p class="label">Current<small>logged ' +
+                              esc(longDay(s.latest_date)) +
+                              '</small></p><p class="fig-hero"><b>' +
+                              wfmt(s.latest_g, unit) +
+                              "</b>" +
+                              unitSm(unit) +
+                              "</p></div>"
+                            : '<div class="facts-cal"><p class="label">Current<small>No weigh-ins</small></p><p class="fig-hero missing">—</p></div><p class="empty w-empty">No weigh-ins yet. Log one here, or ask Claude to log your weight.</p>') +
+                        bodyStats(s, unit) +
+                        '<p class="facts-foot">BMI and burn are estimates from your height, birth date and sex.</p></section>'
                     );
                 }
                 function bodyFormHtml() {
                     return (
-                        '<section class="card"><details class="body-box" id="body-box"' +
+                        '<section class="details-sec rv"><details class="body-box" id="body-box"' +
                         (bodyOpen ? " open" : "") +
                         '><summary>Body details</summary><p class="note">Used only for BMI, your healthy weight range and the estimated daily burn (your resting burn from Mifflin-St Jeor, plus your watch’s active calories).</p>' +
-                        '<form id="body-form" class="body-form" novalidate>' +
+                        '<form id="body-form" class="body-form" novalidate><div class="form-grid">' +
                         '<div class="field"><label for="b-height">Height</label><span class="pair"><input class="input" id="b-height" type="number" inputmode="decimal" step="0.1" min="20" max="272" /><select class="input" id="b-unit" aria-label="Height unit"><option value="cm">cm</option><option value="in">in</option></select></span></div>' +
                         '<label class="field" for="b-birth">Birth date<input class="input" id="b-birth" type="date" /></label>' +
-                        '<label class="field" for="b-sex">Sex<select class="input" id="b-sex"><option value="">—</option><option value="male">Male</option><option value="female">Female</option></select></label>' +
+                        '<label class="field wide" for="b-sex">Sex<select class="input" id="b-sex"><option value="">—</option><option value="male">Male</option><option value="female">Female</option></select></label></div>' +
                         '<div class="form-foot"><button type="submit" class="btn primary" id="b-save">Save</button><span class="b-status ' +
                         bodyStatus.cls +
                         '" id="b-status" role="status">' +
@@ -6190,7 +6149,7 @@
                                     return;
                                 }
                                 bodyDraft = null;
-                                setBodyStatus("Saved.");
+                                setBodyStatus("Saved.", "ok");
                                 bodyStatusTimer = setTimeout(function () {
                                     const st = $("b-status");
                                     if (st) st.classList.add("fade");
@@ -6219,47 +6178,54 @@
                     $("body-body").innerHTML =
                         '<div class="stack">' +
                         (detailsMissing()
-                            ? '<div class="notice"><span><b>Missing details.</b> Add your height, birth date and sex to see BMI and estimated burn.</span></div>'
+                            ? '<div class="notice rv"><span><b>Missing details.</b> Add your height, birth date and sex to see BMI and estimated burn.</span></div>'
                             : "") +
+                        '<div class="body-grid">' +
                         weightHero(s, unit) +
-                        '<div class="body-grid"><div class="col">' +
-                        bodyStats(s, unit) +
-                        bodyFormHtml() +
-                        '</div><div class="col"><section class="card" aria-labelledby="h-wchart"><div class="card-head"><div><h3 id="h-wchart">Weight · since ' +
-                        esc(shortDay(data.weightWindowStart)) +
-                        '</h3><p class="note">' +
+                        '<section class="w-chart rv" aria-labelledby="h-wchart">' +
+                        secHead({
+                            eyebrow: "Trend",
+                            id: "h-wchart",
+                            title:
+                                "Weight · since " +
+                                esc(shortDay(data.weightWindowStart)),
+                            note: pts
+                                ? plural(pts, "weigh-in") +
+                                  " since " +
+                                  esc(longDay(data.weightWindowStart)) +
+                                  ", in " +
+                                  unit +
+                                  "."
+                                : "No weigh-ins in the last " +
+                                  windowDays +
+                                  " days.",
+                            legend: pts
+                                ? legend(
+                                      [[LG.dotline(), "Weight"]]
+                                          .concat(
+                                              s.target_g != null
+                                                  ? [[LG.line(true), "Target"]]
+                                                  : [],
+                                          )
+                                          .concat(
+                                              s.healthy_min_g != null
+                                                  ? [
+                                                        [
+                                                            LG.bar("m-band"),
+                                                            "Healthy BMI range",
+                                                        ],
+                                                    ]
+                                                  : [],
+                                          ),
+                                  )
+                                : "",
+                        }) +
                         (pts
-                            ? plural(pts, "weigh-in") +
-                              " since " +
-                              esc(longDay(data.weightWindowStart)) +
-                              ", in " +
-                              unit +
-                              "."
-                            : "No weigh-ins in the last " +
-                              windowDays +
-                              " days.") +
-                        "</p></div></div>" +
-                        (pts
-                            ? legend(
-                                  [[LG.dotline(), "Weight"]]
-                                      .concat(
-                                          s.target_g != null
-                                              ? [[LG.line(true), "Target"]]
-                                              : [],
-                                      )
-                                      .concat(
-                                          s.healthy_min_g != null
-                                              ? [
-                                                    [
-                                                        LG.bar("m-band"),
-                                                        "Healthy BMI range",
-                                                    ],
-                                                ]
-                                              : [],
-                                      ),
-                              ) + '<div class="plot" id="weight-plot"></div>'
+                            ? '<div class="plot" id="weight-plot"></div>'
                             : '<p class="empty">No weigh-ins yet. Ask Claude to log your weight.</p>') +
-                        "</section></div></div></div>";
+                        "</section>" +
+                        bodyFormHtml() +
+                        "</div></div>";
                     fillBodyForm();
                     wireBodyForm();
                     wireLogWeight();
@@ -6282,7 +6248,7 @@
                     const last = pts[pts.length - 1];
                     const c = chartSvg(
                         host,
-                        isDesktop() ? 300 : 240,
+                        innerWidth <= 480 ? 220 : 280,
                         "Body weight since " +
                             shortDay(data.weightWindowStart) +
                             ": " +
@@ -6306,7 +6272,6 @@
                             ". Use the arrow keys to read each weigh-in.",
                     );
                     const svg = c.svg;
-                    const plotW = c.w - PAD.l - PAD.r;
                     const base = c.h - PAD.b;
                     const plotH = base - PAD.t;
                     const vals = pts.map((p) => p.v);
@@ -6316,10 +6281,12 @@
                     const padY = (hi - lo) * 0.2 || 1;
                     lo -= padY;
                     hi += padY;
+                    const L = gutter([hi.toFixed(1), lo.toFixed(1)]);
+                    const plotW = c.w - L - PAD.r;
                     const t0 = parseDay(data.weightWindowStart).getTime();
                     const t1 = parseDay(data.endDate).getTime();
                     const xAt = (iso) =>
-                        PAD.l +
+                        L +
                         (t1 === t0
                             ? plotW / 2
                             : ((parseDay(iso).getTime() - t0) / (t1 - t0)) *
@@ -6331,7 +6298,7 @@
                         if (b > a)
                             svg.appendChild(
                                 svgEl("rect", {
-                                    x: PAD.l,
+                                    x: L,
                                     y: yAt(b),
                                     width: plotW,
                                     height: yAt(a) - yAt(b),
@@ -6339,20 +6306,22 @@
                                 }),
                             );
                     }
+                    baseline(svg, L, L + plotW, base);
                     for (let i = 0; i <= 3; i++) {
                         const v = lo + ((hi - lo) / 3) * i;
-                        svg.appendChild(
-                            svgEl("line", {
-                                x1: PAD.l,
-                                x2: PAD.l + plotW,
-                                y1: yAt(v),
-                                y2: yAt(v),
-                                class: "gridline",
-                            }),
-                        );
+                        if (i)
+                            svg.appendChild(
+                                svgEl("line", {
+                                    x1: L,
+                                    x2: L + plotW,
+                                    y1: yAt(v),
+                                    y2: yAt(v),
+                                    class: "gridline",
+                                }),
+                            );
                         svgText(
                             svg,
-                            PAD.l - 8,
+                            L - 8,
                             yAt(v) + 4,
                             v.toFixed(1),
                             "ax",
@@ -6363,8 +6332,8 @@
                         const ty = yAt(toUnit(s.target_g, unit));
                         svg.appendChild(
                             svgEl("line", {
-                                x1: PAD.l,
-                                x2: PAD.l + plotW,
+                                x1: L,
+                                x2: L + plotW,
                                 y1: ty,
                                 y2: ty,
                                 class: "m-target",
@@ -6372,7 +6341,7 @@
                         );
                         svgText(
                             svg,
-                            PAD.l + plotW,
+                            L + plotW,
                             ty - 7,
                             "Target " + wfmt(s.target_g, unit),
                             "goal-lbl",
@@ -6393,7 +6362,7 @@
                             class: "m-wline",
                         }),
                     );
-                    const r = pts.length > 60 ? 2.5 : 4;
+                    const r = pts.length > 60 ? 2.5 : 3.5;
                     pts.forEach(function (p) {
                         svg.appendChild(
                             svgEl("circle", {
@@ -6408,10 +6377,10 @@
                         function (iso, k) {
                             svgText(
                                 svg,
-                                k ? PAD.l + plotW : PAD.l,
+                                k ? L + plotW : L,
                                 c.h - 8,
                                 shortDay(iso),
-                                "ax",
+                                "xl",
                                 k ? "end" : "start",
                             );
                         },
@@ -6488,8 +6457,8 @@
                         "treat",
                     ];
                     return (
-                        '<form id="me-form" class="me-form" novalidate aria-label="Edit meal">' +
-                        '<label class="field me-desc" for="me-description">Description<textarea class="input" id="me-description" rows="2" maxlength="2000">' +
+                        '<form id="me-form" class="me-form" novalidate aria-label="Edit meal"><div class="form-grid">' +
+                        '<label class="field wide" for="me-description">Description<textarea class="input" id="me-description" rows="2" maxlength="2000">' +
                         esc(v.description) +
                         "</textarea></label>" +
                         '<label class="field" for="me-type">Meal<select class="input" id="me-type">' +
@@ -6511,7 +6480,6 @@
                         '<label class="field" for="me-at">Eaten at<input class="input" id="me-at" type="datetime-local" value="' +
                         esc(v.logged_at) +
                         '" /></label>' +
-                        '<div class="me-nums">' +
                         MEAL_NUMS.map(function (n) {
                             return (
                                 '<label class="field" for="me-' +
@@ -6529,7 +6497,7 @@
                         }).join("") +
                         "</div>" +
                         '<div class="form-foot"><button type="submit" class="btn primary" id="me-save">Save changes</button><button type="button" class="btn" id="me-cancel">Cancel</button><span class="b-status" id="me-status" role="status"></span></div>' +
-                        '<p class="note">Times are in ' +
+                        '<p class="form-hint">Times are in ' +
                         esc(data.timezone) +
                         ". Only the fields you change are saved.</p></form>"
                     );
@@ -6674,7 +6642,7 @@
                     const meals = data.meals;
                     if (!meals.length) {
                         $("meals-body").innerHTML =
-                            '<div class="card"><p class="empty">No meals logged in this range.</p></div>';
+                            '<p class="empty">No meals logged in this range.</p>';
                         return;
                     }
                     // Group by local day in the PROFILE timezone, newest first
@@ -6716,7 +6684,7 @@
                             const tot =
                                 "<b>" +
                                 fmt(sum(g.meals, "calories")) +
-                                " kcal</b> · P " +
+                                "</b> kcal · P " +
                                 fmt(sum(g.meals, "protein_g")) +
                                 " · C " +
                                 fmt(sum(g.meals, "carbs_g")) +
@@ -6790,7 +6758,7 @@
                               esc(mealFlash) +
                               "</p>"
                             : "") +
-                        '<div class="card meals-wrap"><table class="meals-table"><caption class="sr-only">Meals in this range, grouped by day, newest first</caption><thead><tr><th scope="col">Time</th><th scope="col">Meal</th><th scope="col">Description</th><th scope="col" class="n">kcal</th><th scope="col" class="n">P</th><th scope="col" class="n">C</th><th scope="col" class="n">F</th><th scope="col" class="n">Fib</th><th scope="col" class="n">Sug</th><th scope="col"><span class="sr-only">Edit</span></th></tr></thead>' +
+                        '<div class="meals-wrap rv"><table class="meals-table"><caption class="sr-only">Meals in this range, grouped by day, newest first</caption><thead><tr><th scope="col">Time</th><th scope="col">Meal</th><th scope="col">Description</th><th scope="col" class="n">kcal</th><th scope="col" class="n">P</th><th scope="col" class="n">C</th><th scope="col" class="n">F</th><th scope="col" class="n">Fib</th><th scope="col" class="n">Sug</th><th scope="col"><span class="sr-only">Edit</span></th></tr></thead>' +
                         body +
                         '</table><p class="meals-foot">Showing the ' +
                         plural(
