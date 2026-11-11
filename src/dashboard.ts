@@ -583,8 +583,43 @@ async function readObject(c: {
     }
 }
 
+// The /dashboard page's CSP: the server default (src/index.ts) with font-src
+// narrowed to 'self', because the page self-hosts its fonts and must make no
+// third-party request. src/dashboard-fixture.test.ts checks it differs from
+// the default only in font-src.
+export const DASHBOARD_CSP =
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self'; img-src 'self'; frame-ancestors 'none'";
+
+// Allowlist of the self-hosted dashboard fonts (public/dashboard-fonts/,
+// OFL texts alongside). Versioned names: the bytes never change under a name,
+// which is what makes the immutable cache safe.
+export const DASHBOARD_FONTS: ReadonlySet<string> = new Set([
+    "bricolage-grotesque-latin-v9.woff2",
+    "instrument-sans-latin-v4.woff2",
+    "geist-mono-latin-v6.woff2",
+]);
+
+// One implementation for production and the preview. null = not ours (404).
+export function dashboardFontResponse(file: string): Response | null {
+    if (!DASHBOARD_FONTS.has(file)) return null;
+    return new Response(Bun.file(`./public/dashboard-fonts/${file}`), {
+        headers: {
+            "Content-Type": "font/woff2",
+            "Cache-Control": "public, max-age=31536000, immutable",
+        },
+    });
+}
+
 export function createDashboardRouter(): Hono {
     const dash = new Hono();
+
+    // Self-hosted fonts for the page. Unauthenticated (the login card needs
+    // them, and font fetches carry no bearer); the allowlist lookup is the
+    // only path check, so no path is ever built from unchecked input.
+    dash.get(
+        "/dashboard-fonts/:file",
+        (c) => dashboardFontResponse(c.req.param("file")) ?? c.notFound(),
+    );
 
     // Exchange email + password for an access token. Deliberately does NOT
     // sign anyone up: the account is created through the OAuth flow when the

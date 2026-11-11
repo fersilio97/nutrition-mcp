@@ -165,13 +165,34 @@ describe("preview scenarios say what they claim", () => {
         }
     });
 
-    test("the preview sends the same CSP string as src/index.ts", async () => {
-        // Read as text: importing the script would start its server.
-        const preview = await Bun.file("scripts/dashboard-preview.ts").text();
+    test("the dashboard CSP is the default with font-src 'self', shared by prod and preview", async () => {
+        // Read as text: importing the preview would start its server.
         const index = await Bun.file("src/index.ts").text();
-        const csp = /PREVIEW_CSP =\s*"([^"]+)"/.exec(preview)?.[1];
+        const dash = await Bun.file("src/dashboard.ts").text();
+        const preview = await Bun.file("scripts/dashboard-preview.ts").text();
+        const parse = (s: string) =>
+            Object.fromEntries(
+                s
+                    .split(";")
+                    .map((d) => d.trim())
+                    .filter(Boolean)
+                    .map((d) => [
+                        d.split(" ")[0],
+                        d.split(" ").slice(1).join(" "),
+                    ]),
+            );
+        const def = /"(default-src [^"]+)"/.exec(index)?.[1];
+        const csp = /DASHBOARD_CSP =\s*"([^"]+)"/.exec(dash)?.[1];
+        expect(def).toBeDefined();
         expect(csp).toBeDefined();
-        expect(index).toContain(`"${csp}"`);
+        const a = parse(def!),
+            b = parse(csp!);
+        expect(b["font-src"]).toBe("'self'");
+        expect({ ...b, "font-src": a["font-src"] }).toEqual(a);
+        expect(index).toContain(
+            'c.header("Content-Security-Policy", DASHBOARD_CSP)',
+        );
+        expect(preview).toContain("PREVIEW_CSP = DASHBOARD_CSP");
     });
 
     test("deterministic: the same today renders the same page", () => {

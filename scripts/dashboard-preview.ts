@@ -28,7 +28,13 @@
 process.env.SUPABASE_URL = "";
 process.env.SUPABASE_SECRET_KEY = "";
 
-import { bodyOf, checkMealPatch, checkWeightEntry } from "../src/dashboard.js";
+import {
+    bodyOf,
+    checkMealPatch,
+    checkWeightEntry,
+    DASHBOARD_CSP,
+    dashboardFontResponse,
+} from "../src/dashboard.js";
 import {
     SCENARIOS,
     isScenario,
@@ -43,10 +49,9 @@ import { checkBodyPatch } from "../src/body.js";
 import { dateInTz, todayInTz } from "../src/tz.js";
 import type { Meal } from "../src/supabase.js";
 
-// Same string src/index.ts sends (src/dashboard-fixture.test.ts keeps the two
-// in step), so a CSP violation shows up here before it shows up in prod.
-export const PREVIEW_CSP =
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self'; frame-ancestors 'none'";
+// The same CSP production sends for /dashboard (src/dashboard-fixture.test.ts
+// keeps the two in step), so a CSP violation shows up here before prod.
+export const PREVIEW_CSP = DASHBOARD_CSP;
 
 const PORT = Number(process.env.DASHBOARD_PREVIEW_PORT ?? 8791);
 const TOKEN = "preview-token";
@@ -265,6 +270,12 @@ const server = Bun.serve({
                 },
             });
         }
+
+        if (req.method === "GET" && path.startsWith("/dashboard-fonts/"))
+            return (
+                dashboardFontResponse(path.slice("/dashboard-fonts/".length)) ??
+                new Response("Not found", { status: 404 })
+            );
 
         return json({ error: "not_found" }, 404);
     },

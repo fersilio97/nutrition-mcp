@@ -3,7 +3,11 @@ import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
 import { createOAuthRouter } from "./oauth.js";
 import { createActivitySyncRouter } from "./activity-sync.js";
-import { createDashboardRouter, dashboardEnabled } from "./dashboard.js";
+import {
+    createDashboardRouter,
+    dashboardEnabled,
+    DASHBOARD_CSP,
+} from "./dashboard.js";
 import {
     authenticateBearer,
     rateLimit,
@@ -191,6 +195,7 @@ if (dashboardEnabled()) {
     app.route("/", createDashboardRouter());
 
     app.get("/dashboard", async (c) => {
+        c.header("Content-Security-Policy", DASHBOARD_CSP);
         return c.html(await Bun.file("./public/dashboard.html").text());
     });
 }
