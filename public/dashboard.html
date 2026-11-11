@@ -1636,6 +1636,12 @@
             }
             .strip .foot .link-btn {
                 min-height: 28px;
+                white-space: normal;
+                text-align: left;
+            }
+            .strip + .empty,
+            .strip + .plot {
+                margin-top: var(--gap-block);
             }
             .strip.three {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1717,6 +1723,12 @@
                 overflow: visible;
                 touch-action: pan-y;
                 border-radius: 4px;
+            }
+            /* A tap focuses the chart (it pins the tooltip); Chrome then
+               paints its blue UA ring although this is not :focus-visible.
+               Keyboard focus keeps the brand ring. */
+            svg.chart:focus:not(:focus-visible) {
+                outline: none;
             }
             .chart text {
                 font-family: var(--font-mono);
