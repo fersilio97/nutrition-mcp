@@ -88,6 +88,69 @@ describe("matchFood", () => {
         expect(foodMatchFor("wine-red", 750)!.values.alcohol_g).toBe(78);
     });
 
+    test("units: olive oil by the spoon or by the millilitre gives the same nutrients", () => {
+        const tbsp = foodMatchFor("olive-oil", 1, 1, "tbsp")!;
+        const ml = foodMatchFor("olive-oil", 15, 1, "ml")!;
+        expect(tbsp.values).toEqual(ml.values);
+        expect(tbsp.values.calories).toBe(119);
+        expect(tbsp.values.fat_g).toBe(13.5);
+        expect(foodMatchFor("olive-oil", 2, 1, "tbsp")!.values.calories).toBe(
+            238,
+        );
+        expect(foodMatchFor("olive-oil", 1, 1, "tsp")!.values.calories).toBe(
+            40,
+        );
+        // The default is the base unit; the named serving keeps its name.
+        expect(foodMatchFor("olive-oil")!.unit).toBe("ml");
+        expect(foodMatchFor("olive-oil")!.description).toBe(
+            "Olive oil (1 tbsp)",
+        );
+        expect(tbsp.baseAmount).toBe(15);
+        expect(tbsp.unit).toBe("tbsp");
+        expect(tbsp.amount).toBe(1);
+        // In its own unit a non-serving amount is labelled with that unit.
+        expect(foodMatchFor("olive-oil", 1.5, 1, "tbsp")!.description).toBe(
+            "Olive oil (1.5 tbsp)",
+        );
+    });
+
+    test("units: fluid ounces for drinks, grams for a banana", () => {
+        const oz = foodMatchFor("beer", 12, 1, "fl oz")!;
+        expect(oz.baseAmount).toBeCloseTo(354.88, 2);
+        expect(oz.description).toBe("Beer (12 fl oz)");
+        expect(oz.values.calories).toBe(153);
+        expect(foodMatchFor("wine-red", 5, 1, "fl oz")!.values.calories).toBe(
+            123,
+        );
+        const g = foodMatchFor("banana", 59, 1, "g")!;
+        expect(g.values.calories).toBe(53);
+        expect(g.description).toBe("Banana (59 g)");
+        expect(foodMatchFor("coffee-black", 1, 1, "cup")!.values.calories).toBe(
+            2,
+        );
+    });
+
+    test("an item only offers its own units; bad units are refused", () => {
+        expect(foodMatchFor("beer", 1, 1, "tbsp")).toBeNull();
+        expect(foodMatchFor("olive-oil", 1, 1, "cup")).toBeNull();
+        expect(foodMatchFor("beer", 355, 1, "nope")).toBeNull();
+        // The cap applies to the base amount: 200 tbsp is 3 litres of oil.
+        expect(foodMatchFor("olive-oil", 400, 1, "tbsp")).toBeNull();
+        expect(foodMatchFor("beer")!.units.map((u) => u.id)).toEqual([
+            "ml",
+            "fl oz",
+        ]);
+        expect(foodMatchFor("olive-oil")!.units.map((u) => u.id)).toEqual([
+            "ml",
+            "tbsp",
+            "tsp",
+        ]);
+        expect(
+            suggestFood({ id: "olive-oil", amount: "2", unit: "tbsp" })?.values
+                .calories,
+        ).toBe(238);
+    });
+
     test("out-of-range amounts and counts, and unknown items, are refused", () => {
         for (const args of [
             ["beer", 0],

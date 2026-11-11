@@ -2134,8 +2134,10 @@
             .lm-item #lm-custom {
                 flex: 0 0 88px;
             }
-            .lm-x,
-            .lm-unit {
+            .lm-item #lm-unit {
+                flex: 0 0 110px;
+            }
+            .lm-x {
                 font-family: var(--font-mono);
                 font-size: var(--fs-small);
                 color: var(--ink-3);
@@ -7085,7 +7087,7 @@
                     const near = (a, b) => Math.abs(a - b) < 1e-9;
                     const listed =
                         !f.custom &&
-                        f.servings.some((x) => near(x.amount, f.amount));
+                        f.servings.some((x) => near(x.amount, f.baseAmount));
                     const amount =
                         '<select class="input" id="lm-amount" aria-label="Amount">' +
                         f.servings
@@ -7094,7 +7096,7 @@
                                     '<option value="' +
                                     x.amount +
                                     '"' +
-                                    (listed && near(x.amount, f.amount)
+                                    (listed && near(x.amount, f.baseAmount)
                                         ? " selected"
                                         : "") +
                                     ">" +
@@ -7111,9 +7113,20 @@
                           esc(String(f.amount)) +
                           '" aria-label="Amount in ' +
                           esc(f.unit) +
-                          '" /><span class="lm-unit">' +
-                          esc(f.unit) +
-                          "</span>";
+                          '" /><select class="input" id="lm-unit" aria-label="Unit">' +
+                          f.units
+                              .map(
+                                  (u) =>
+                                      '<option value="' +
+                                      esc(u.id) +
+                                      '"' +
+                                      (u.id === f.unit ? " selected" : "") +
+                                      ">" +
+                                      esc(u.label) +
+                                      "</option>",
+                              )
+                              .join("") +
+                          "</select>";
                     return (
                         pick +
                         amount +
@@ -7569,6 +7582,25 @@
                                 {
                                     id: lmFood.id,
                                     amount: t.value,
+                                    unit: lmFood.unit,
+                                    count: lmFood.count,
+                                },
+                                { custom: true },
+                            );
+                    } else if (lmFood && t.id === "lm-unit") {
+                        // The same quantity, expressed in the new unit.
+                        const u = lmFood.units.filter(
+                            (x) => x.id === t.value,
+                        )[0];
+                        if (u)
+                            go(
+                                {
+                                    id: lmFood.id,
+                                    amount:
+                                        Math.round(
+                                            (lmFood.baseAmount / u.per) * 100,
+                                        ) / 100,
+                                    unit: u.id,
                                     count: lmFood.count,
                                 },
                                 { custom: true },
@@ -7579,7 +7611,18 @@
                             Math.max(1, Math.round(Number(t.value) || 1)),
                         );
                         go(
-                            { id: lmFood.id, amount: lmFood.amount, count: n },
+                            lmFood.custom
+                                ? {
+                                      id: lmFood.id,
+                                      amount: lmFood.amount,
+                                      unit: lmFood.unit,
+                                      count: n,
+                                  }
+                                : {
+                                      id: lmFood.id,
+                                      amount: lmFood.baseAmount,
+                                      count: n,
+                                  },
                             { custom: lmFood.custom },
                         );
                     }

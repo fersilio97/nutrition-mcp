@@ -989,6 +989,7 @@ export function createDashboardRouter(): Hono {
                 q: c.req.query("q"),
                 id: c.req.query("id"),
                 amount: c.req.query("amount"),
+                unit: c.req.query("unit"),
                 count: c.req.query("count"),
             }),
         }),

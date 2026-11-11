@@ -258,6 +258,7 @@ const server = Bun.serve({
                     q: q.get("q"),
                     id: q.get("id"),
                     amount: q.get("amount"),
+                    unit: q.get("unit"),
                     count: q.get("count"),
                 }),
             });

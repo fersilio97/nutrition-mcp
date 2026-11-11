@@ -40,14 +40,28 @@ export interface Serving {
     amount: number;
 }
 
+/** A unit an item can be measured in; `per` is how much of the item's
+ *  base unit one of it is (1 tbsp of oil = 15 ml). */
+export interface FoodUnit {
+    id: string;
+    label: string;
+    per: number;
+}
+
 export interface FoodMatch {
     id: string;
     /** Generic name: "Beer". The amount is separate. */
     name: string;
-    unit: string;
+    /** Every unit the amount can be given in; the first is the base unit. */
+    units: FoodUnit[];
+    /** Common named amounts, in the BASE unit. */
     servings: Serving[];
-    /** The amount in `unit` the values are for (one portion). */
+    /** The unit `amount` is in (an id from `units`). */
+    unit: string;
+    /** The amount, in `unit`, the values are for (one portion). */
     amount: number;
+    /** The same amount in the base unit. */
+    baseAmount: number;
     /** How many of that amount. */
     count: number;
     /** Nutrients for count × amount. */
@@ -382,16 +396,26 @@ for (const f of FOODS)
         INDEX.set(k, f);
     }
 
-// How much of each item the values above are FOR (`ref`), the amounts it
-// is commonly had in, and which one is the default. The entry's figures are
-// for exactly one `ref`; any other amount scales linearly.
+// How much of each item the values above are FOR (`ref`, in the base
+// unit), the amounts it is commonly had in, which one is the default, and any
+// other units it can be measured in. The entry's figures are for exactly one
+// `ref`; any other amount scales linearly.
 interface Portion {
+    /** Base unit id, also its label: "ml", "banana", "cup". */
     unit: string;
     ref: number;
     servings: Serving[];
     def: number;
+    alt?: FoodUnit[];
 }
 const sv = (label: string, amount: number): Serving => ({ label, amount });
+const U = (id: string, per: number, label = id): FoodUnit => ({
+    id,
+    label,
+    per,
+});
+const FLOZ = U("fl oz", 29.5735);
+const CUP = U("cup", 240);
 const BEER = [
     sv("Caña 200 ml", 200),
     sv("Small bottle 250 ml", 250),
@@ -422,12 +446,14 @@ const PORTIONS: Record<string, Portion> = {
         ref: 240,
         servings: [sv("Small cup 150 ml", 150), ...HOT],
         def: 1,
+        alt: [FLOZ, CUP],
     },
     espresso: {
         unit: "ml",
         ref: 30,
         servings: [sv("Single shot 30 ml", 30), sv("Double shot 60 ml", 60)],
         def: 0,
+        alt: [FLOZ],
     },
     "coffee-milk": {
         unit: "cup",
@@ -439,12 +465,36 @@ const PORTIONS: Record<string, Portion> = {
         ],
         def: 1,
     },
-    "tea-black": { unit: "ml", ref: 240, servings: HOT, def: 0 },
-    "tea-green": { unit: "ml", ref: 240, servings: HOT, def: 0 },
-    beer: { unit: "ml", ref: 355, servings: BEER, def: 3 },
-    "beer-light": { unit: "ml", ref: 355, servings: BEER, def: 3 },
-    "wine-red": { unit: "ml", ref: 150, servings: WINE, def: 2 },
-    "wine-white": { unit: "ml", ref: 150, servings: WINE, def: 2 },
+    "tea-black": {
+        unit: "ml",
+        ref: 240,
+        servings: HOT,
+        def: 0,
+        alt: [FLOZ, CUP],
+    },
+    "tea-green": {
+        unit: "ml",
+        ref: 240,
+        servings: HOT,
+        def: 0,
+        alt: [FLOZ, CUP],
+    },
+    beer: { unit: "ml", ref: 355, servings: BEER, def: 3, alt: [FLOZ] },
+    "beer-light": {
+        unit: "ml",
+        ref: 355,
+        servings: BEER,
+        def: 3,
+        alt: [FLOZ],
+    },
+    "wine-red": { unit: "ml", ref: 150, servings: WINE, def: 2, alt: [FLOZ] },
+    "wine-white": {
+        unit: "ml",
+        ref: 150,
+        servings: WINE,
+        def: 2,
+        alt: [FLOZ],
+    },
     "sparkling-wine": {
         unit: "ml",
         ref: 125,
@@ -455,6 +505,7 @@ const PORTIONS: Record<string, Portion> = {
             sv("Bottle 750 ml", 750),
         ],
         def: 0,
+        alt: [FLOZ],
     },
     spirit: {
         unit: "ml",
@@ -466,9 +517,16 @@ const PORTIONS: Record<string, Portion> = {
             sv("Double 88 ml", 88),
         ],
         def: 1,
+        alt: [FLOZ],
     },
-    cola: { unit: "ml", ref: 355, servings: COLA, def: 1 },
-    "cola-zero": { unit: "ml", ref: 355, servings: COLA, def: 1 },
+    cola: { unit: "ml", ref: 355, servings: COLA, def: 1, alt: [FLOZ] },
+    "cola-zero": {
+        unit: "ml",
+        ref: 355,
+        servings: COLA,
+        def: 1,
+        alt: [FLOZ],
+    },
     "orange-juice": {
         unit: "ml",
         ref: 240,
@@ -478,6 +536,7 @@ const PORTIONS: Record<string, Portion> = {
             sv("Large 330 ml", 330),
         ],
         def: 1,
+        alt: [FLOZ, CUP],
     },
     "milk-whole": {
         unit: "ml",
@@ -488,25 +547,36 @@ const PORTIONS: Record<string, Portion> = {
             sv("Mug 350 ml", 350),
         ],
         def: 1,
+        alt: [FLOZ, CUP],
     },
-    "egg-boiled": { unit: "egg", ref: 1, servings: [sv("1 egg", 1)], def: 0 },
+    "egg-boiled": {
+        unit: "egg",
+        ref: 1,
+        servings: [sv("1 egg", 1)],
+        def: 0,
+        alt: [U("g", 1 / 50)],
+    },
     banana: {
         unit: "banana",
         ref: 1,
         servings: [sv("Half", 0.5), sv("1 medium", 1)],
         def: 1,
+        alt: [U("g", 1 / 118)],
     },
     apple: {
         unit: "apple",
         ref: 1,
         servings: [sv("Half", 0.5), sv("1 medium", 1)],
         def: 1,
+        alt: [U("g", 1 / 182)],
     },
+    // Oil is measured by the spoon and by the millilitre.
     "olive-oil": {
-        unit: "tbsp",
-        ref: 1,
-        servings: [sv("1 tsp", 0.33), sv("1 tbsp", 1), sv("2 tbsp", 2)],
+        unit: "ml",
+        ref: 15,
+        servings: [sv("1 tsp", 5), sv("1 tbsp", 15), sv("2 tbsp", 30)],
         def: 1,
+        alt: [U("tbsp", 15), U("tsp", 5)],
     },
 };
 const BY_ID = new Map(FOODS.map((f) => [f.id, f]));
@@ -516,31 +586,44 @@ for (const f of FOODS) {
         throw new Error(`simple-foods.ts: no portions for "${f.id}"`);
 }
 
+const unitsOf = (por: Portion): FoodUnit[] => [
+    { id: por.unit, label: por.unit, per: 1 },
+    ...(por.alt ?? []),
+];
+
 const round1 = (n: number) => Math.round(n * 10) / 10;
+const round2 = (n: number) => Math.round(n * 100) / 100;
+// Caps on the amount in the BASE unit (ml / pieces).
 const MAX_ML = 5000;
 const MAX_PIECES = 20;
 
-/** Nutrients for `count` × `amount` of an item (amount in the item's unit;
- *  the default serving when omitted). Null for an unknown item or an amount
- *  / count out of range. Pure. */
+/** Nutrients for `count` × `amount` of an item. `amount` is in `unit` (an id
+ *  from the item's units; the base unit when omitted) and defaults to the
+ *  default serving. Null for an unknown item or unit, or an amount / count
+ *  out of range. Pure. */
 export function foodMatchFor(
     id: string,
     amount?: number,
     count = 1,
+    unit?: string,
 ): FoodMatch | null {
     const entry = BY_ID.get(id);
     const por = PORTIONS[id];
     if (!entry || !por) return null;
-    const amt = amount ?? por.servings[por.def]!.amount;
+    const units = unitsOf(por);
+    const u = unit ? units.find((x) => x.id === unit) : units[0];
+    if (!u) return null;
+    const baseAmt =
+        amount === undefined ? por.servings[por.def]!.amount : amount * u.per;
     if (
-        !Number.isFinite(amt) ||
-        amt <= 0 ||
-        amt > (por.unit === "ml" ? MAX_ML : MAX_PIECES)
+        !Number.isFinite(baseAmt) ||
+        baseAmt <= 0 ||
+        baseAmt > (por.unit === "ml" ? MAX_ML : MAX_PIECES)
     )
         return null;
     if (!Number.isInteger(count) || count < 1 || count > MAX_COUNT) return null;
 
-    const f = (amt / por.ref) * count;
+    const f = (baseAmt / por.ref) * count;
     const scale = (n: number) => round1(n * f);
     const values: FoodValues = {
         calories: Math.round(entry.calories * f),
@@ -554,15 +637,20 @@ export function foodMatchFor(
         values.alcohol_g = scale(entry.alcohol_g);
     if (entry.caffeine_mg !== undefined)
         values.caffeine_mg = Math.round(entry.caffeine_mg * f);
+
+    // Shown in the unit it was entered in; a named serving keeps its name.
+    const shown = amount === undefined ? baseAmt / u.per : amount;
+    const named = por.servings.find((x) => Math.abs(x.amount - baseAmt) < 1e-9);
     const label =
-        por.servings.find((x) => Math.abs(x.amount - amt) < 1e-9)?.label ??
-        `${round1(amt)} ${por.unit}`;
+        named && u === units[0] ? named.label : `${round2(shown)} ${u.label}`;
     return {
         id,
         name: entry.name,
-        unit: por.unit,
+        units,
         servings: por.servings,
-        amount: amt,
+        unit: u.id,
+        amount: round2(shown),
+        baseAmount: baseAmt,
         count,
         values,
         description: `${count > 1 ? `${count} × ` : ""}${entry.name} (${label})`,
@@ -573,7 +661,7 @@ export function foodMatchFor(
 export function listFoods(): {
     id: string;
     name: string;
-    unit: string;
+    units: FoodUnit[];
     servings: Serving[];
     amount: number;
 }[] {
@@ -582,7 +670,7 @@ export function listFoods(): {
         return {
             id: f.id,
             name: f.name,
-            unit: por.unit,
+            units: unitsOf(por),
             servings: por.servings,
             amount: por.servings[por.def]!.amount,
         };
@@ -620,16 +708,23 @@ export function matchFood(description: string): FoodMatch | null {
 }
 
 /** One entry point for the page's lookups: an item picked by id (with an
- *  optional amount and count), or free text. Query-string values. */
+ *  optional amount, unit and count), or free text. Query-string values. */
 export function suggestFood(p: {
     q?: string | null;
     id?: string | null;
     amount?: string | null;
+    unit?: string | null;
     count?: string | null;
 }): FoodMatch | null {
     const num = (v?: string | null) =>
         v == null || v === "" ? undefined : Number(v);
-    if (p.id) return foodMatchFor(p.id, num(p.amount), num(p.count) ?? 1);
+    if (p.id)
+        return foodMatchFor(
+            p.id,
+            num(p.amount),
+            num(p.count) ?? 1,
+            p.unit || undefined,
+        );
     return matchFood(p.q ?? "");
 }
 
