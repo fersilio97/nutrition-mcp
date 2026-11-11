@@ -520,6 +520,26 @@ export interface PreviewEdits {
     weights?: WeightEntry[];
     /** Meal edits from the Meals tab, by meal id. */
     mealPatches?: Record<string, Partial<Meal>>;
+    /** Calorie goal saved from the page: a number, or null for "use the
+     *  estimated burn". Absent means not edited this session. */
+    goalCalories?: number | null;
+}
+
+function emptyGoals(): NutritionGoals {
+    return {
+        user_id: "fixture",
+        daily_calories: null,
+        daily_protein_g: null,
+        daily_carbs_g: null,
+        daily_fat_g: null,
+        daily_fiber_g: null,
+        daily_sugar_g: null,
+        daily_alcohol_g: null,
+        daily_caffeine_mg: null,
+        daily_water_ml: null,
+        target_weight_g: null,
+        updated_at: "",
+    };
 }
 
 /** A scenario's rows with the preview's in-memory writes applied. */
@@ -531,6 +551,11 @@ export function scenarioWithEdits(
     const fx = buildScenario(name, today);
     if (edits.body) fx.profile = { ...fx.profile, ...edits.body };
     if (edits.weights?.length) fx.weight = [...fx.weight, ...edits.weights];
+    if (edits.goalCalories !== undefined)
+        fx.goals = {
+            ...(fx.goals ?? emptyGoals()),
+            daily_calories: edits.goalCalories,
+        };
     const patches = edits.mealPatches ?? {};
     fx.meals = fx.meals.map((m) =>
         patches[m.id] ? { ...m, ...patches[m.id] } : m,

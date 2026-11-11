@@ -22,6 +22,7 @@ import {
     getWaterInRange,
     getWeightInRange,
     getNutritionGoals,
+    upsertNutritionGoals,
     getProfile,
     getLatestWeight,
     getActivityInRange,
@@ -331,6 +332,49 @@ export async function saveBodyDetails(
         };
     const saved = await upsertProfile(userId, checked.patch);
     return { status: 200, json: { ok: true, body: bodyOf(saved) } };
+}
+
+/** The "Calorie goal" form: a baseline kcal figure (the day's active kcal are
+ *  added on top, as for every goal), or null to go back to the estimated
+ *  burn. Same ceiling as set_nutrition_goals. */
+export function checkCalorieGoal(
+    input: Record<string, unknown>,
+): { ok: true; value: number | null } | { ok: false; error: string } {
+    if (!("calories" in input))
+        return { ok: false, error: "calories is required (or null to reset)." };
+    if (input.calories === null || input.calories === "")
+        return { ok: true, value: null };
+    const n = toNumber(input.calories);
+    if (n == null || n < 500 || n > MAX_CALORIES)
+        return {
+            ok: false,
+            error: `Calorie goal must be between 500 and ${MAX_CALORIES.toLocaleString("en-US")} kcal.`,
+        };
+    return { ok: true, value: Math.round(n) };
+}
+
+/** Save the calorie goal without touching the other targets (the upsert
+ *  rewrites the whole row, so the existing one is carried over). */
+export async function saveCalorieGoal(
+    userId: string,
+    input: Record<string, unknown>,
+): Promise<{ status: 200 | 400 | 404; json: Record<string, unknown> }> {
+    const checked = checkCalorieGoal(input);
+    if (!checked.ok) return invalid(checked.error);
+    const existing = await getNutritionGoals(userId);
+    const saved = await upsertNutritionGoals(userId, {
+        daily_calories: checked.value,
+        daily_protein_g: existing?.daily_protein_g,
+        daily_carbs_g: existing?.daily_carbs_g,
+        daily_fat_g: existing?.daily_fat_g,
+        daily_fiber_g: existing?.daily_fiber_g,
+        daily_sugar_g: existing?.daily_sugar_g,
+        daily_alcohol_g: existing?.daily_alcohol_g,
+        daily_caffeine_mg: existing?.daily_caffeine_mg,
+        daily_water_ml: existing?.daily_water_ml,
+        target_weight_g: existing?.target_weight_g,
+    });
+    return { status: 200, json: { ok: true, calories: saved.daily_calories } };
 }
 
 type Checked<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -680,6 +724,14 @@ export function createDashboardRouter(): Hono {
             return c.json({ error: "invalid_request" }, 400);
         }
         const res = await saveBodyDetails(userId, body);
+        return c.json(res.json, res.status);
+    });
+
+    // Set (or reset to the estimated burn) the daily calorie goal.
+    dash.post("/api/dashboard/goal", authenticateBearer, async (c) => {
+        const body = await readObject(c);
+        if (!body) return c.json({ error: "invalid_request" }, 400);
+        const res = await saveCalorieGoal(c.get("userId") as string, body);
         return c.json(res.json, res.status);
     });
 

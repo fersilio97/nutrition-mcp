@@ -32,6 +32,7 @@ import {
     bodyOf,
     checkMealPatch,
     checkWeightEntry,
+    checkCalorieGoal,
     DASHBOARD_CSP,
     dashboardFontResponse,
 } from "../src/dashboard.js";
@@ -187,6 +188,16 @@ const server = Bun.serve({
                 bodyOf(buildScenario(state.scenario, todayInTz(tz)).profile);
             e.body = { ...current, ...checked.patch };
             return json({ ok: true, body: e.body });
+        }
+
+        if (req.method === "POST" && path === "/api/dashboard/goal") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const b = await readJson(req);
+            if (!b) return json({ error: "invalid_request" }, 400);
+            const checked = checkCalorieGoal(b);
+            if (!checked.ok) return invalid(checked.error);
+            edits().goalCalories = checked.value;
+            return json({ ok: true, calories: checked.value });
         }
 
         // Same validator as production (checkWeightEntry); stored in memory.

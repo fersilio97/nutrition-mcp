@@ -3942,6 +3942,13 @@
                 // chart, so the split always has room.
                 const splitBurn = (rows) =>
                     rows.some((r) => r.bmr_kcal != null && r.active_kcal);
+                // The stored calorie baseline, or null: with none, the server
+                // defaults the goal to the estimated burn.
+                function goalCustom() {
+                    return data.goals && data.goals.calories > 0
+                        ? data.goals.calories
+                        : null;
+                }
                 function plural(n, one, many) {
                     return n + " " + (n === 1 ? one : many || one + "s");
                 }
@@ -3963,7 +3970,11 @@
                               ],
                     ];
                     if (r.goal_calories)
-                        rows.push([null, "Goal" + per, fmt(r.goal_calories)]);
+                        rows.push([
+                            null,
+                            "Goal" + per + (goalCustom() ? "" : " (est. burn)"),
+                            fmt(r.goal_calories),
+                        ]);
                     if (r.active_kcal)
                         rows.push([
                             null,
@@ -3973,7 +3984,7 @@
                     if (isOver(r))
                         rows.push([
                             null,
-                            "Over by",
+                            "Over goal by",
                             fmt(r.calories - r.goal_calories) + " kcal",
                             1,
                         ]);
@@ -3991,23 +4002,25 @@
                             "Est. burn total",
                             fmt(r.burn_kcal),
                         ]);
-                        // Burn = break-even, goal = target: the difference
-                        // is the deficit the goal plans for.
-                        if (r.goal_calories) {
-                            const gap = r.burn_kcal - r.goal_calories;
-                            rows.push([
-                                null,
-                                "Planned deficit: burn − goal",
-                                fmtSigned(gap) + " kcal",
-                            ]);
-                        }
                     }
                     if (r.balance_kcal != null)
                         rows.push([
                             r.balance_kcal >= 0 ? "s-gain" : "s-loss",
-                            "Balance" + per,
+                            "Balance vs est. burn" + per,
                             fmtSigned(r.balance_kcal) + " kcal",
                         ]);
+                    // Burn = break-even, goal = target: the difference is the
+                    // deficit the goal plans for, so it sits right under the
+                    // balance (balance = over-goal + planned deficit unused).
+                    if (r.burn_kcal && r.goal_calories) {
+                        const gap = r.burn_kcal - r.goal_calories;
+                        if (gap !== 0)
+                            rows.push([
+                                null,
+                                "Planned deficit (burn − goal)",
+                                fmtSigned(gap) + " kcal",
+                            ]);
+                    }
                     if (r.balance_g != null)
                         rows.push([
                             null,
@@ -4022,7 +4035,7 @@
                     if (r.burn_kcal && r.goal_calories)
                         rows.push([
                             null,
-                            "Goal = your target; Est. burn = break-even (0 change). The gap is your planned deficit.",
+                            "Over goal compares with your goal; Balance compares with est. burn (break-even). The gap between them is your planned deficit.",
                             "",
                         ]);
                     return tipContent(r.title, rows);
@@ -4233,12 +4246,14 @@
                         h += factsRow(
                             "Goal",
                             fmt(goal) + kcal,
-                            t.active_kcal
-                                ? fmt(goal - t.active_kcal) +
+                            goalCustom()
+                                ? t.active_kcal
+                                    ? fmt(goal - t.active_kcal) +
                                       " base + " +
                                       fmt(t.active_kcal) +
                                       " active"
-                                : "",
+                                    : ""
+                                : "estimated burn: resting + active",
                         );
                         h +=
                             eaten <= goal
@@ -4440,6 +4455,124 @@
                         .sort((a, b) => (a.logged_at < b.logged_at ? -1 : 1));
                 }
 
+                // The calorie-goal editor on Today. A baseline kcal figure (the
+                // day's active kcal are added on top); "Use estimated burn"
+                // clears it, and the server then defaults the goal to burn.
+                function goalFormHtml() {
+                    const cur = goalCustom();
+                    return (
+                        '<section class="details-sec rv"><details class="body-box" id="goal-box"' +
+                        (goalOpen ? " open" : "") +
+                        '><summary>Calorie goal</summary><p class="note">' +
+                        (cur
+                            ? "Your goal is " +
+                              fmt(cur) +
+                              " kcal plus each day’s active calories."
+                            : "No goal set, so your goal is your estimated burn (resting + active): eating at break-even.") +
+                        " Set a lower number to plan a deficit.</p>" +
+                        '<form id="goal-form" class="body-form" novalidate><div class="form-grid">' +
+                        '<label class="field wide" for="g-kcal">Daily goal, before active calories (kcal)<input class="input" id="g-kcal" type="number" inputmode="numeric" step="1" min="500" max="20000" placeholder="Estimated burn" /></label></div>' +
+                        '<div class="form-foot"><button type="submit" class="btn primary" id="g-save">Save</button>' +
+                        (cur
+                            ? '<button type="button" class="btn" id="g-reset">Use estimated burn</button>'
+                            : "") +
+                        '<span class="b-status ' +
+                        goalStatus.cls +
+                        '" id="g-status" role="status">' +
+                        esc(goalStatus.text) +
+                        "</span></div></form></details></section>"
+                    );
+                }
+                function setGoalStatus(text, cls) {
+                    clearTimeout(goalStatusTimer);
+                    goalStatus = { text: text, cls: cls || "" };
+                    const st = $("g-status");
+                    if (st) {
+                        st.className = "b-status " + goalStatus.cls;
+                        st.textContent = text;
+                    }
+                }
+                function saveGoal(calories) {
+                    const btn = $("g-save");
+                    if (btn) btn.disabled = true;
+                    setGoalStatus("Saving…");
+                    fetch("/api/dashboard/goal", {
+                        method: "POST",
+                        headers: {
+                            Authorization: "Bearer " + token,
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ calories: calories }),
+                    })
+                        .then(function (r) {
+                            return r
+                                .json()
+                                .catch(function () {
+                                    return {};
+                                })
+                                .then(function (b) {
+                                    return {
+                                        ok: r.ok,
+                                        status: r.status,
+                                        body: b,
+                                    };
+                                });
+                        })
+                        .then(function (res) {
+                            if (res.status === 401) return signOut();
+                            if (!res.ok) {
+                                if ($("g-save")) $("g-save").disabled = false;
+                                setGoalStatus(
+                                    (res.body && res.body.error_description) ||
+                                        "Could not save.",
+                                    "err",
+                                );
+                                return;
+                            }
+                            goalDraft = null;
+                            goalStatus = { text: "Saved.", cls: "ok" };
+                            goalStatusTimer = setTimeout(function () {
+                                goalStatus = { text: "", cls: "" };
+                                const st = $("g-status");
+                                if (st) setGoalStatus("");
+                            }, 4000);
+                            refresh();
+                        })
+                        .catch(function () {
+                            if ($("g-save")) $("g-save").disabled = false;
+                            setGoalStatus("Could not reach the server.", "err");
+                        });
+                }
+                function wireGoalForm() {
+                    const box = $("goal-box");
+                    if (!box) return;
+                    const input = $("g-kcal");
+                    input.value =
+                        goalDraft != null
+                            ? goalDraft
+                            : goalCustom() == null
+                              ? ""
+                              : String(goalCustom());
+                    box.addEventListener("toggle", function () {
+                        goalOpen = box.open;
+                    });
+                    input.addEventListener("input", function () {
+                        goalDraft = input.value;
+                    });
+                    $("goal-form").addEventListener("submit", function (ev) {
+                        ev.preventDefault();
+                        const v = input.value.trim();
+                        saveGoal(v === "" ? null : Number(v));
+                    });
+                    const reset = $("g-reset");
+                    if (reset)
+                        reset.addEventListener("click", function () {
+                            goalDraft = null;
+                            input.value = "";
+                            saveGoal(null);
+                        });
+                }
+
                 RENDER.today = function () {
                     const t = data.daily[data.daily.length - 1];
                     const g = data.goals;
@@ -4494,8 +4627,10 @@
                         '</ul><p class="facts-foot">' +
                         (t.goal_calories
                             ? ""
-                            : "No calorie goal set — ask Claude to set one. ") +
-                        "Goals adjust for your watch’s active calories. Est. burn = resting (Mifflin-St Jeor) + active — estimates, not measurements.</p></section></div>" +
+                            : "No calorie goal yet — add your body details for an estimated-burn default, or set one below. ") +
+                        "Goals adjust for your watch’s active calories. Est. burn = resting (Mifflin-St Jeor) + active — estimates, not measurements.</p></section>" +
+                        goalFormHtml() +
+                        "</div>" +
                         '<div class="col">' +
                         '<section class="rv" aria-labelledby="h-strip">' +
                         secHead({
@@ -4547,6 +4682,7 @@
                                 });
                         });
                     });
+                    wireGoalForm();
                 };
 
                 CHARTS.today = function () {
@@ -5093,12 +5229,15 @@
                               " average per logged day";
                     const calNote =
                         (hasGoal && hasBurn()
-                            ? "<b>Goal = your target; Est. burn = break-even (0 change). The gap is your planned deficit.</b> "
+                            ? "<b>Over goal compares with your goal; Balance compares with est. burn (break-even). The gap between them is your planned deficit.</b> "
                             : "") +
                         (hasGoal
-                            ? "The goal is your " +
-                              fmt(data.goals.calories) +
-                              " kcal baseline plus that day’s active calories from your watch; the part of a bar above it is hatched."
+                            ? (goalCustom()
+                                  ? "The goal is your " +
+                                    fmt(goalCustom()) +
+                                    " kcal baseline plus that day’s active calories from your watch"
+                                  : "No goal set, so the goal is your estimated burn (resting + active)") +
+                              "; the part of a bar above it is hatched."
                             : "No calorie goal set.") +
                         (hasBurn()
                             ? " Est. burn is your resting burn (dashed) plus workout / active kcal (the slate segment up to the ring)."
@@ -5751,6 +5890,10 @@
                 // refetch after save): open/closed, whether the user has
                 // toggled it, unsaved input, and the status line.
                 let bodyTouched = false;
+                let goalOpen = false;
+                let goalDraft = null;
+                let goalStatus = { text: "", cls: "" };
+                let goalStatusTimer = 0;
                 let bodyOpen = false;
                 let bodyDraft = null;
                 let bodyStatus = { text: "", cls: "" };

@@ -536,3 +536,54 @@ describe("groupDays", () => {
         expect(groupDays([], "week")).toEqual([]);
     });
 });
+
+describe("calorie goal default and editor", () => {
+    const blank = (cal: number | null): NutritionGoals => ({
+        user_id: "u",
+        daily_calories: cal,
+        daily_protein_g: null,
+        daily_carbs_g: null,
+        daily_fat_g: null,
+        daily_fiber_g: null,
+        daily_sugar_g: null,
+        daily_alcohol_g: null,
+        daily_caffeine_mg: null,
+        daily_water_ml: null,
+        target_weight_g: null,
+        updated_at: "",
+    });
+
+    test("a stored goal wins over the burn default", async () => {
+        const { withBurnDefault } = await import("./dashboard-stats.js");
+        const g = blank(1800);
+        expect(withBurnDefault(g, 1740)).toBe(g);
+    });
+
+    test("no goal defaults the baseline to resting burn; no body data leaves it unset", async () => {
+        const { withBurnDefault } = await import("./dashboard-stats.js");
+        expect(withBurnDefault(null, 1739.6)?.daily_calories).toBe(1740);
+        expect(withBurnDefault(blank(null), 1740)?.daily_calories).toBe(1740);
+        expect(withBurnDefault(blank(0), 1740)?.daily_calories).toBe(1740);
+        expect(withBurnDefault(null, null)).toBeNull();
+    });
+
+    test("checkCalorieGoal accepts a number or null and rejects the rest", async () => {
+        const { checkCalorieGoal } = await import("./dashboard.js");
+        expect(checkCalorieGoal({ calories: 1800 })).toEqual({
+            ok: true,
+            value: 1800,
+        });
+        expect(checkCalorieGoal({ calories: "2000" })).toEqual({
+            ok: true,
+            value: 2000,
+        });
+        expect(checkCalorieGoal({ calories: null })).toEqual({
+            ok: true,
+            value: null,
+        });
+        expect(checkCalorieGoal({}).ok).toBe(false);
+        expect(checkCalorieGoal({ calories: 100 }).ok).toBe(false);
+        expect(checkCalorieGoal({ calories: 99999 }).ok).toBe(false);
+        expect(checkCalorieGoal({ calories: "abc" }).ok).toBe(false);
+    });
+});

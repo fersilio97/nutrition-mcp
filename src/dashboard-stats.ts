@@ -58,6 +58,35 @@ export interface DashboardDay {
     in_progress: boolean;
 }
 
+/** The calorie goal the dashboard shows. A stored goal wins; with none set,
+ *  the baseline is the day's resting burn, so the effective goal (baseline +
+ *  active kcal) is the estimated burn itself — eat to break even until the
+ *  user picks a target. Without body details there is no burn to default to,
+ *  so the goal stays unset. Dashboard-only: the MCP tools keep reading the
+ *  stored goal, so "no goal set" there still means no goal. */
+export function withBurnDefault(
+    goals: NutritionGoals | null,
+    bmr: number | null,
+): NutritionGoals | null {
+    if (goals?.daily_calories != null && goals.daily_calories > 0) return goals;
+    if (bmr == null) return goals;
+    const blank: NutritionGoals = {
+        user_id: "",
+        daily_calories: null,
+        daily_protein_g: null,
+        daily_carbs_g: null,
+        daily_fat_g: null,
+        daily_fiber_g: null,
+        daily_sugar_g: null,
+        daily_alcohol_g: null,
+        daily_caffeine_mg: null,
+        daily_water_ml: null,
+        target_weight_g: null,
+        updated_at: "",
+    };
+    return { ...(goals ?? blank), daily_calories: Math.round(bmr) };
+}
+
 export function buildDashboardDays(
     buckets: DailyBucket[],
     activeByDate: Map<string, number>,
@@ -68,9 +97,9 @@ export function buildDashboardDays(
 ): DashboardDay[] {
     return buckets.map((b) => {
         const active = activeByDate.get(b.date) ?? null;
-        const adj = adjustGoalsForActivity(goals, active);
-        const g = adj.goals;
         const bmr = bmrFor(body, weightOn(weighIns, b.date), b.date);
+        const adj = adjustGoalsForActivity(withBurnDefault(goals, bmr), active);
+        const g = adj.goals;
         const burn = bmr == null ? null : dailyBurn(bmr, active);
         return {
             date: b.date,
