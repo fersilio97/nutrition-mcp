@@ -242,6 +242,90 @@ for (const theme of ["light", "dark"] as const)
         await ctx.close();
     }
 
+// ---------- round 3: self-hosted fonts, x-label density ----------
+console.log("fonts + x labels");
+{
+    const { ctx, page, problems } = await open({ width: 390 });
+    await login(page);
+    await settled(page);
+    const fonts = await page.evaluate(async () => {
+        await document.fonts.ready;
+        const fam = (sel: string) =>
+            getComputedStyle(document.querySelector(sel)!).fontFamily;
+        return {
+            loaded: [...document.fonts]
+                .filter((f) => f.status === "loaded")
+                .map((f) => f.family.replace(/"/g, "")),
+            hero: fam("#today-body .fig-hero"),
+            body: fam("body"),
+        };
+    });
+    for (const f of ["Bricolage Grotesque", "Instrument Sans", "Geist Mono"])
+        check(fonts.loaded.includes(f), `font loaded: ${f}`);
+    check(
+        /^"?Bricolage Grotesque/.test(fonts.hero) &&
+            /^"?Instrument Sans/.test(fonts.body),
+        `computed families (${fonts.hero.split(",")[0]} / ${fonts.body.split(",")[0]})`,
+    );
+    await page.click("#tab-trends");
+    await settled(page);
+    check(
+        /^"?Geist Mono/.test(
+            await page.evaluate(
+                () =>
+                    getComputedStyle(document.querySelector(".seg button")!)
+                        .fontFamily,
+            ),
+        ),
+        "range segments are Geist Mono",
+    );
+    // The fonts load with the page (before any listener here could
+    // attach), so read them back from Resource Timing, then check each
+    // one's headers directly.
+    const entries = await page.evaluate(() =>
+        performance
+            .getEntriesByType("resource")
+            .filter((e) => e.name.includes("/dashboard-fonts/"))
+            .map((e: any) => ({ url: e.name, status: e.responseStatus })),
+    );
+    const uniq = [...new Set(entries.map((e: any) => e.url))] as string[];
+    const heads = await Promise.all(
+        uniq.map(async (u) => {
+            const r = await page.request.get(u);
+            return { status: r.status(), type: r.headers()["content-type"] };
+        }),
+    );
+    check(
+        uniq.length === 3 &&
+            uniq.every((u) => new URL(u).origin === new URL(base).origin) &&
+            entries.every((e: any) => e.status === 200) &&
+            heads.every((h) => h.status === 200 && h.type === "font/woff2"),
+        `three woff2 files, 200 font/woff2, same origin (${uniq.map((u) => new URL(u).pathname.split("/").pop()).join(", ")})`,
+    );
+    for (const d of [7, 30, 365]) {
+        await page.click(`#panel-trends .seg button[data-days="${d}"]`);
+        await settled(page);
+        const overlap = await page.evaluate(() => {
+            const r = [...document.querySelectorAll("#cal-plot text.xl")]
+                .map((t) => t.getBoundingClientRect())
+                .sort((a, b) => a.left - b.left);
+            let n = 0;
+            for (let i = 1; i < r.length; i++)
+                if (r[i].left < r[i - 1].right) n++;
+            return { n, count: r.length };
+        });
+        check(
+            overlap.count >= 2 && overlap.n === 0,
+            `390px x labels do not overlap at ${d} days (${overlap.count} labels)`,
+        );
+    }
+    check(
+        problems.length === 0,
+        `console/network clean: ${problems.join(" | ") || "none"}`,
+    );
+    await ctx.close();
+}
+
 // ---------- theme: toggle both ways, no flash, icon follows ----------
 console.log("theme");
 {
@@ -269,13 +353,13 @@ console.log("theme");
     await page.click("#theme-btn");
     s = await icon();
     check(
-        !s.sun && s.moon && s.bg === "rgb(243, 247, 244)",
+        !s.sun && s.moon && s.bg === "rgb(251, 251, 249)",
         "toggle wins over a dark system theme (light --bg)",
     );
     await page.click("#theme-btn");
     s = await icon();
     check(
-        s.sun && s.bg === "rgb(10, 19, 16)",
+        s.sun && s.bg === "rgb(13, 18, 16)",
         "toggle back to dark (forest --bg)",
     );
     // Reload with the saved dark choice in a LIGHT system: the pre-paint
@@ -298,7 +382,7 @@ console.log("theme");
     await p2.goto(`${base}/dashboard`);
     const firstBg = await p2.evaluate(() => (window as any).__firstBg);
     check(
-        firstBg === "rgb(10, 19, 16)",
+        firstBg === "rgb(13, 18, 16)",
         `saved dark theme applies before first paint (${firstBg})`,
     );
     await ctx2.close();
@@ -446,7 +530,8 @@ for (const width of [390, 1440]) {
     // Today: the two fixed 7-day figures.
     const pair = await page.evaluate(
         () =>
-            document.querySelector("#today-body .trio.two")?.textContent || "",
+            document.querySelector("#today-body [data-last7]")?.textContent ||
+            "",
     );
     check(
         /Scale/.test(pair) && /Net est\. change/.test(pair) && /g/.test(pair),
