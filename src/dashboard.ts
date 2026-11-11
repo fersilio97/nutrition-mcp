@@ -73,10 +73,13 @@ import {
     buildEstimateVsScale,
     buildLast7,
     buildWeightStats,
+    buildFrequentMeals,
+    FREQUENT_DAYS,
     granularityFor,
     groupDays,
     LAST7_DAYS,
 } from "./dashboard-stats.js";
+import { matchFood } from "./simple-foods.js";
 
 // The weight rate needs a span longer than a day or a week to mean anything,
 // so the weight tracker always looks back at least this far, whatever range
@@ -958,6 +961,27 @@ export function createDashboardRouter(): Hono {
         );
         return c.json(res.json, res.status);
     });
+
+    // The meals this user logs most, from their own history — the "Log a
+    // meal" block's one-tap list.
+    dash.get("/api/dashboard/frequent", authenticateBearer, async (c) => {
+        const userId = c.get("userId") as string;
+        const tz = timezoneFromProfile(await getProfile(userId)) ?? "UTC";
+        const end = todayInTz(tz);
+        const meals = await getMealsInRange(
+            userId,
+            shiftLocalDate(end, -(FREQUENT_DAYS - 1)),
+            end,
+            tz,
+        );
+        return c.json({ meals: buildFrequentMeals(meals) });
+    });
+
+    // Typical nutrients for a simple item ("coffee", "2 beers"), so the form
+    // can fill them. Pure lookup, no user data involved.
+    dash.get("/api/dashboard/foods/suggest", authenticateBearer, (c) =>
+        c.json({ match: matchFood(c.req.query("q") ?? "") }),
+    );
 
     // Log a meal typed into the page — log_meal's write path, no LLM.
     dash.post("/api/dashboard/meals", authenticateBearer, async (c) => {

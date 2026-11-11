@@ -49,6 +49,8 @@ import {
     type ScenarioName,
 } from "../src/dashboard-fixture.js";
 import { checkBodyPatch } from "../src/body.js";
+import { matchFood } from "../src/simple-foods.js";
+import { buildFrequentMeals } from "../src/dashboard-stats.js";
 import { dateInTz, todayInTz } from "../src/tz.js";
 import type { Meal, MealInput } from "../src/supabase.js";
 
@@ -241,6 +243,22 @@ const server = Bun.serve({
                     notes: entry.notes,
                 },
             });
+        }
+
+        // Same pure lookups as production (matchFood, buildFrequentMeals).
+        if (req.method === "GET" && path === "/api/dashboard/foods/suggest") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            return json({ match: matchFood(url.searchParams.get("q") ?? "") });
+        }
+        if (req.method === "GET" && path === "/api/dashboard/frequent") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const tz = scenarioTz(state.scenario);
+            const fx = scenarioWithEdits(
+                state.scenario,
+                todayInTz(tz),
+                edits(),
+            );
+            return json({ meals: buildFrequentMeals(fx.meals) });
         }
 
         // Log a meal / repeat one / undo — the production validators and
