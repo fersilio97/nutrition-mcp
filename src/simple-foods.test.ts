@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { FOOD_ENTRIES, matchFood } from "./simple-foods.js";
+import {
+    FOOD_ENTRIES,
+    foodMatchFor,
+    listFoods,
+    matchFood,
+    suggestFood,
+} from "./simple-foods.js";
 import { buildFrequentMeals } from "./dashboard-stats.js";
 import type { Meal } from "./supabase.js";
 
@@ -51,7 +57,7 @@ describe("matchFood", () => {
         const one = matchFood("beer")!.values;
         const two = matchFood("2 beers")!;
         expect(two.count).toBe(2);
-        expect(two.name.startsWith("2 × ")).toBe(true);
+        expect(two.description).toBe("2 × Beer (Can 355 ml)");
         expect(two.values.calories).toBe(one.calories * 2);
         expect(two.values.alcohol_g).toBe(Math.round(one.alcohol_g! * 20) / 10);
         expect(matchFood("dos cervezas")?.count).toBe(2);
@@ -59,6 +65,65 @@ describe("matchFood", () => {
         expect(matchFood("2 wines")?.id).toBe("wine-red");
         expect(matchFood("0 beers")).toBeNull();
         expect(matchFood("13 beers")).toBeNull();
+    });
+
+    test("the amount matters: half a litre of beer is not a can", () => {
+        const can = foodMatchFor("beer")!;
+        const half = foodMatchFor("beer", 500)!;
+        const pint = foodMatchFor("beer", 473)!;
+        expect(can.amount).toBe(355);
+        expect(can.values.calories).toBe(153);
+        expect(half.values.calories).toBe(Math.round((153 * 500) / 355));
+        expect(half.values.alcohol_g).toBe(
+            Math.round(((13.9 * 500) / 355) * 10) / 10,
+        );
+        expect(half.description).toBe("Beer (Half litre 500 ml)");
+        expect(pint.description).toBe("Beer (Pint 473 ml)");
+        // An amount that is not a listed serving is labelled with its size.
+        expect(foodMatchFor("beer", 400)!.description).toBe("Beer (400 ml)");
+        // Amount × count.
+        expect(foodMatchFor("beer", 500, 2)!.values.calories).toBe(
+            Math.round(((153 * 500) / 355) * 2),
+        );
+        expect(foodMatchFor("wine-red", 750)!.values.alcohol_g).toBe(78);
+    });
+
+    test("out-of-range amounts and counts, and unknown items, are refused", () => {
+        for (const args of [
+            ["beer", 0],
+            ["beer", -5],
+            ["beer", 5001],
+            ["beer", Number.NaN],
+            ["beer", 355, 0],
+            ["beer", 355, 13],
+            ["beer", 355, 1.5],
+            ["banana", 21],
+        ] as [string, number, number?][])
+            expect(foodMatchFor(...args)).toBeNull();
+        expect(foodMatchFor("nope")).toBeNull();
+    });
+
+    test("suggestFood: an item by id (query-string values) or free text", () => {
+        expect(suggestFood({ id: "beer", amount: "500", count: "2" })).toEqual(
+            foodMatchFor("beer", 500, 2),
+        );
+        expect(suggestFood({ id: "beer" })?.amount).toBe(355);
+        expect(suggestFood({ id: "beer", amount: "abc" })).toBeNull();
+        expect(suggestFood({ q: "2 beers" })?.count).toBe(2);
+        expect(suggestFood({ q: "pasta" })).toBeNull();
+        expect(suggestFood({})).toBeNull();
+    });
+
+    test("every item is listed with a default serving that is one of its servings", () => {
+        const list = listFoods();
+        expect(list).toHaveLength(FOOD_ENTRIES.length);
+        for (const f of list) {
+            expect(f.servings.some((s) => s.amount === f.amount)).toBe(true);
+            expect(foodMatchFor(f.id)?.amount).toBe(f.amount);
+            // Every listed serving is itself a valid amount.
+            for (const s of f.servings)
+                expect(foodMatchFor(f.id, s.amount)).not.toBeNull();
+        }
     });
 
     test("every entry sets fiber and sugar, and no alias is shared", () => {

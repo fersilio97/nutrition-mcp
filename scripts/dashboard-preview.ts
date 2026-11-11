@@ -49,7 +49,7 @@ import {
     type ScenarioName,
 } from "../src/dashboard-fixture.js";
 import { checkBodyPatch } from "../src/body.js";
-import { matchFood } from "../src/simple-foods.js";
+import { listFoods, suggestFood } from "../src/simple-foods.js";
 import { buildFrequentMeals } from "../src/dashboard-stats.js";
 import { dateInTz, todayInTz } from "../src/tz.js";
 import type { Meal, MealInput } from "../src/supabase.js";
@@ -246,9 +246,21 @@ const server = Bun.serve({
         }
 
         // Same pure lookups as production (matchFood, buildFrequentMeals).
+        if (req.method === "GET" && path === "/api/dashboard/foods") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            return json({ foods: listFoods() });
+        }
         if (req.method === "GET" && path === "/api/dashboard/foods/suggest") {
             if (!authed(req)) return json({ error: "invalid_token" }, 401);
-            return json({ match: matchFood(url.searchParams.get("q") ?? "") });
+            const q = url.searchParams;
+            return json({
+                match: suggestFood({
+                    q: q.get("q"),
+                    id: q.get("id"),
+                    amount: q.get("amount"),
+                    count: q.get("count"),
+                }),
+            });
         }
         if (req.method === "GET" && path === "/api/dashboard/frequent") {
             if (!authed(req)) return json({ error: "invalid_token" }, 401);

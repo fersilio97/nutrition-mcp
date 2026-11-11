@@ -2119,6 +2119,27 @@
             .lm-form {
                 margin-top: var(--s4);
             }
+            .lm-item {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: var(--s2);
+            }
+            .lm-item .input {
+                flex: 1 1 160px;
+                width: auto;
+                min-width: 0;
+            }
+            .lm-item #lm-count,
+            .lm-item #lm-custom {
+                flex: 0 0 88px;
+            }
+            .lm-x,
+            .lm-unit {
+                font-family: var(--font-mono);
+                font-size: var(--fs-small);
+                color: var(--ink-3);
+            }
             @keyframes flash-out {
                 0%,
                 85% {
@@ -7008,18 +7029,109 @@
                         "</div>"
                     );
                 }
-                // Typical nutrients for a simple item, filled as you type
-                // ("coffee", "2 beers"). Only ever fills blank fields or ones
-                // it filled itself, so numbers you typed are never replaced.
-                let lmAuto = null; // { name, snap }: what was filled, and the values
+                // Typical nutrients for a simple item. Pick the item and the amount
+                // (or just type "2 beers") and the values scale with the amount.
+                // Typing only fills fields that are blank or that it filled
+                // itself; the item / amount / count controls are an explicit
+                // request, so they always recompute.
+                let lmAuto = null; // { snap }: the numbers last filled in
+                let lmFood = null; // the match in play, plus { custom }
+                let lmFoodList = null;
                 let lmSuggestSeq = 0;
                 let lmSuggestTimer = 0;
+                const authHeader = () => ({
+                    headers: { Authorization: "Bearer " + token },
+                });
                 function lmHintText() {
-                    return lmAuto
-                        ? "Filled with typical values for " +
-                              lmAuto.name +
+                    return lmFood && lmAuto
+                        ? "Typical values for " +
+                              lmFood.description +
                               " — adjust if yours differs."
                         : "";
+                }
+                function loadFoods() {
+                    if (lmFoodList) return;
+                    fetch("/api/dashboard/foods", authHeader())
+                        .then((r) => (r.ok ? r.json() : null))
+                        .then(function (b) {
+                            if (!b || !b.foods) return;
+                            lmFoodList = b.foods;
+                            if ($("lm-item")) paintItem();
+                        })
+                        .catch(function () {});
+                }
+                function lmItemHtml() {
+                    const list = lmFoodList || [];
+                    const pick =
+                        '<select class="input" id="lm-food" aria-label="Item">' +
+                        '<option value="">Pick an item…</option>' +
+                        list
+                            .map(
+                                (f) =>
+                                    '<option value="' +
+                                    esc(f.id) +
+                                    '"' +
+                                    (lmFood && lmFood.id === f.id
+                                        ? " selected"
+                                        : "") +
+                                    ">" +
+                                    esc(f.name) +
+                                    "</option>",
+                            )
+                            .join("") +
+                        "</select>";
+                    if (!lmFood) return pick;
+                    const f = lmFood;
+                    const near = (a, b) => Math.abs(a - b) < 1e-9;
+                    const listed =
+                        !f.custom &&
+                        f.servings.some((x) => near(x.amount, f.amount));
+                    const amount =
+                        '<select class="input" id="lm-amount" aria-label="Amount">' +
+                        f.servings
+                            .map(
+                                (x) =>
+                                    '<option value="' +
+                                    x.amount +
+                                    '"' +
+                                    (listed && near(x.amount, f.amount)
+                                        ? " selected"
+                                        : "") +
+                                    ">" +
+                                    esc(x.label) +
+                                    "</option>",
+                            )
+                            .join("") +
+                        '<option value="custom"' +
+                        (listed ? "" : " selected") +
+                        ">Other amount…</option></select>";
+                    const custom = listed
+                        ? ""
+                        : '<input class="input" id="lm-custom" type="number" inputmode="decimal" min="0" step="any" value="' +
+                          esc(String(f.amount)) +
+                          '" aria-label="Amount in ' +
+                          esc(f.unit) +
+                          '" /><span class="lm-unit">' +
+                          esc(f.unit) +
+                          "</span>";
+                    return (
+                        pick +
+                        amount +
+                        custom +
+                        '<span class="lm-x" aria-hidden="true">×</span>' +
+                        '<input class="input" id="lm-count" type="number" inputmode="numeric" min="1" max="12" step="1" value="' +
+                        f.count +
+                        '" aria-label="How many" />'
+                    );
+                }
+                function paintHint() {
+                    const h = $("lm-hint");
+                    if (h) h.textContent = lmHintText();
+                }
+                function paintItem() {
+                    const el = $("lm-item");
+                    if (el) el.innerHTML = lmItemHtml();
+                    paintHint();
                 }
                 function lmNumsUntouched() {
                     return LM_NUMS.every(function (n) {
@@ -7027,49 +7139,78 @@
                         return v === "" || (lmAuto && lmAuto.snap[n[0]] === v);
                     });
                 }
-                function applySuggestion(match) {
-                    const hint = $("lm-hint");
-                    if (!match) {
-                        if (!lmAuto) return;
-                        if (lmNumsUntouched())
-                            LM_NUMS.forEach(function (n) {
-                                $("lm-" + n[0]).value = "";
-                            });
-                        lmAuto = null;
-                    } else {
-                        if (!lmNumsUntouched()) return;
-                        const snap = {};
-                        LM_NUMS.forEach(function (n) {
-                            const x = match.values[n[0]];
-                            const str = x == null ? "" : String(x);
-                            $("lm-" + n[0]).value = str;
-                            snap[n[0]] = str;
-                        });
-                        lmAuto = { name: match.name, snap: snap };
-                    }
+                function syncDraft() {
                     const at = lmDraft && lmDraft.atTouched;
                     lmDraft = readLmForm();
                     lmDraft.atTouched = at;
-                    if (hint) hint.textContent = lmHintText();
                 }
-                function suggestFor(text) {
+                // Forget the item; blank what was filled if it is still ours.
+                function clearAuto() {
+                    if (lmAuto && lmNumsUntouched())
+                        LM_NUMS.forEach(function (n) {
+                            $("lm-" + n[0]).value = "";
+                        });
+                    lmAuto = null;
+                    lmFood = null;
+                }
+                function applyMatch(match, opts) {
+                    if (!match) {
+                        if (opts.typed && lmFood) {
+                            clearAuto();
+                            syncDraft();
+                            paintItem();
+                        }
+                        return;
+                    }
+                    // Numbers you typed yourself are yours: only the controls
+                    // may overwrite them.
+                    if (!opts.force && !lmNumsUntouched()) return;
+                    const snap = {};
+                    LM_NUMS.forEach(function (n) {
+                        const x = match.values[n[0]];
+                        const str = x == null ? "" : String(x);
+                        $("lm-" + n[0]).value = str;
+                        snap[n[0]] = str;
+                    });
+                    lmAuto = { snap: snap };
+                    lmFood = Object.assign({ custom: !!opts.custom }, match);
+                    if (opts.describe)
+                        $("lm-description").value = match.description;
+                    syncDraft();
+                    paintItem();
+                }
+                function requestFood(params, opts) {
                     clearTimeout(lmSuggestTimer);
                     const mine = ++lmSuggestSeq;
                     lmSuggestTimer = setTimeout(function () {
-                        if (!text.trim()) return applySuggestion(null);
                         fetch(
-                            "/api/dashboard/foods/suggest?q=" +
-                                encodeURIComponent(text.trim()),
-                            { headers: { Authorization: "Bearer " + token } },
+                            "/api/dashboard/foods/suggest?" +
+                                new URLSearchParams(params),
+                            authHeader(),
                         )
                             .then((r) => (r.ok ? r.json() : null))
                             .then(function (b) {
                                 if (mine !== lmSuggestSeq || !$("lm-form"))
                                     return;
-                                applySuggestion(b && b.match);
+                                applyMatch(b && b.match, opts);
                             })
                             .catch(function () {});
-                    }, 250);
+                    }, opts.delay || 0);
+                }
+                function suggestFor(text) {
+                    if (!text.trim()) {
+                        ++lmSuggestSeq;
+                        if (lmFood) {
+                            clearAuto();
+                            syncDraft();
+                            paintItem();
+                        }
+                        return;
+                    }
+                    requestFood(
+                        { q: text.trim() },
+                        { typed: true, delay: 250 },
+                    );
                 }
                 function setLmFlash(text, undoId, err, kind) {
                     lmFlash = {
@@ -7121,6 +7262,9 @@
                         '<label class="field wide" for="lm-description">What did you eat?<input class="input" id="lm-description" type="text" maxlength="2000" autocomplete="off" placeholder="e.g. Coffee, solo" value="' +
                         esc(v.description) +
                         '" /></label>' +
+                        '<div class="field wide"><label for="lm-food">Or pick a simple item and amount</label><span class="lm-item" id="lm-item">' +
+                        lmItemHtml() +
+                        "</span></div>" +
                         '<label class="field" for="lm-type">Meal<select class="input" id="lm-type">' +
                         types
                             .map(
@@ -7193,7 +7337,9 @@
                     lmOpen = true;
                     lmDraft = null;
                     lmAuto = null;
+                    lmFood = null;
                     lmKey = uuid();
+                    loadFoods();
                     selectTab("meals");
                     lmRerender();
                     const box = $("lm-description");
@@ -7355,6 +7501,7 @@
                         lmOpen = false;
                         lmDraft = null;
                         lmAuto = null;
+                        lmFood = null;
                         lmRerender();
                         const b = document.querySelector(
                             "#meals-body [data-lm-open]",
@@ -7371,6 +7518,83 @@
                     lmDraft.atTouched = touched;
                     if (ev.target.id === "lm-description")
                         suggestFor(ev.target.value);
+                    else if (
+                        lmAuto &&
+                        LM_NUMS.some((n) => "lm-" + n[0] === ev.target.id) &&
+                        !lmNumsUntouched()
+                    ) {
+                        // You changed a number: it is yours now.
+                        lmAuto = null;
+                        paintHint();
+                    }
+                });
+                $("meals-body").addEventListener("change", function (ev) {
+                    const t = ev.target;
+                    if (!t.closest || !t.closest("#lm-form")) return;
+                    const go = (params, opts) =>
+                        requestFood(
+                            params,
+                            Object.assign(
+                                { force: true, describe: true },
+                                opts,
+                            ),
+                        );
+                    if (t.id === "lm-food") {
+                        if (!t.value) {
+                            clearAuto();
+                            syncDraft();
+                            paintItem();
+                            return;
+                        }
+                        go({ id: t.value }, {});
+                    } else if (lmFood && t.id === "lm-amount") {
+                        if (t.value === "custom") {
+                            lmFood.custom = true;
+                            paintItem();
+                            const c = $("lm-custom");
+                            if (c) c.focus();
+                            return;
+                        }
+                        go(
+                            {
+                                id: lmFood.id,
+                                amount: t.value,
+                                count: lmFood.count,
+                            },
+                            {},
+                        );
+                    } else if (lmFood && t.id === "lm-custom") {
+                        if (Number(t.value) > 0)
+                            go(
+                                {
+                                    id: lmFood.id,
+                                    amount: t.value,
+                                    count: lmFood.count,
+                                },
+                                { custom: true },
+                            );
+                    } else if (lmFood && t.id === "lm-count") {
+                        const n = Math.min(
+                            12,
+                            Math.max(1, Math.round(Number(t.value) || 1)),
+                        );
+                        go(
+                            { id: lmFood.id, amount: lmFood.amount, count: n },
+                            { custom: lmFood.custom },
+                        );
+                    }
+                });
+                // Enter in the amount / count boxes commits them; it must not
+                // submit (log) the form half-way through choosing.
+                $("meals-body").addEventListener("keydown", function (ev) {
+                    if (
+                        ev.key === "Enter" &&
+                        ev.target.closest &&
+                        ev.target.closest("#lm-item")
+                    ) {
+                        ev.preventDefault();
+                        ev.target.blur();
+                    }
                 });
                 $("meals-body").addEventListener("submit", function (ev) {
                     if (!ev.target.closest("#lm-form")) return;
@@ -7415,6 +7639,7 @@
                             lmOpen = false;
                             lmDraft = null;
                             lmAuto = null;
+                            lmFood = null;
                             lmKey = "";
                             logged(res);
                         })

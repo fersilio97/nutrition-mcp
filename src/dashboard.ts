@@ -79,7 +79,7 @@ import {
     groupDays,
     LAST7_DAYS,
 } from "./dashboard-stats.js";
-import { matchFood } from "./simple-foods.js";
+import { listFoods, suggestFood } from "./simple-foods.js";
 
 // The weight rate needs a span longer than a day or a week to mean anything,
 // so the weight tracker always looks back at least this far, whatever range
@@ -977,10 +977,21 @@ export function createDashboardRouter(): Hono {
         return c.json({ meals: buildFrequentMeals(meals) });
     });
 
-    // Typical nutrients for a simple item ("coffee", "2 beers"), so the form
-    // can fill them. Pure lookup, no user data involved.
+    // Typical nutrients for a simple item at a chosen amount, so the form
+    // can fill them: either free text ("2 beers") or an item picked by id
+    // with an amount and count. Pure lookups, no user data involved.
+    dash.get("/api/dashboard/foods", authenticateBearer, (c) =>
+        c.json({ foods: listFoods() }),
+    );
     dash.get("/api/dashboard/foods/suggest", authenticateBearer, (c) =>
-        c.json({ match: matchFood(c.req.query("q") ?? "") }),
+        c.json({
+            match: suggestFood({
+                q: c.req.query("q"),
+                id: c.req.query("id"),
+                amount: c.req.query("amount"),
+                count: c.req.query("count"),
+            }),
+        }),
     );
 
     // Log a meal typed into the page — log_meal's write path, no LLM.
