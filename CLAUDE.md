@@ -178,6 +178,7 @@ no Google Fonts, unlike the public site, so opening it reaches nothing).
 - **`/api/dashboard/data` buckets through `buildDailyBuckets`** (`src/insights.ts`),
   the same function the MCP trend tools use, so a figure on the page and a
   figure the assistant quotes cannot disagree. `?days=` is clamped to 1–365.
+- **Manual meal logging, no LLM.** A "Log a meal" block heads the Meals tab (form) and Today tab (one-tap strip). `POST /api/dashboard/meals` goes through `checkMealEntry` → `insertMeal`; `POST …/meals/:id/repeat` re-logs a meal **copied server-side by id** (`repeatFields`) because the page's meal rows omit caffeine/alcohol/notes; `DELETE …/meals/:id` is the "Undo". Blank nutrients are omitted, never 0 (a stored 0 is a fake measurement, and a caffeine 0 turns the caffeine row on). The page sends a per-tap uuid `client_key`, stored as `dash:<uuid>` so it can never forge an `auto:`/`import:` key and a double-click dedupes; `logged_at` is sent only if the user edited the time. The quick-add buttons are meals eaten ≥2× in the listed range. No MCP tool was added, so the 36-tool count is unchanged.
 - **`mealTypes` is dropped from the JSON.** It is a `Set`, which
   `JSON.stringify` renders as `{}` — shipping it would look like data.
 - **The page parses `YYYY-MM-DD` by hand** (`parseDay`) rather than

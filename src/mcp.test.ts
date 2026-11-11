@@ -43,6 +43,9 @@ import { todayInTz } from "./tz.js";
 import {
     dashboardPayload,
     logWeightFromDashboard,
+    logMealFromDashboard,
+    repeatMealFromDashboard,
+    deleteMealFromDashboard,
     saveBodyDetails,
     updateMealFromDashboard,
 } from "./dashboard.js";
@@ -1559,6 +1562,10 @@ mock.module("./supabase.js", () => ({
             idempotency_key: null,
         } as WeightEntry;
     },
+    // The real one is scoped by user_id; NOT_MY_MEAL stands for another
+    // user's row, which the scoped query simply does not return.
+    getMealById: async (_userId: string, id: string) =>
+        id === NOT_MY_MEAL ? null : (db.meals.find((m) => m.id === id) ?? null),
     deleteMeal: async (_userId: string, id: string) => {
         const before = db.meals.length;
         db.meals = db.meals.filter((m) => m.id !== id);
@@ -5009,6 +5016,149 @@ describe("dashboard API", () => {
                 expect(typeof r.json.error_description).toBe("string");
             }
             expect(db.weightInserted).toEqual([]);
+        });
+    });
+
+    describe("Log a meal (POST /api/dashboard/meals)", () => {
+        const KEY = "0b9f3c52-7d1e-4a64-9c0e-5a1f2d3b4c5d";
+
+        test("a typed meal goes through insertMeal; blank nutrients are omitted, not 0", async () => {
+            stage();
+            const r = await logMealFromDashboard("u1", {
+                description: "  Coffee, solo ",
+                meal_type: "breakfast",
+                calories: "2",
+                caffeine_mg: 95,
+                fiber_g: "",
+                sugar_g: null,
+                client_key: KEY,
+            });
+            expect(r.status).toBe(200);
+            const w = db.inserted.at(-1)!;
+            expect(w).toEqual({
+                description: "Coffee, solo",
+                meal_type: "breakfast",
+                calories: 2,
+                caffeine_mg: 95,
+                idempotency_key: `dash:${KEY}`,
+            });
+            // No logged_at: the server stamps "now" itself.
+            expect("logged_at" in w).toBe(false);
+        });
+
+        test("an explicit local time resolves in the profile zone", async () => {
+            stage();
+            await logMealFromDashboard("u1", {
+                description: "Late lunch",
+                meal_type: "lunch",
+                logged_at: "2026-10-20T14:30",
+            });
+            expect(db.inserted.at(-1)!.logged_at).toBe(
+                "2026-10-20T18:30:00.000Z",
+            );
+        });
+
+        test("missing description or type, bad numbers, unknown keys, a forged key: refused, nothing written", async () => {
+            stage();
+            const before = db.inserted.length;
+            for (const input of [
+                { meal_type: "lunch" },
+                { description: "  ", meal_type: "lunch" },
+                { description: "x" },
+                { description: "x", meal_type: "brunch" },
+                { description: "x", meal_type: "snack", calories: -1 },
+                { description: "x", meal_type: "snack", calories: "abc" },
+                { description: "x", meal_type: "snack", caffeine_mg: 5_001 },
+                { description: "x", meal_type: "snack", alcohol_g: 501 },
+                { description: "x", meal_type: "snack", notes: "n" },
+                {
+                    description: "x",
+                    meal_type: "snack",
+                    logged_at: "2099-01-01T08:00",
+                },
+                // The page can never mint an auto: / import: key.
+                {
+                    description: "x",
+                    meal_type: "snack",
+                    client_key: "auto:abc",
+                },
+            ]) {
+                const r = await logMealFromDashboard("u1", input);
+                expect(r.status).toBe(400);
+                expect(typeof r.json.error_description).toBe("string");
+            }
+            expect(db.inserted.length).toBe(before);
+        });
+    });
+
+    describe("Repeat a meal (POST /api/dashboard/meals/:id/repeat)", () => {
+        const ID = "3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b";
+        const KEY = "0b9f3c52-7d1e-4a64-9c0e-5a1f2d3b4c5d";
+
+        test("copies every field server-side, caffeine and notes included, and stamps now", async () => {
+            stage();
+            db.meals = [
+                meal({
+                    id: ID,
+                    description: "Coffee, solo",
+                    meal_type: "breakfast",
+                    calories: 2,
+                    protein_g: 0,
+                    caffeine_mg: 95,
+                    fiber_g: 0,
+                    sugar_g: null,
+                    notes: "from the moka pot",
+                }),
+            ];
+            const r = await repeatMealFromDashboard("u1", ID, {
+                client_key: KEY,
+            });
+            expect(r.status).toBe(200);
+            const w = db.inserted.at(-1)!;
+            expect(w).toMatchObject({
+                description: "Coffee, solo",
+                meal_type: "breakfast",
+                calories: 2,
+                protein_g: 0,
+                fiber_g: 0,
+                caffeine_mg: 95,
+                notes: "from the moka pot",
+                idempotency_key: `dash:${KEY}`,
+            });
+            // Unmeasured stays unmeasured; the old time is not carried over.
+            expect("sugar_g" in w).toBe(false);
+            expect("logged_at" in w).toBe(false);
+        });
+
+        test("someone else's meal, a non-uuid id, or extra keys: nothing written", async () => {
+            stage();
+            const before = db.inserted.length;
+            expect(
+                (await repeatMealFromDashboard("u1", NOT_MY_MEAL, {})).status,
+            ).toBe(404);
+            expect((await repeatMealFromDashboard("u1", "m1", {})).status).toBe(
+                404,
+            );
+            expect(
+                (await repeatMealFromDashboard("u1", ID, { calories: 1 }))
+                    .status,
+            ).toBe(400);
+            expect(db.inserted.length).toBe(before);
+        });
+    });
+
+    describe("Undo (DELETE /api/dashboard/meals/:id)", () => {
+        const ID = "3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b";
+
+        test("deletes the user's meal; an unknown or malformed id is a 404", async () => {
+            stage();
+            db.meals = [meal({ id: ID })];
+            expect((await deleteMealFromDashboard("u1", ID)).status).toBe(200);
+            expect(db.meals).toEqual([]);
+            expect((await deleteMealFromDashboard("u1", ID)).status).toBe(404);
+            expect((await deleteMealFromDashboard("u1", "m1")).status).toBe(
+                404,
+            );
         });
     });
 
