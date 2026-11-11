@@ -520,6 +520,10 @@ export interface PreviewEdits {
     weights?: WeightEntry[];
     /** Meal edits from the Meals tab, by meal id. */
     mealPatches?: Record<string, Partial<Meal>>;
+    /** Meals logged from the page (form or one-tap repeat). */
+    addedMeals?: Meal[];
+    /** Meal ids deleted from the page ("Undo"). */
+    deletedMealIds?: string[];
     /** Calorie goal saved from the page: a number, or null for "use the
      *  estimated burn". Absent means not edited this session. */
     goalCalories?: number | null;
@@ -557,9 +561,10 @@ export function scenarioWithEdits(
             daily_calories: edits.goalCalories,
         };
     const patches = edits.mealPatches ?? {};
-    fx.meals = fx.meals.map((m) =>
-        patches[m.id] ? { ...m, ...patches[m.id] } : m,
-    );
+    const gone = new Set(edits.deletedMealIds ?? []);
+    fx.meals = [...fx.meals, ...(edits.addedMeals ?? [])]
+        .filter((m) => !gone.has(m.id))
+        .map((m) => (patches[m.id] ? { ...m, ...patches[m.id] } : m));
     return fx;
 }
 

@@ -29,7 +29,10 @@ import {
     activityByDate,
     upsertProfile,
     insertWeight,
+    insertMeal,
     updateMeal,
+    deleteMeal,
+    getMealById,
     timezoneFromProfile,
     preferredWeightUnitFromProfile,
     type ActivityDay,
@@ -56,7 +59,13 @@ import {
     MAX_PLAUSIBLE_WEIGHT_G,
     type WeightUnit,
 } from "./units.js";
-import { MAX_CALORIES, MAX_MACRO_G, MEAL_TYPE_VALUES } from "./import.js";
+import {
+    MAX_ALCOHOL_G,
+    MAX_CAFFEINE_MG,
+    MAX_CALORIES,
+    MAX_MACRO_G,
+    MEAL_TYPE_VALUES,
+} from "./import.js";
 import { authenticateBearer, rateLimitAuth } from "./middleware.js";
 import { checkBodyPatch, type BodyDetails, type WeighIn } from "./body.js";
 import {
@@ -64,10 +73,13 @@ import {
     buildEstimateVsScale,
     buildLast7,
     buildWeightStats,
+    buildFrequentMeals,
+    FREQUENT_DAYS,
     granularityFor,
     groupDays,
     LAST7_DAYS,
 } from "./dashboard-stats.js";
+import { listFoods, suggestFood } from "./simple-foods.js";
 
 // The weight rate needs a span longer than a day or a week to mean anything,
 // so the weight tracker always looks back at least this far, whatever range
@@ -614,6 +626,198 @@ export async function updateMealFromDashboard(
     };
 }
 
+// ---- Logging a meal from the page (no LLM) --------------------------------
+
+// Every numeric a meal can carry, with its bound. Blank is NOT zero here: an
+// omitted nutrient is stored as "nobody measured this", and a stored 0 would
+// be a fake measurement (a caffeine 0 even switches the caffeine row on).
+const MEAL_ENTRY_BOUNDS: Record<string, number> = {
+    ...MEAL_NUMBER_BOUNDS,
+    alcohol_g: MAX_ALCOHOL_G,
+    caffeine_mg: MAX_CAFFEINE_MG,
+};
+
+// The page mints one uuid per form-open / tap and the server prefixes it, so
+// the page can never forge an "auto:" or "import:" key. A double-click or a
+// retried request lands on the same row; a second, separate tap is a new
+// meal — the same coffee tomorrow, or twice today, is two meals.
+function checkClientKey(raw: unknown): Checked<string | undefined> {
+    if (raw === undefined || raw === null || raw === "")
+        return { ok: true, value: undefined };
+    if (typeof raw !== "string" || !UUID_RE.test(raw))
+        return { ok: false, error: "client_key must be a uuid." };
+    return { ok: true, value: `dash:${raw.toLowerCase()}` };
+}
+
+/**
+ * Validate the page's "Log a meal" form. Pure, so the dev preview applies the
+ * same rules to its in-memory store. description and meal_type are required;
+ * every number is optional and a blank one is simply left out. Unknown keys
+ * are refused so a typo cannot look like a successful save.
+ */
+export function checkMealEntry(
+    input: Record<string, unknown>,
+    opts: { tz: string; nowMs: number },
+): Checked<MealInput> {
+    const allowed = new Set([
+        "description",
+        "meal_type",
+        "logged_at",
+        "client_key",
+        ...Object.keys(MEAL_ENTRY_BOUNDS),
+    ]);
+    for (const key of Object.keys(input))
+        if (!allowed.has(key))
+            return { ok: false, error: `${key} can't be set here.` };
+
+    const description =
+        typeof input.description === "string" ? input.description.trim() : "";
+    if (!description) return { ok: false, error: "Describe what you ate." };
+    if (description.length > MAX_DESCRIPTION_CHARS)
+        return {
+            ok: false,
+            error: `description is longer than ${MAX_DESCRIPTION_CHARS} characters.`,
+        };
+    if (
+        typeof input.meal_type !== "string" ||
+        !MEAL_TYPES.includes(input.meal_type)
+    )
+        return {
+            ok: false,
+            error: `meal_type must be one of: ${MEAL_TYPES.join(", ")}.`,
+        };
+
+    const meal: Record<string, string | number> = {
+        description,
+        meal_type: input.meal_type,
+    };
+    for (const [key, max] of Object.entries(MEAL_ENTRY_BOUNDS)) {
+        const raw = input[key];
+        if (raw === undefined || raw === null || raw === "") continue;
+        const n = toNumber(raw);
+        if (n == null || n < 0 || n > max)
+            return {
+                ok: false,
+                error: `${key} must be a number from 0 to ${max.toLocaleString("en-US")}.`,
+            };
+        meal[key] = n;
+    }
+    // Omitted means "now", exactly like log_meal.
+    if (input.logged_at !== undefined && input.logged_at !== "") {
+        const at = checkLoggedAt(input.logged_at, opts.tz, opts.nowMs);
+        if (!at.ok) return at;
+        meal.logged_at = at.value;
+    }
+    const key = checkClientKey(input.client_key);
+    if (!key.ok) return key;
+    if (key.value) meal.idempotency_key = key.value;
+    // Keys and value types were checked one by one above.
+    return { ok: true, value: meal as unknown as MealInput };
+}
+
+function mealSummary(m: Meal) {
+    return {
+        id: m.id,
+        logged_at: m.logged_at,
+        meal_type: m.meal_type,
+        description: m.description,
+        calories: m.calories,
+        protein_g: m.protein_g,
+        carbs_g: m.carbs_g,
+        fat_g: m.fat_g,
+        fiber_g: m.fiber_g,
+        sugar_g: m.sugar_g,
+    };
+}
+
+/** Save a meal typed into the page, through the same insertMeal every other
+ *  path uses. */
+export async function logMealFromDashboard(
+    userId: string,
+    input: Record<string, unknown>,
+): Promise<Reply> {
+    const profile = await getProfile(userId);
+    const checked = checkMealEntry(input, {
+        tz: timezoneFromProfile(profile) ?? "UTC",
+        nowMs: Date.now(),
+    });
+    if (!checked.ok) return invalid(checked.error);
+    const { meal, deduplicated } = await insertMeal(userId, checked.value);
+    return {
+        status: 200,
+        json: { ok: true, deduplicated, meal: mealSummary(meal) },
+    };
+}
+
+/**
+ * The fields a repeat copies from a meal the user already has. Copied
+ * server-side by id because the page's meal rows do not carry caffeine,
+ * alcohol or notes — copying client-side would log the morning coffee with no
+ * caffeine. Pure, shared with the preview.
+ */
+export function repeatFields(
+    source: Meal,
+    opts: { clientKey?: string },
+): MealInput {
+    const meal: Record<string, string | number> = {
+        description: source.description,
+        meal_type: source.meal_type ?? "snack",
+    };
+    for (const key of [
+        "calories",
+        "protein_g",
+        "carbs_g",
+        "fat_g",
+        "fiber_g",
+        "sugar_g",
+        "alcohol_g",
+        "caffeine_mg",
+        "notes",
+    ] as const) {
+        const v = source[key];
+        if (v != null) meal[key] = v;
+    }
+    if (opts.clientKey) meal.idempotency_key = opts.clientKey;
+    return meal as unknown as MealInput;
+}
+
+/** "Log this again, now": the one-tap path. 404 for an id that is not one of
+ *  this user's meals. */
+export async function repeatMealFromDashboard(
+    userId: string,
+    id: string,
+    input: Record<string, unknown>,
+): Promise<Reply> {
+    const notFound: Reply = { status: 404, json: { error: "not_found" } };
+    if (!UUID_RE.test(id)) return notFound;
+    for (const key of Object.keys(input))
+        if (key !== "client_key") return invalid(`${key} can't be set here.`);
+    const key = checkClientKey(input.client_key);
+    if (!key.ok) return invalid(key.error);
+    const source = await getMealById(userId, id);
+    if (!source) return notFound;
+    const { meal, deduplicated } = await insertMeal(
+        userId,
+        repeatFields(source, { clientKey: key.value }),
+    );
+    return {
+        status: 200,
+        json: { ok: true, deduplicated, meal: mealSummary(meal) },
+    };
+}
+
+/** Delete one of the user's meals (the "Undo" after a one-tap log). 404 when
+ *  nothing matched, so the page never claims a delete that did not happen. */
+export async function deleteMealFromDashboard(
+    userId: string,
+    id: string,
+): Promise<Reply> {
+    if (!UUID_RE.test(id)) return { status: 404, json: { error: "not_found" } };
+    return (await deleteMeal(userId, id))
+        ? { status: 200, json: { ok: true } }
+        : { status: 404, json: { error: "not_found" } };
+}
+
 async function readObject(c: {
     req: { json: () => Promise<unknown> };
 }): Promise<Record<string, unknown> | null> {
@@ -754,6 +958,72 @@ export function createDashboardRouter(): Hono {
             c.get("userId") as string,
             c.req.param("id") ?? "",
             body,
+        );
+        return c.json(res.json, res.status);
+    });
+
+    // The meals this user logs most, from their own history — the "Log a
+    // meal" block's one-tap list.
+    dash.get("/api/dashboard/frequent", authenticateBearer, async (c) => {
+        const userId = c.get("userId") as string;
+        const tz = timezoneFromProfile(await getProfile(userId)) ?? "UTC";
+        const end = todayInTz(tz);
+        const meals = await getMealsInRange(
+            userId,
+            shiftLocalDate(end, -(FREQUENT_DAYS - 1)),
+            end,
+            tz,
+        );
+        return c.json({ meals: buildFrequentMeals(meals) });
+    });
+
+    // Typical nutrients for a simple item at a chosen amount, so the form
+    // can fill them: either free text ("2 beers") or an item picked by id
+    // with an amount and count. Pure lookups, no user data involved.
+    dash.get("/api/dashboard/foods", authenticateBearer, (c) =>
+        c.json({ foods: listFoods() }),
+    );
+    dash.get("/api/dashboard/foods/suggest", authenticateBearer, (c) =>
+        c.json({
+            match: suggestFood({
+                q: c.req.query("q"),
+                id: c.req.query("id"),
+                amount: c.req.query("amount"),
+                unit: c.req.query("unit"),
+                count: c.req.query("count"),
+            }),
+        }),
+    );
+
+    // Log a meal typed into the page — log_meal's write path, no LLM.
+    dash.post("/api/dashboard/meals", authenticateBearer, async (c) => {
+        const body = await readObject(c);
+        if (!body) return c.json({ error: "invalid_request" }, 400);
+        const res = await logMealFromDashboard(c.get("userId") as string, body);
+        return c.json(res.json, res.status);
+    });
+
+    // One tap: log a meal the user already has again, now.
+    dash.post(
+        "/api/dashboard/meals/:id/repeat",
+        authenticateBearer,
+        async (c) => {
+            const body = await readObject(c);
+            if (!body) return c.json({ error: "invalid_request" }, 400);
+            const res = await repeatMealFromDashboard(
+                c.get("userId") as string,
+                c.req.param("id") ?? "",
+                body,
+            );
+            return c.json(res.json, res.status);
+        },
+    );
+
+    // Delete one meal ("Undo" after a one-tap log).
+    dash.delete("/api/dashboard/meals/:id", authenticateBearer, async (c) => {
+        const res = await deleteMealFromDashboard(
+            c.get("userId") as string,
+            c.req.param("id") ?? "",
         );
         return c.json(res.json, res.status);
     });
