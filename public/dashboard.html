@@ -2397,6 +2397,7 @@
                     grid-template-columns: 5fr 7fr;
                     grid-template-areas:
                         "panel chart"
+                        "goal chart"
                         "details chart";
                     column-gap: clamp(2rem, 4vw, 3.5rem);
                     align-items: start;
@@ -2406,6 +2407,9 @@
                 }
                 .body-grid > .w-chart {
                     grid-area: chart;
+                }
+                .body-grid > .goal-sec {
+                    grid-area: goal;
                 }
                 .body-grid > .details-sec {
                     grid-area: details;
@@ -4461,7 +4465,7 @@
                 function goalFormHtml() {
                     const cur = goalCustom();
                     return (
-                        '<section class="details-sec rv"><details class="body-box" id="goal-box"' +
+                        '<section class="goal-sec rv"><details class="body-box" id="goal-box"' +
                         (goalOpen ? " open" : "") +
                         '><summary>Calorie goal</summary><p class="note">' +
                         (cur
@@ -4627,10 +4631,8 @@
                         '</ul><p class="facts-foot">' +
                         (t.goal_calories
                             ? ""
-                            : "No calorie goal yet — add your body details for an estimated-burn default, or set one below. ") +
-                        "Goals adjust for your watch’s active calories. Est. burn = resting (Mifflin-St Jeor) + active — estimates, not measurements.</p></section>" +
-                        goalFormHtml() +
-                        "</div>" +
+                            : "No calorie goal yet — add your body details for an estimated-burn default, or set one in Body. ") +
+                        "Goals adjust for your watch’s active calories. Est. burn = resting (Mifflin-St Jeor) + active — estimates, not measurements.</p></section></div>" +
                         '<div class="col">' +
                         '<section class="rv" aria-labelledby="h-strip">' +
                         secHead({
@@ -4682,7 +4684,6 @@
                                 });
                         });
                     });
-                    wireGoalForm();
                 };
 
                 CHARTS.today = function () {
@@ -6379,10 +6380,12 @@
                             ? '<div class="plot" id="weight-plot"></div>'
                             : '<p class="empty">No weigh-ins yet. Ask Claude to log your weight.</p>') +
                         "</section>" +
+                        goalFormHtml() +
                         bodyFormHtml() +
                         "</div></div>";
                     fillBodyForm();
                     wireBodyForm();
+                    wireGoalForm();
                     wireLogWeight();
                 };
 
