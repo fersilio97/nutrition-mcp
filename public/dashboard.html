@@ -4999,7 +4999,7 @@
                     if (!e || e.status === "no_weighins")
                         return (
                             head +
-                            '<p class="empty">Log your weight at least twice in this period to compare — ask Claude to log a weigh-in.</p>'
+                            '<p class="empty">Needs two weigh-ins in this period — pick a longer range, or ask Claude to log a weigh-in.</p>'
                         );
                     const bars = [];
                     if (e.est_logged_g != null)

@@ -39,6 +39,7 @@ export const SCENARIOS = [
     "empty",
     "lb",
     "calibrate",
+    "offset",
 ] as const;
 export type ScenarioName = (typeof SCENARIOS)[number];
 
@@ -299,6 +300,13 @@ function generateScenario(name: ScenarioName, today: string): FixtureData {
             activity: [],
         };
     if (name === "calibrate") return calibrateScenario(profile, today, tz);
+    // Same 45 days of data, resting burn left on the plain formula: the
+    // Estimate-vs-reality card shows the full ~150 kcal/day gap.
+    if (name === "offset")
+        return {
+            ...calibrateScenario(profile, today, tz),
+            profile: { ...profile, resting_basis: "formula" },
+        };
 
     const rnd = prng(0xc0ffee);
     const span = 120;

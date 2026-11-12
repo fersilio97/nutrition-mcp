@@ -12,7 +12,7 @@
 // any Body form saves; a load with none keeps the current state (single-user
 // dev tool, held in memory):
 //
-//   ?scenario=full|over-goal|no-body|no-goals|empty|lb|calibrate
+//   ?scenario=full|over-goal|no-body|no-goals|empty|lb|calibrate|offset
 //   ?delay=2000        delay every data response (shows the skeletons)
 //   ?fail=500|401      fail every data response
 //
