@@ -62,8 +62,8 @@ export interface DashboardDay {
  *  the baseline is the day's resting burn, so the effective goal (baseline +
  *  active kcal) is the estimated burn itself — eat to break even until the
  *  user picks a target. Without body details there is no burn to default to,
- *  so the goal stays unset. Dashboard-only: the MCP tools keep reading the
- *  stored goal, so "no goal set" there still means no goal. */
+ *  so the goal stays unset. Also used by log_meal / update_meal /
+ *  get_goal_progress (src/mcp.ts), so the assistant's progress matches. */
 export function withBurnDefault(
     goals: NutritionGoals | null,
     bmr: number | null,
