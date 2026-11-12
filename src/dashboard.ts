@@ -129,7 +129,13 @@ export function dashboardWindow(
             today,
             -(Math.max(days, WEIGHT_WINDOW_DAYS) - 1),
         ),
-        fetchStart: last7Start < startDate ? last7Start : startDate,
+        // Also back to the calibration window's start (28 days), so the
+        // calibrated resting burn never depends on the chart range picked.
+        fetchStart: [
+            startDate,
+            last7Start,
+            shiftLocalDate(today, -28),
+        ].sort()[0]!,
     };
 }
 

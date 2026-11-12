@@ -3994,7 +3994,19 @@
                         ]);
                     if (r.burn_kcal) {
                         if (r.bmr_kcal != null) {
-                            rows.push(["s-rest", "Resting", fmt(r.bmr_kcal)]);
+                            rows.push([
+                                "s-rest",
+                                data.calibration && data.calibration.applied
+                                    ? "Resting (calibrated)"
+                                    : "Resting",
+                                fmt(r.bmr_kcal),
+                            ]);
+                            if (data.calibration && data.calibration.applied)
+                                rows.push([
+                                    null,
+                                    "BMR (formula reference)",
+                                    fmt(data.calibration.bmr_kcal),
+                                ]);
                             rows.push([
                                 "s-active",
                                 "Active",
@@ -4171,6 +4183,74 @@
                     );
                 }
                 const unitSm = (u) => "<small>" + u + "</small>";
+                const calibrationErrors = {};
+                function calibrationToggle(row) {
+                    if (!row || row.bmr_kcal == null) return "";
+                    const reason = row.in_progress
+                        ? "Today is still in progress"
+                        : !row.mealCount
+                          ? "No meals logged"
+                          : "";
+                    const disabled = !!reason;
+                    return (
+                        '<label><input type="checkbox" data-cal-date="' +
+                        esc(row.date) +
+                        '"' +
+                        (row.skipped || row.counts_in_calibration === false
+                            ? ""
+                            : " checked") +
+                        (disabled
+                            ? ' disabled title="' +
+                              esc(reason) +
+                              '" aria-label="Count this day in calibration — ' +
+                              esc(reason) +
+                              '"'
+                            : ' aria-label="Count this day in calibration"') +
+                        '> Count this day in calibration</label><span class="b-status err" role="status" data-cal-error="' +
+                        esc(row.date) +
+                        '">' +
+                        esc(calibrationErrors[row.date] || "") +
+                        "</span>"
+                    );
+                }
+                function wireCalibrationToggles(root) {
+                    if (root.dataset.calibrationWired) return;
+                    root.dataset.calibrationWired = "1";
+                    root.addEventListener("change", function (ev) {
+                        const input = ev.target.closest("[data-cal-date]");
+                        if (!input) return;
+                        const date = input.dataset.calDate;
+                        input.disabled = true;
+                        fetch("/api/dashboard/calibration/day", {
+                            method: "POST",
+                            headers: {
+                                Authorization: "Bearer " + token,
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                                date: date,
+                                skip: !input.checked,
+                            }),
+                        })
+                            .then(function (r) {
+                                if (r.status === 401) return signOut();
+                                if (!r.ok) throw new Error("save");
+                                delete calibrationErrors[date];
+                                refresh();
+                            })
+                            .catch(function () {
+                                calibrationErrors[date] = "Could not save.";
+                                input.checked = !input.checked;
+                                input.disabled = false;
+                                const status = root.querySelector(
+                                    '[data-cal-error="' + date + '"]',
+                                );
+                                if (status)
+                                    status.textContent =
+                                        calibrationErrors[date];
+                            });
+                    });
+                }
 
                 /* ================= TODAY ================= */
                 const RING = 112;
@@ -4275,7 +4355,30 @@
                     }
                     h +=
                         t.burn_kcal != null
-                            ? factsRow(
+                            ? (data.calibration && data.calibration.applied
+                                  ? factsRow(
+                                        "Resting burn (calibrated)",
+                                        fmt(data.calibration.resting_kcal) +
+                                            kcal,
+                                        "BMR " +
+                                            fmt(data.calibration.bmr_kcal) +
+                                            " " +
+                                            (data.calibration.resting_kcal >=
+                                            data.calibration.bmr_kcal
+                                                ? "+"
+                                                : "−") +
+                                            fmt(
+                                                Math.abs(
+                                                    data.calibration
+                                                        .resting_kcal -
+                                                        data.calibration
+                                                            .bmr_kcal,
+                                                ),
+                                            ) +
+                                            " from your data",
+                                    )
+                                  : "") +
+                              factsRow(
                                   "Est. burn",
                                   fmt(t.burn_kcal) + kcal,
                                   // The model's split, so the figure
@@ -4632,7 +4735,10 @@
                         (t.goal_calories
                             ? ""
                             : "No calorie goal yet — add your body details for an estimated-burn default, or set one in Body. ") +
-                        "Goals adjust for your watch’s active calories. Est. burn = resting (Mifflin-St Jeor) + active — estimates, not measurements.</p></section></div>" +
+                        (data.calibration && data.calibration.applied
+                            ? "Goals adjust for your watch’s active calories. Est. burn = resting calibrated from your weight trend + active — estimates, not measurements."
+                            : "Goals adjust for your watch’s active calories. Est. burn = resting (Mifflin-St Jeor) + active — estimates, not measurements.") +
+                        "</p></section></div>" +
                         '<div class="col">' +
                         '<section class="rv" aria-labelledby="h-strip">' +
                         secHead({
@@ -4660,12 +4766,14 @@
                                   " kcal</span>"
                                 : "",
                         }) +
+                        calibrationToggle(t) +
                         (meals.length
                             ? '<ul class="meal-list">' +
                               meals.map(mealItem).join("") +
                               "</ul>"
                             : '<p class="empty">Nothing logged yet today. Tell Claude what you ate and it will show up here.</p>') +
                         "</section></div></div>";
+                    wireCalibrationToggles($("today-body"));
                     // Sweep the ring and grow the nutrient tracks from zero.
                     requestAnimationFrame(function () {
                         requestAnimationFrame(function () {
@@ -5169,7 +5277,10 @@
                                     ? [
                                           [
                                               LG.rest(),
-                                              "Resting burn (changes with weight)",
+                                              data.calibration &&
+                                              data.calibration.applied
+                                                  ? "Resting burn calibrated from your weight trend"
+                                                  : "Resting burn (changes with weight)",
                                           ],
                                       ]
                                           .concat(
@@ -5241,7 +5352,9 @@
                               "; the part of a bar above it is hatched."
                             : "No calorie goal set.") +
                         (hasBurn()
-                            ? " Est. burn is your resting burn (dashed) plus workout / active kcal (the slate segment up to the ring)."
+                            ? data.calibration && data.calibration.applied
+                                ? " Est. burn is resting burn calibrated from your weight trend (dashed) plus workout / active kcal (the slate segment up to the ring); BMR is shown as a muted reference."
+                                : " Est. burn is your resting burn (dashed) plus workout / active kcal (the slate segment up to the ring)."
                             : "") +
                         grouped;
                     $("trends-body").innerHTML =
@@ -5445,13 +5558,19 @@
                     const plotH = base - PAD.t;
                     const peak = Math.max.apply(
                         null,
-                        rows.map((r) =>
-                            Math.max(
-                                r.calories || 0,
-                                r.goal_calories || 0,
-                                r.burn_kcal || 0,
+                        rows
+                            .map((r) =>
+                                Math.max(
+                                    r.calories || 0,
+                                    r.goal_calories || 0,
+                                    r.burn_kcal || 0,
+                                ),
+                            )
+                            .concat(
+                                data.calibration && data.calibration.applied
+                                    ? [data.calibration.bmr_kcal]
+                                    : [],
                             ),
-                        ),
                     );
                     const maxY = tickMax(peak * 1.05, 4);
                     const L = gutter(yLabels(maxY, 4));
@@ -5500,6 +5619,18 @@
                         svg.appendChild(
                             svgEl("path", { d: rest, class: "m-rest" }),
                         );
+                    if (data.calibration && data.calibration.applied) {
+                        const reference = svgEl("line", {
+                            x1: L,
+                            x2: L + plotW,
+                            y1: yAt(data.calibration.bmr_kcal),
+                            y2: yAt(data.calibration.bmr_kcal),
+                        });
+                        reference.setAttribute("class", "m-rest");
+                        reference.style.opacity = "0.35";
+                        reference.style.strokeDasharray = "2 5";
+                        svg.appendChild(reference);
+                    }
                     if (splitBurn(rows) && lay.bw >= 3) {
                         const w = Math.max(1.5, Math.min(4, lay.barW * 0.3));
                         rows.forEach(function (r, i) {
@@ -5981,10 +6112,36 @@
                     h +=
                         s.bmr_kcal != null
                             ? factsRow(
-                                  "Resting burn (est.)",
-                                  fmt(s.bmr_kcal) + kcal,
-                                  "BMR · Mifflin-St Jeor" +
-                                      (s.age != null ? " · age " + s.age : ""),
+                                  data.calibration && data.calibration.applied
+                                      ? "Resting burn (calibrated)"
+                                      : "Resting burn (est.)",
+                                  fmt(
+                                      data.calibration &&
+                                          data.calibration.applied
+                                          ? data.calibration.resting_kcal
+                                          : s.bmr_kcal,
+                                  ) + kcal,
+                                  data.calibration && data.calibration.applied
+                                      ? "BMR " +
+                                            fmt(data.calibration.bmr_kcal) +
+                                            " " +
+                                            (data.calibration.resting_kcal >=
+                                            data.calibration.bmr_kcal
+                                                ? "+"
+                                                : "−") +
+                                            fmt(
+                                                Math.abs(
+                                                    data.calibration
+                                                        .resting_kcal -
+                                                        data.calibration
+                                                            .bmr_kcal,
+                                                ),
+                                            ) +
+                                            " from your data"
+                                      : "BMR · Mifflin-St Jeor" +
+                                            (s.age != null
+                                                ? " · age " + s.age
+                                                : ""),
                               )
                             : miss("Resting burn (est.)", ADD_BODY);
                     h +=
@@ -6190,7 +6347,11 @@
                     return (
                         '<section class="details-sec rv"><details class="body-box" id="body-box"' +
                         (bodyOpen ? " open" : "") +
-                        '><summary>Body details</summary><p class="note">Used only for BMI, your healthy weight range and the estimated daily burn (your resting burn from Mifflin-St Jeor, plus your watch’s active calories).</p>' +
+                        '><summary>Body details</summary><p class="note">Used only for BMI, your healthy weight range and the estimated daily burn (' +
+                        (data.calibration && data.calibration.applied
+                            ? "your resting burn calibrated from your weight trend"
+                            : "your resting burn from Mifflin-St Jeor") +
+                        ", plus your watch’s active calories).</p>" +
                         '<form id="body-form" class="body-form" novalidate><div class="form-grid">' +
                         '<div class="field"><label for="b-height">Height</label><span class="pair"><input class="input" id="b-height" type="number" inputmode="decimal" step="0.1" min="20" max="272" /><select class="input" id="b-unit" aria-label="Height unit"><option value="cm">cm</option><option value="in">in</option></select></span></div>' +
                         '<label class="field" for="b-birth">Birth date<input class="input" id="b-birth" type="date" /></label>' +
@@ -6199,7 +6360,9 @@
                         (data.calibration && data.calibration.applied
                             ? '<p class="note">Calibrated from ' +
                               data.calibration.counted_days +
-                              " of 28 days (" +
+                              " of " +
+                              data.calibration.window_days +
+                              " days (" +
                               data.calibration.skipped_days.length +
                               " skipped): resting " +
                               fmt(data.calibration.resting_kcal) +
@@ -6213,8 +6376,29 @@
                               ")</p>"
                             : data.calibration &&
                                 data.calibration.basis === "calibrated"
-                              ? '<p class="note">Calibration needs 14+ days and 70% logged.</p>'
-                              : "") +
+                              ? '<p class="note">' +
+                                (data.calibration.status === "no_weighins"
+                                    ? "Calibration needs 2 weigh-ins on different days in the last 28 days."
+                                    : data.calibration.status === "missing_bmr"
+                                      ? "Calibration needs height, birth date and sex to calculate BMR."
+                                      : data.calibration.status ===
+                                          "no_estimate"
+                                        ? "Calibration needs complete logged days between weigh-ins."
+                                        : "Calibration needs 14+ days between weigh-ins and 70% of days logged.") +
+                                "</p>"
+                              : data.calibration &&
+                                  data.calibration.status === "ok"
+                                ? '<p class="note">Your data suggests resting burn of ' +
+                                  fmt(data.calibration.resting_kcal) +
+                                  " kcal vs BMR " +
+                                  fmt(data.calibration.bmr_kcal) +
+                                  " (" +
+                                  fmtSigned(
+                                      data.calibration.resting_kcal -
+                                          data.calibration.bmr_kcal,
+                                  ) +
+                                  ") if you choose calibrated burn.</p>"
+                                : "") +
                         '<div class="form-foot"><button type="submit" class="btn primary" id="b-save">Save</button><span class="b-status ' +
                         bodyStatus.cls +
                         '" id="b-status" role="status">' +
@@ -6851,6 +7035,9 @@
                     ];
                     const body = groups
                         .map(function (g, gi) {
+                            const dayRow = data.daily.find(
+                                (r) => r.date === g.date,
+                            );
                             const day = parseDay(g.date).toLocaleDateString(
                                 undefined,
                                 {
@@ -6878,6 +7065,7 @@
                                 '<tbody><tr class="day"><th colspan="10" scope="colgroup">' +
                                 esc(day) +
                                 partial +
+                                calibrationToggle(dayRow) +
                                 '<span class="tot">' +
                                 tot +
                                 "</span></th></tr>" +
@@ -6951,6 +7139,7 @@
                         " in this range" +
                         (capped ? " — the dashboard lists at most 50." : ".") +
                         "</p></div>";
+                    wireCalibrationToggles($("meals-body"));
                 };
 
                 /* ---------- data ---------- */

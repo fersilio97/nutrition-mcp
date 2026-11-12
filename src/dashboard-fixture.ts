@@ -418,6 +418,7 @@ function calibrateScenario(
     today: string,
     tz: string,
 ): FixtureData {
+    profile = { ...profile, resting_basis: "calibrated" };
     const rnd = prng(0xca11b);
     const span = 45;
     const body = bodyOf(profile);
@@ -516,6 +517,8 @@ export function previewInputs(
 /** What the dev preview has "written" this session, held in its memory. */
 export interface PreviewEdits {
     body?: BodyDetails;
+    restingBasis?: "formula" | "calibrated";
+    skippedDays?: string[];
     /** Weigh-ins logged from the page's form. */
     weights?: WeightEntry[];
     /** Meal edits from the Meals tab, by meal id. */
@@ -550,6 +553,8 @@ export function scenarioWithEdits(
 ): FixtureData {
     const fx = buildScenario(name, today);
     if (edits.body) fx.profile = { ...fx.profile, ...edits.body };
+    if (edits.restingBasis)
+        fx.profile = { ...fx.profile, resting_basis: edits.restingBasis };
     if (edits.weights?.length) fx.weight = [...fx.weight, ...edits.weights];
     if (edits.goalCalories !== undefined)
         fx.goals = {
@@ -572,5 +577,8 @@ export function previewPayload(
     const tz = scenarioTz(name);
     const today = todayInTz(tz);
     const fx = scenarioWithEdits(name, today, edits);
-    return buildDashboardPayload(previewInputs(fx, days, today));
+    return buildDashboardPayload({
+        ...previewInputs(fx, days, today),
+        skippedDays: edits.skippedDays,
+    });
 }

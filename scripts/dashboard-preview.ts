@@ -16,7 +16,7 @@
 //   ?delay=2000        delay every data response (shows the skeletons)
 //   ?fail=500|401      fail every data response
 //
-// Writes (Body form, "Log weight", meal edits) run the production validators
+// Writes (Body form, "Log weight", meal edits, calibration skips) run the production validators
 // and are kept in memory per scenario; a page load with params forgets them.
 //
 // Login error states: email 429@test → 429, bad@test → 401.
@@ -180,14 +180,48 @@ const server = Bun.serve({
             const b = await readJson(req);
             if (!b) return json({ error: "invalid_request" }, 400);
             const tz = scenarioTz(state.scenario);
-            const checked = checkBodyPatch(b, todayInTz(tz));
+            const { resting_basis, ...bodyInput } = b;
+            if (
+                resting_basis !== undefined &&
+                resting_basis !== "formula" &&
+                resting_basis !== "calibrated"
+            )
+                return invalid("resting_basis must be formula or calibrated.");
+            const checked = checkBodyPatch(bodyInput, todayInTz(tz));
             if (!checked.ok) return invalid(checked.error);
             const e = edits();
             const current =
                 e.body ??
                 bodyOf(buildScenario(state.scenario, todayInTz(tz)).profile);
             e.body = { ...current, ...checked.patch };
+            if (resting_basis) e.restingBasis = resting_basis;
             return json({ ok: true, body: e.body });
+        }
+
+        if (
+            req.method === "POST" &&
+            path === "/api/dashboard/calibration/day"
+        ) {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const b = await readJson(req);
+            if (
+                !b ||
+                typeof b.date !== "string" ||
+                !/^\d{4}-\d{2}-\d{2}$/.test(b.date) ||
+                !Number.isFinite(Date.parse(`${b.date}T00:00:00Z`)) ||
+                new Date(`${b.date}T00:00:00Z`).toISOString().slice(0, 10) !==
+                    b.date ||
+                typeof b.skip !== "boolean"
+            )
+                return json({ error: "invalid_request" }, 400);
+            const tz = scenarioTz(state.scenario);
+            if (b.date > todayInTz(tz))
+                return json({ error: "invalid_request" }, 400);
+            const skipped = (edits().skippedDays ??= []);
+            const existing = skipped.indexOf(b.date);
+            if (b.skip && existing < 0) skipped.push(b.date);
+            if (!b.skip && existing >= 0) skipped.splice(existing, 1);
+            return json({ ok: true });
         }
 
         if (req.method === "POST" && path === "/api/dashboard/goal") {

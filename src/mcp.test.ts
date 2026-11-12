@@ -41,6 +41,7 @@ import { Hono } from "hono";
 import { createActivitySyncRouter } from "./activity-sync.js";
 import { todayInTz } from "./tz.js";
 import {
+    createDashboardRouter,
     dashboardPayload,
     logWeightFromDashboard,
     saveBodyDetails,
@@ -1455,6 +1456,7 @@ const db = {
     activityThrows: false,
     // Weigh-ins, oldest first; the last is what getLatestWeight returns.
     weights: [] as WeightEntry[],
+    calibrationSkips: [] as Array<{ user_id: string; day: string }>,
 };
 
 mock.module("./supabase.js", () => ({
@@ -1476,6 +1478,20 @@ mock.module("./supabase.js", () => ({
     getProfile: async (userId: string) => {
         db.profileReads.push(userId);
         return db.profile;
+    },
+    getUserIdByToken: async (token: string) =>
+        token === "dashboard-test-token"
+            ? { status: "valid" as const, userId: "u1" }
+            : { status: "invalid" as const },
+    setCalibrationSkippedDay: async (
+        userId: string,
+        day: string,
+        skip: boolean,
+    ) => {
+        db.calibrationSkips = db.calibrationSkips.filter(
+            (row) => !(row.user_id === userId && row.day === day),
+        );
+        if (skip) db.calibrationSkips.push({ user_id: userId, day });
     },
     getUserTimezone: async () => db.profile?.timezone ?? "UTC",
     getNutritionGoals: async () => db.goals,
@@ -1672,6 +1688,7 @@ beforeEach(() => {
     db.ingestToken = null;
     db.activityThrows = false;
     db.weights = [];
+    db.calibrationSkips = [];
 });
 
 interface ToolResult {
@@ -4913,6 +4930,54 @@ describe("dashboard API", () => {
             sex: "male",
         });
         expect((ok.json.body as { height_cm: number }).height_cm).toBe(177.8);
+    });
+
+    describe("POST /api/dashboard/calibration/day", () => {
+        const post = (body: unknown, token = "dashboard-test-token") =>
+            createDashboardRouter().request(
+                "http://x/api/dashboard/calibration/day",
+                {
+                    method: "POST",
+                    headers: {
+                        "content-type": "application/json",
+                        ...(token ? { authorization: `Bearer ${token}` } : {}),
+                    },
+                    body:
+                        typeof body === "string" ? body : JSON.stringify(body),
+                },
+            );
+
+        test("requires an authenticated user", async () => {
+            expect(
+                (await post({ date: "2026-11-10", skip: true }, "")).status,
+            ).toBe(401);
+        });
+
+        test("rejects malformed dates, impossible dates, non-boolean skip and future dates", async () => {
+            for (const input of [
+                { date: "2026-2-01", skip: true },
+                { date: "2026-02-30", skip: true },
+                { date: "2026-11-10", skip: "true" },
+                { date: "2099-01-01", skip: true },
+                [],
+                "not-json",
+            ]) {
+                const r = await post(input);
+                expect(r.status).toBe(400);
+            }
+            expect(db.calibrationSkips).toEqual([]);
+        });
+
+        test("marks and unmarks a valid past day", async () => {
+            const added = await post({ date: "2026-11-10", skip: true });
+            expect(added.status).toBe(200);
+            expect(db.calibrationSkips).toEqual([
+                { user_id: "u1", day: "2026-11-10" },
+            ]);
+            const removed = await post({ date: "2026-11-10", skip: false });
+            expect(removed.status).toBe(200);
+            expect(db.calibrationSkips).toEqual([]);
+        });
     });
 
     // Drift guard for the dev preview (scripts/dashboard-preview.ts): its
