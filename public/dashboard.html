@@ -1170,6 +1170,55 @@
                 color: var(--ink-2);
                 white-space: nowrap;
             }
+            .chart-prefs {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+            .chart-prefs .seg button {
+                min-width: 0;
+                min-height: 30px;
+                padding: 0 9px;
+                font-size: 10px;
+            }
+            .chart-note {
+                margin: -12px 0 16px;
+                color: var(--ink-2);
+                font-size: var(--fs-small);
+            }
+            .met-line {
+                fill: none;
+                stroke-width: 2.5;
+                stroke-linejoin: round;
+                stroke-linecap: round;
+            }
+            .met-est {
+                stroke: var(--burn);
+            }
+            .met-scale {
+                stroke: var(--accent);
+            }
+            .met-gap {
+                fill: var(--over);
+                opacity: 0.15;
+            }
+            .met-label {
+                fill: var(--ink);
+                font: 600 11px var(--font-mono);
+            }
+            .met-highlight {
+                padding: var(--s3);
+                border-left: 3px solid var(--accent);
+                background: var(--surface-2);
+                font-weight: 600;
+            }
+            .chart-value {
+                fill: #fff;
+                font: 600 10px var(--font-mono);
+            }
+            .chart-value.dim {
+                fill: var(--ink);
+            }
             .sec-head .legend {
                 margin-top: var(--s1);
             }
@@ -1645,6 +1694,9 @@
             }
             .strip.three {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+            .strip.two {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
             .strip.four {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3102,6 +3154,12 @@
                 const KEY = "nutrition-dash-token";
                 const THEME_KEY = "nutrition-dash-theme";
                 const RANGE_KEY = "nutrition-dash-range";
+                const pref = (key, fallback) =>
+                    load("nutrition-dash-" + key) || fallback;
+                let macroSegments = pref("macro-segments", "on") === "on";
+                let macroTotals = pref("macro-totals", "on") === "on";
+                let caloriesAxis = pref("calories-axis", "full");
+                let caloriesToday = pref("calories-today", "hidden");
                 const TABS = ["today", "trends", "body", "meals"];
                 // 7 days → daily bars, 30 → weekly, a year → monthly (the
                 // server's groupDays). 90 was dropped (§0c).
@@ -3792,6 +3850,31 @@
                     }
                 }
                 document.addEventListener("click", function (ev) {
+                    const prefButton =
+                        ev.target.closest &&
+                        ev.target.closest("[data-chart-pref]");
+                    if (prefButton) {
+                        const key = prefButton.dataset.chartPref;
+                        const value = prefButton.dataset.value;
+                        if (key === "macro-segments")
+                            macroSegments = value === "on";
+                        if (key === "macro-totals")
+                            macroTotals = value === "on";
+                        if (key === "calories-axis") caloriesAxis = value;
+                        if (key === "calories-today") caloriesToday = value;
+                        document
+                            .querySelectorAll('[data-chart-pref="' + key + '"]')
+                            .forEach(function (button) {
+                                button.setAttribute(
+                                    "aria-pressed",
+                                    String(button.dataset.value === value),
+                                );
+                            });
+                        store("nutrition-dash-" + key, value);
+                        if (key.startsWith("macro-")) macroChart();
+                        else caloriesChart();
+                        return;
+                    }
                     const b =
                         ev.target.closest && ev.target.closest(".seg button");
                     if (!b || loading) return;
@@ -4876,12 +4959,306 @@
                         "</div>"
                     );
                 }
+                function chartPref(key, label, value, options) {
+                    return (
+                        '<div class="seg" role="group" aria-label="' +
+                        label +
+                        '">' +
+                        options
+                            .map(function (o) {
+                                return (
+                                    '<button type="button" data-chart-pref="' +
+                                    key +
+                                    '" data-value="' +
+                                    o[0] +
+                                    '" aria-pressed="' +
+                                    (value === o[0]) +
+                                    '">' +
+                                    o[1] +
+                                    "</button>"
+                                );
+                            })
+                            .join("") +
+                        "</div>"
+                    );
+                }
                 // Weight deltas: grams under 1 kg, else one decimal in the
                 // user's unit. Pounds stay pounds at every size.
                 function wDelta(g, unit) {
                     if (unit !== "lb" && Math.abs(g) < 1000)
                         return fmtSigned(g) + " g";
                     return fmtSignedDec(toUnit(g, unit)) + " " + unit;
+                }
+                function metabolismSeries() {
+                    const days = data.daily;
+                    const weights = (data.weights || [])
+                        .slice()
+                        .sort((a, b) => a.date.localeCompare(b.date));
+                    const byDate = new Map(days.map((r) => [r.date, r]));
+                    const out = [];
+                    days.forEach(function (d, i) {
+                        const trailing = days
+                            .slice(Math.max(0, i - 6), i + 1)
+                            .filter((r) => r.burn_kcal != null);
+                        const est7 =
+                            trailing.length >= 4
+                                ? trailing.reduce(
+                                      (s, r) => s + r.burn_kcal,
+                                      0,
+                                  ) / trailing.length
+                                : null;
+                        const start =
+                            parseDay(d.date).getTime() - 20 * 86400000;
+                        const candidates = weights.filter(
+                            (w) =>
+                                parseDay(w.date).getTime() >= start &&
+                                w.date <= d.date,
+                        );
+                        let scale = null;
+                        if (candidates.length >= 2) {
+                            const first = candidates[0];
+                            const last = candidates[candidates.length - 1];
+                            const span = Math.round(
+                                (parseDay(last.date) - parseDay(first.date)) /
+                                    86400000,
+                            );
+                            const covered = [];
+                            for (
+                                let t = parseDay(first.date).getTime();
+                                t < parseDay(last.date).getTime();
+                                t += 86400000
+                            ) {
+                                const row = byDate.get(
+                                    new Date(t).getFullYear() +
+                                        "-" +
+                                        String(
+                                            new Date(t).getMonth() + 1,
+                                        ).padStart(2, "0") +
+                                        "-" +
+                                        String(new Date(t).getDate()).padStart(
+                                            2,
+                                            "0",
+                                        ),
+                                );
+                                if (
+                                    row &&
+                                    !row.in_progress &&
+                                    row.balance_g != null
+                                )
+                                    covered.push(row);
+                            }
+                            if (span >= 14 && covered.length / span >= 0.7) {
+                                const actual = last.weight_g - first.weight_g;
+                                const estimated =
+                                    (covered.reduce(
+                                        (s, r) => s + r.balance_g,
+                                        0,
+                                    ) *
+                                        span) /
+                                    covered.length;
+                                const offset = Math.round(
+                                    ((actual - estimated) * 7.7) / span,
+                                );
+                                const burns = covered
+                                    .map((r) => r.burn_kcal)
+                                    .filter((v) => v != null);
+                                if (burns.length)
+                                    scale =
+                                        burns.reduce((s, v) => s + v, 0) /
+                                            burns.length -
+                                        offset;
+                            }
+                        }
+                        if (scale == null) {
+                            for (let j = out.length - 1; j >= 0; j--) {
+                                const age = Math.round(
+                                    (parseDay(d.date) - parseDay(out[j].date)) /
+                                        86400000,
+                                );
+                                if (age > 7) break;
+                                if (out[j].scale != null) {
+                                    scale = out[j].scale;
+                                    break;
+                                }
+                            }
+                        }
+                        out.push({ date: d.date, est: est7, scale: scale });
+                    });
+                    return out;
+                }
+                function metabolismHtml() {
+                    const points = metabolismSeries();
+                    const both = points.filter(
+                        (p) => p.est != null && p.scale != null,
+                    );
+                    const head = secHead({
+                        wide: true,
+                        eyebrow: "Calibration",
+                        id: "h-met",
+                        title: 'Estimated metabolism <span class="est">(estimate)</span>',
+                        note: "Daily burn as a 7-day average: the estimate (resting + watch active kcal) next to what your scale and meals imply. The gap is how much the estimate overstates, or understates, what the scale shows.",
+                        aside: '<span class="aside">When the resting burn is already calibrated, the lines converge by design.</span>',
+                        legend: legend([
+                            [
+                                '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="met-est"/></svg>',
+                                "Estimated",
+                            ],
+                            [
+                                '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="met-scale"/></svg>',
+                                "Scale-implied",
+                            ],
+                        ]),
+                    });
+                    if (!hasBurn())
+                        return (
+                            head +
+                            '<p class="empty">Add your height, birth date and sex under Body › Body details to estimate this.<br>' +
+                            ADD_BODY +
+                            "</p>"
+                        );
+                    if (!both.length)
+                        return (
+                            head +
+                            '<p class="empty">Needs about 2 weeks of logged meals and at least two weigh-ins to estimate. Pick a longer range or log more.</p>'
+                        );
+                    return (
+                        head +
+                        '<div class="plot" id="met-plot"></div><div class="strip two rv" id="met-stats"></div><p class="met-highlight" id="met-today"></p>'
+                    );
+                }
+                function metabolismChart() {
+                    const host = $("met-plot");
+                    if (!host || !host.clientWidth) return;
+                    const points = metabolismSeries();
+                    const both = points.filter(
+                        (p) => p.est != null && p.scale != null,
+                    );
+                    const latest = both[both.length - 1];
+                    const latestEst = points
+                        .filter((p) => p.est != null)
+                        .slice(-1)[0];
+                    const latestScale = points
+                        .filter((p) => p.scale != null)
+                        .slice(-1)[0];
+                    if (!latest) return;
+                    const all = points
+                        .flatMap((p) => [p.est, p.scale])
+                        .filter((v) => v != null);
+                    const lo = Math.max(
+                        0,
+                        Math.floor(Math.min.apply(null, all) / 100) * 100,
+                    );
+                    const hi = Math.ceil(Math.max.apply(null, all) / 100) * 100;
+                    const c = chartSvg(
+                        host,
+                        innerWidth <= 480 ? 240 : 280,
+                        "Estimated and scale-implied daily burn, kcal per day.",
+                    );
+                    const base = c.h - PAD.b,
+                        L = gutter(yLabels(hi, 4)),
+                        W = c.w - L - PAD.r,
+                        H = base - PAD.t;
+                    const yAt = (v) =>
+                        base - ((v - lo) / Math.max(1, hi - lo)) * H;
+                    const svg = c.svg;
+                    for (let i = 0; i <= 4; i++) {
+                        const value = lo + ((hi - lo) * i) / 4;
+                        const y = yAt(value);
+                        if (i)
+                            svg.appendChild(
+                                svgEl("line", {
+                                    x1: L,
+                                    x2: L + W,
+                                    y1: y,
+                                    y2: y,
+                                    class: "gridline",
+                                }),
+                            );
+                        svgText(svg, L - 8, y + 4, fmt(value), "lbl", "end");
+                    }
+                    const xAt = (i) =>
+                        L +
+                        (points.length < 2
+                            ? W / 2
+                            : (W * i) / (points.length - 1));
+                    const pathFor = (key) => {
+                        let d = "";
+                        points.forEach((p, i) => {
+                            if (p[key] == null) return;
+                            d +=
+                                (i === 0 || points[i - 1][key] == null
+                                    ? "M"
+                                    : "L") +
+                                xAt(i) +
+                                "," +
+                                yAt(p[key]);
+                        });
+                        return d;
+                    };
+                    const ep = pathFor("est"),
+                        sp = pathFor("scale");
+                    if (ep && sp) {
+                        const e = points
+                            .map((p, i) =>
+                                p.est != null && p.scale != null
+                                    ? [xAt(i), yAt(p.est), yAt(p.scale)]
+                                    : null,
+                            )
+                            .filter(Boolean);
+                        if (e.length > 1) {
+                            let d = "M" + e[0][0] + "," + e[0][1];
+                            e.forEach((p) => (d += "L" + p[0] + "," + p[1]));
+                            for (let i = e.length - 1; i >= 0; i--)
+                                d += "L" + e[i][0] + "," + e[i][2];
+                            d += "Z";
+                            svg.appendChild(
+                                svgEl("path", { d: d, class: "met-gap" }),
+                            );
+                        }
+                    }
+                    svg.appendChild(
+                        svgEl("path", { d: ep, class: "met-line met-est" }),
+                    );
+                    svg.appendChild(
+                        svgEl("path", { d: sp, class: "met-line met-scale" }),
+                    );
+                    baseline(svg, L, L + W, base);
+                    const metLabels = xLabelIdx(points.length, W, 4);
+                    const metLabelIdx =
+                        metLabels.length <= 7
+                            ? metLabels
+                            : [...Array(7)].map((_, k) =>
+                                  Math.round((k * (points.length - 1)) / 6),
+                              );
+                    metLabelIdx.forEach(function (i) {
+                        svgText(
+                            svg,
+                            xAt(i),
+                            c.h - 8,
+                            shortDay(points[i].date),
+                            "xl",
+                            "middle",
+                        );
+                    });
+                    svgText(
+                        svg,
+                        L + W,
+                        Math.min(yAt(latest.est), yAt(latest.scale)) - 7,
+                        "gap ~" + fmt(Math.abs(latest.est - latest.scale)),
+                        "met-label",
+                        "end",
+                    );
+                    $("met-stats").innerHTML =
+                        stat("Estimated burn", fmt(latestEst.est), "kcal/day") +
+                        stat(
+                            "Scale-implied burn",
+                            fmt(latestScale.scale),
+                            "kcal/day",
+                        );
+                    $("met-today").textContent =
+                        "Your metabolism today: ~" +
+                        fmt(Math.round(latestScale.scale / 10) * 10) +
+                        " kcal/day. Updates as new weigh-ins and meals are logged.";
                 }
                 function trendsStats(rows) {
                     const logged = rows.filter((r) => r.mealCount > 0);
@@ -5367,10 +5744,31 @@
                             id: "h-cal",
                             title: calTitle,
                             note: calNote,
+                            aside:
+                                '<div class="chart-prefs">' +
+                                chartPref(
+                                    "calories-axis",
+                                    "Calories axis",
+                                    caloriesAxis,
+                                    [
+                                        ["full", "Y axis: Full"],
+                                        ["collapsed", "Collapsed"],
+                                    ],
+                                ) +
+                                chartPref(
+                                    "calories-today",
+                                    "Today bar",
+                                    caloriesToday,
+                                    [
+                                        ["hidden", "Today: Hidden"],
+                                        ["shown", "Shown"],
+                                    ],
+                                ) +
+                                "</div>",
                             legend: any ? calLegend : "",
                         }) +
                         (any
-                            ? '<div class="plot" id="cal-plot"></div>'
+                            ? '<div class="plot" id="cal-plot"></div><p class="chart-note" id="cal-axis-note"></p>'
                             : emptyMsg) +
                         "</section>" +
                         '<section class="rv" aria-labelledby="h-bal">' +
@@ -5405,6 +5803,9 @@
                         '<section class="rv" aria-labelledby="h-evs">' +
                         evsHtml() +
                         "</section>" +
+                        '<section class="rv" aria-labelledby="h-met">' +
+                        metabolismHtml() +
+                        "</section>" +
                         '<section class="rv" aria-labelledby="h-mac">' +
                         secHead({
                             wide: true,
@@ -5417,6 +5818,27 @@
                                       (g === "week" ? "weekly" : "monthly") +
                                       " average per logged day",
                             note: "Stacked grams of protein, carbs and fat.",
+                            aside:
+                                '<div class="chart-prefs">' +
+                                chartPref(
+                                    "macro-segments",
+                                    "Segment grams",
+                                    macroSegments ? "on" : "off",
+                                    [
+                                        ["on", "Segment grams"],
+                                        ["off", "Hidden"],
+                                    ],
+                                ) +
+                                chartPref(
+                                    "macro-totals",
+                                    "Day total",
+                                    macroTotals ? "on" : "off",
+                                    [
+                                        ["on", "Day total"],
+                                        ["off", "Hidden"],
+                                    ],
+                                ) +
+                                "</div>",
                             legend: any
                                 ? legend([
                                       [LG.bar("m-protein"), "Protein"],
@@ -5535,7 +5957,10 @@
                 function caloriesChart() {
                     const host = $("cal-plot");
                     if (!host || !host.clientWidth) return;
-                    const rows = chartRows();
+                    const rows = chartRows().filter(
+                        (r) => caloriesToday !== "hidden" || !r.in_progress,
+                    );
+                    const note = $("cal-axis-note");
                     const s = trendsStats(data.daily);
                     const c = chartSvg(
                         host,
@@ -5572,14 +5997,66 @@
                                     : [],
                             ),
                     );
-                    const maxY = tickMax(peak * 1.05, 4);
-                    const L = gutter(yLabels(maxY, 4));
+                    const eaten = rows
+                        .filter((r) => r.calories > 0)
+                        .map((r) => r.calories);
+                    const minEaten = eaten.length
+                        ? Math.min.apply(null, eaten)
+                        : 0;
+                    const minY =
+                        caloriesAxis === "collapsed"
+                            ? Math.max(
+                                  0,
+                                  Math.floor((minEaten - 300) / 100) * 100,
+                              )
+                            : 0;
+                    const maxY =
+                        caloriesAxis === "collapsed"
+                            ? Math.max(minY + 100, peak * 1.03)
+                            : tickMax(peak * 1.05, 4);
+                    if (note)
+                        note.textContent =
+                            caloriesAxis === "collapsed"
+                                ? "Axis starts at " +
+                                  minY +
+                                  " kcal, so bar heights are not proportional to zero."
+                                : "";
+                    const L = gutter(
+                        caloriesAxis === "collapsed" ? [""] : yLabels(maxY, 4),
+                    );
                     const plotW = c.w - L - PAD.r;
-                    const yAt = (v) => base - (v / maxY) * plotH;
-                    yAxis(svg, maxY, L, L + plotW, yAt, 4);
+                    const yAt = (v) =>
+                        base - ((v - minY) / (maxY - minY)) * plotH;
+                    if (caloriesAxis !== "collapsed")
+                        yAxis(svg, maxY, L, L + plotW, yAt, 4);
                     const lay = bandLayout(rows.length, plotW);
                     calBars(svg, rows, L, plotW, yAt, base, lay);
                     baseline(svg, L, L + plotW, base);
+                    if (caloriesAxis === "collapsed") {
+                        svg.appendChild(
+                            svgEl("path", {
+                                d:
+                                    "M" +
+                                    L +
+                                    "," +
+                                    (base - 3) +
+                                    "l4,-5 4,5 4,-5 4,5",
+                                class: "gridline",
+                            }),
+                        );
+                        rows.forEach(function (r, i) {
+                            const h = base - yAt(r.calories || 0);
+                            if (r.calories > 0 && h >= 18)
+                                svgText(
+                                    svg,
+                                    L + lay.bw * (i + 0.5),
+                                    yAt(r.calories) + 13,
+                                    fmt(r.calories),
+                                    "chart-value",
+                                    "middle",
+                                );
+                        });
+                    }
                     // Goal as a step line: each bar's own target across its
                     // column, joined vertically where it changes.
                     let d = "";
@@ -5970,8 +6447,27 @@
                                     style: growDelay(i),
                                 }),
                             );
+                            if (macroSegments && segH >= 16 && lay.barW >= 14) {
+                                svgText(
+                                    svg,
+                                    x + w / 2,
+                                    yTop + segH / 2 + 3,
+                                    fmt(val) + "g",
+                                    "chart-value" + (r.dim ? " dim" : ""),
+                                    "middle",
+                                );
+                            }
                             acc += val;
                         }
+                        if (macroTotals && lay.barW >= 16)
+                            svgText(
+                                svg,
+                                x + w / 2,
+                                yAt(total(r)) - 5,
+                                fmt(total(r)) + "g",
+                                "lbl",
+                                "middle",
+                            );
                     });
                     baseline(svg, L, L + plotW, base);
                     xAxis(svg, rows, lay, L, c.h - 8);
@@ -6009,6 +6505,7 @@
                     caloriesChart();
                     balanceChart();
                     macroChart();
+                    metabolismChart();
                 };
 
                 /* ================= BODY ================= */
