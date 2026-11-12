@@ -6195,6 +6195,26 @@
                         '<div class="field"><label for="b-height">Height</label><span class="pair"><input class="input" id="b-height" type="number" inputmode="decimal" step="0.1" min="20" max="272" /><select class="input" id="b-unit" aria-label="Height unit"><option value="cm">cm</option><option value="in">in</option></select></span></div>' +
                         '<label class="field" for="b-birth">Birth date<input class="input" id="b-birth" type="date" /></label>' +
                         '<label class="field wide" for="b-sex">Sex<select class="input" id="b-sex"><option value="">—</option><option value="male">Male</option><option value="female">Female</option></select></label></div>' +
+                        '<label class="field wide" for="b-resting">Resting burn<select class="input" id="b-resting"><option value="formula">Formula (BMR)</option><option value="calibrated">Calibrated from my data</option></select></label>' +
+                        (data.calibration && data.calibration.applied
+                            ? '<p class="note">Calibrated from ' +
+                              data.calibration.counted_days +
+                              " of 28 days (" +
+                              data.calibration.skipped_days.length +
+                              " skipped): resting " +
+                              fmt(data.calibration.resting_kcal) +
+                              " kcal vs BMR " +
+                              fmt(data.calibration.bmr_kcal) +
+                              " (" +
+                              fmtSigned(
+                                  data.calibration.resting_kcal -
+                                      data.calibration.bmr_kcal,
+                              ) +
+                              ")</p>"
+                            : data.calibration &&
+                                data.calibration.basis === "calibrated"
+                              ? '<p class="note">Calibration needs 14+ days and 70% logged.</p>'
+                              : "") +
                         '<div class="form-foot"><button type="submit" class="btn primary" id="b-save">Save</button><span class="b-status ' +
                         bodyStatus.cls +
                         '" id="b-status" role="status">' +
@@ -6220,6 +6240,9 @@
                             : String(body.height_cm);
                     $("b-birth").value = d ? d.birth : body.birth_date || "";
                     $("b-sex").value = d ? d.sex : body.sex || "";
+                    $("b-resting").value =
+                        (data.calibration && data.calibration.basis) ||
+                        "formula";
                     // Open it when something is missing, so the ask is
                     // visible — unless the user has toggled it themselves.
                     if (
@@ -6276,6 +6299,7 @@
                                 height_unit: $("b-unit").value,
                                 birth_date: $("b-birth").value || null,
                                 sex: $("b-sex").value || null,
+                                resting_basis: $("b-resting").value,
                             }),
                         })
                             .then(function (r) {

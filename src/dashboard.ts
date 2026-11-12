@@ -26,6 +26,8 @@ import {
     getProfile,
     getLatestWeight,
     getActivityInRange,
+    getCalibrationSkippedDays,
+    setCalibrationSkippedDay,
     activityByDate,
     upsertProfile,
     insertWeight,
@@ -41,6 +43,8 @@ import {
     type WeightEntry,
 } from "./supabase.js";
 import { buildDailyBuckets } from "./insights.js";
+import { buildCalibration } from "./calibration.js";
+import { balanceGrams, dailyBurn } from "./body.js";
 import {
     todayInTz,
     shiftLocalDate,
@@ -138,6 +142,7 @@ export interface DashboardInputs {
     goals: NutritionGoals | null;
     latestWeight: WeightEntry | null;
     activityRows: ActivityDay[];
+    skippedDays?: string[];
     days: number;
     /** The user's local today, YYYY-MM-DD. */
     today: string;
@@ -166,6 +171,12 @@ export async function dashboardPayload(userId: string, days: number) {
             getActivityInRange(userId, fetchStart, endDate).catch(() => []),
         ]);
 
+    const skippedDays = await getCalibrationSkippedDays(
+        userId,
+        shiftLocalDate(today, -28),
+        shiftLocalDate(today, -1),
+    ).catch(() => []);
+
     return buildDashboardPayload({
         profile,
         meals,
@@ -174,6 +185,7 @@ export async function dashboardPayload(userId: string, days: number) {
         goals,
         latestWeight,
         activityRows,
+        skippedDays,
         days,
         today,
     });
@@ -193,6 +205,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         goals,
         latestWeight,
         activityRows,
+        skippedDays = [],
         days,
         today,
     } = inputs;
@@ -232,6 +245,49 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         weightsForBmr,
         endDate,
     );
+    const calibration = buildCalibration(
+        allRows.map((r) => ({ ...r, skipped: skippedDays.includes(r.date) })),
+        weighIns,
+        endDate,
+        profile?.resting_basis === "calibrated" ? "calibrated" : "formula",
+        skippedDays,
+    );
+    if (calibration.applied && calibration.implied_kcal_per_day != null) {
+        for (const row of allRows) {
+            if (row.bmr_kcal == null) continue;
+            const resting = Math.round(
+                Math.max(
+                    row.bmr_kcal * 0.75,
+                    Math.min(
+                        row.bmr_kcal * 1.25,
+                        row.bmr_kcal - calibration.implied_kcal_per_day,
+                    ),
+                ),
+            );
+            const delta = resting - row.bmr_kcal;
+            row.bmr_kcal = resting;
+            row.burn_kcal = dailyBurn(resting, row.active_kcal);
+            row.balance_g =
+                row.mealCount > 0
+                    ? balanceGrams(row.calories, row.burn_kcal)
+                    : null;
+            row.balance_kcal =
+                row.mealCount > 0
+                    ? Math.round(row.calories - row.burn_kcal)
+                    : null;
+            if (goals?.daily_calories == null || goals.daily_calories <= 0)
+                row.goal_calories =
+                    (row.goal_calories ??
+                        row.burn_kcal - (row.active_kcal ?? 0)) +
+                    delta +
+                    (row.active_kcal ?? 0);
+        }
+    }
+    for (const row of allRows) {
+        row.skipped = skippedDays.includes(row.date);
+        row.counts_in_calibration =
+            !row.skipped && !row.in_progress && row.balance_g != null;
+    }
     const dayRows = allRows.filter((r) => r.date >= startDate);
     const inRange = (iso: string) => {
         const d = dateInTz(iso, tz);
@@ -244,6 +300,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         startDate,
         endDate,
         days,
+        calibration,
         body,
         weightStats: buildWeightStats(
             weighIns,
@@ -321,7 +378,21 @@ export async function saveBodyDetails(
 ): Promise<{ status: 200 | 400; json: Record<string, unknown> }> {
     const profile = await getProfile(userId);
     const today = todayInTz(timezoneFromProfile(profile) ?? "UTC");
-    const checked = checkBodyPatch(input, today);
+    const { resting_basis, ...bodyInput } = input;
+    if (
+        resting_basis !== undefined &&
+        resting_basis !== "formula" &&
+        resting_basis !== "calibrated"
+    )
+        return {
+            status: 400,
+            json: {
+                error: "invalid_request",
+                error_description:
+                    "resting_basis must be formula or calibrated.",
+            },
+        };
+    const checked = checkBodyPatch(bodyInput, today);
     if (!checked.ok)
         return {
             status: 400,
@@ -330,7 +401,10 @@ export async function saveBodyDetails(
                 error_description: checked.error,
             },
         };
-    const saved = await upsertProfile(userId, checked.patch);
+    const saved = await upsertProfile(userId, {
+        ...checked.patch,
+        ...(resting_basis ? { resting_basis } : {}),
+    });
     return { status: 200, json: { ok: true, body: bodyOf(saved) } };
 }
 
@@ -726,6 +800,35 @@ export function createDashboardRouter(): Hono {
         const res = await saveBodyDetails(userId, body);
         return c.json(res.json, res.status);
     });
+
+    dash.post(
+        "/api/dashboard/calibration/day",
+        authenticateBearer,
+        async (c) => {
+            const body = await readObject(c);
+            if (
+                !body ||
+                typeof body.date !== "string" ||
+                !/^\d{4}-\d{2}-\d{2}$/.test(body.date) ||
+                !Number.isFinite(Date.parse(`${body.date}T00:00:00Z`)) ||
+                new Date(`${body.date}T00:00:00Z`)
+                    .toISOString()
+                    .slice(0, 10) !== body.date ||
+                typeof body.skip !== "boolean"
+            )
+                return c.json({ error: "invalid_request" }, 400);
+            const userId = c.get("userId") as string;
+            const profile = await getProfile(userId);
+            if (body.date > todayInTz(timezoneFromProfile(profile) ?? "UTC"))
+                return c.json({ error: "invalid_request" }, 400);
+            try {
+                await setCalibrationSkippedDay(userId, body.date, body.skip);
+            } catch {
+                return c.json({ error: "unavailable" }, 503);
+            }
+            return c.json({ ok: true });
+        },
+    );
 
     // Set (or reset to the estimated burn) the daily calorie goal.
     dash.post("/api/dashboard/goal", authenticateBearer, async (c) => {

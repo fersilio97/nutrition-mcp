@@ -56,6 +56,8 @@ export interface DashboardDay {
     balance_kcal: number | null;
     /** True for today: the day is still running, so its balance is partial. */
     in_progress: boolean;
+    skipped?: boolean;
+    counts_in_calibration?: boolean;
 }
 
 /** The calorie goal the dashboard shows. A stored goal wins; with none set,
