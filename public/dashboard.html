@@ -3607,9 +3607,11 @@
 
                 let token = null;
                 let data = null;
-                const mockCalories =
-                    new URLSearchParams(location.search).get("mock") ===
-                    "calories";
+                // The "Eaten vs burned" chart is the Energy chart; the old bar
+                // chart stays reachable with ?chart=bars.
+                const barsView =
+                    new URLSearchParams(location.search).get("chart") ===
+                    "bars";
                 let loading = false;
                 let loadError = false;
                 let active = "today";
@@ -5520,7 +5522,7 @@
                         '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="cal2-eaten-line"/><circle cx="7" cy="7" r="3" class="cal2-eaten-dot"/></svg>';
                     const head = secHead({
                         wide: true,
-                        eyebrow: "Energy · mock",
+                        eyebrow: "Energy",
                         id: "h-cal2",
                         title: 'Eaten vs burned <span class="est">(estimate)</span>',
                         note:
@@ -6647,12 +6649,14 @@
                     $("trends-body").innerHTML =
                         '<div class="stack">' +
                         tilesHtml(rows, s) +
-                        (mockCalories
-                            ? '<section class="rv" aria-labelledby="h-cal2">' +
+                        (barsView
+                            ? ""
+                            : '<section class="rv" aria-labelledby="h-cal2">' +
                               calories2Html() +
-                              "</section>"
-                            : "") +
-                        '<section class="rv" aria-labelledby="h-cal">' +
+                              "</section>") +
+                        (barsView
+                            ? '<section class="rv" aria-labelledby="h-cal">'
+                            : '<section class="rv" hidden aria-labelledby="h-cal">') +
                         secHead({
                             wide: true,
                             eyebrow: "Energy",
@@ -7870,8 +7874,8 @@
                     );
                 }
                 CHARTS.trends = function () {
-                    if (mockCalories) calories2Chart();
-                    caloriesChart();
+                    if (!barsView) calories2Chart();
+                    else caloriesChart();
                     balanceChart();
                     macroChart();
                     metabolismChart();
