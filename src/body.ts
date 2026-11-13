@@ -16,8 +16,9 @@
 //           more than predicted), the dashboard's "Estimate vs reality" card
 //           shows it as a negative kcal/day offset — that card, not a guessed
 //           multiplier, is how to calibrate.
-//   TEF     + 10% of that day's logged kcal: the thermic effect of food
-//           (Westerterp 2004, ~10% on a mixed diet). Mifflin predicts a FASTING
+//   TEF     + the thermic effect of food (foodTef): 25% of protein kcal,
+//           7.5% of carbohydrate, 2% of fat — ~10% on a mixed diet
+//           (Westerterp 2004). Mifflin predicts a FASTING
 //           resting rate and the watch's active kcal excludes it, so without
 //           this term the burn ran ~150-250 kcal/day low.
 //   Balance (eaten − burned) ÷ 6.0 kcal per gram. Not the classic 7.7 (pure
@@ -33,8 +34,35 @@ import type { BodySex } from "./supabase.js";
 export const BASE_FACTOR = 1.0;
 /** kcal per gram of short-window (2-4 week) scale-weight change. */
 export const KCAL_PER_GRAM = 6.0;
-/** Thermic effect of food, as a share of the day's logged kcal. */
+/** Thermic effect of food, as a share of the day's logged kcal: the
+ *  fallback when a day has no macros, and the break-even goal's factor. */
 export const TEF_FRACTION = 0.1;
+/** Thermic effect per macronutrient, as a share of its kcal (mid-points of
+ *  the usual ranges: protein 20-30%, carbohydrate 5-10%, fat 0-3%;
+ *  Westerterp 2004). A high-protein day therefore burns more digesting. */
+export const TEF_PROTEIN = 0.25;
+export const TEF_CARBS = 0.075;
+export const TEF_FAT = 0.02;
+
+/** A day's thermic effect of food, kcal. From its macros when they account
+ *  for at least half its kcal (protein and carbs 4 kcal/g, fat 9), with any
+ *  kcal the macros do not explain (alcohol, rounding) at TEF_FRACTION;
+ *  otherwise TEF_FRACTION of everything. */
+export function foodTef(day: {
+    calories: number;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+}): number {
+    const p = (day.protein_g ?? 0) * 4,
+        c = (day.carbs_g ?? 0) * 4,
+        f = (day.fat_g ?? 0) * 9;
+    const macro = p + c + f;
+    if (day.calories <= 0) return 0;
+    if (macro < day.calories * 0.5) return TEF_FRACTION * day.calories;
+    const rest = Math.max(0, day.calories - macro);
+    return TEF_PROTEIN * p + TEF_CARBS * c + TEF_FAT * f + TEF_FRACTION * rest;
+}
 export const MIN_HEIGHT_CM = 50;
 export const MAX_HEIGHT_CM = 272;
 const BMI_HEALTHY_LOW = 18.5;
@@ -98,15 +126,19 @@ export function bmrMifflin(
 }
 
 /** Estimated total burn for a day: resting (BMR × BASE_FACTOR) + active kcal
- *  + the thermic effect of the kcal eaten (TEF_FRACTION of them). */
+ *  + the thermic effect of what was eaten (foodTef). */
 export function dailyBurn(
     bmr: number,
     activeKcal: number | null,
-    eatenKcal = 0,
+    tefKcal = 0,
 ): number {
-    return Math.round(
-        bmr * BASE_FACTOR + (activeKcal ?? 0) + TEF_FRACTION * eatenKcal,
-    );
+    return Math.round(bmr * BASE_FACTOR + (activeKcal ?? 0) + tefKcal);
+}
+
+/** The intake at which a day breaks even: I = resting + active + TEF(I),
+ *  solved with TEF at TEF_FRACTION. The dashboard's default goal. */
+export function breakEvenKcal(bmr: number, activeKcal: number | null): number {
+    return Math.round((bmr + (activeKcal ?? 0)) / (1 - TEF_FRACTION));
 }
 
 /** Estimated grams gained (+) or lost (−) for a day's energy balance. */

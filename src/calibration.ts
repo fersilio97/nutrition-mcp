@@ -4,7 +4,7 @@
 // "Estimate vs reality" card and the metabolism chart, so they cannot disagree.
 //
 //   T (observed TDEE)  = mean intake − weight slope (g/day) × KCAL_PER_GRAM
-//   baseline           = T − mean active kcal − TEF_FRACTION × mean intake
+//   baseline           = T − mean active kcal − mean digestion (foodTef)
 //   offset             = mean formula BMR − baseline   (positive = formula high)
 //
 // Active kcal is SUBTRACTED, never divided out as an activity factor: the
@@ -16,12 +16,19 @@
 // Always computed from FORMULA-burn rows, never from already-calibrated ones,
 // so the calibration never feeds on itself.
 
-import {
-    KCAL_PER_GRAM,
-    TEF_FRACTION,
-    weightSlope,
-    type WeighIn,
-} from "./body.js";
+import { KCAL_PER_GRAM, weightSlope, type WeighIn } from "./body.js";
+
+/** The model's tunable inputs. Defaults are the dashboard's; the what-if
+ *  lab passes others, and they never reach goals, balances or the tools. */
+export interface ModelParams {
+    /** Days of history the calibration looks back over. */
+    windowDays: number;
+    /** kcal per gram of scale-weight change. */
+    kcalPerGram: number;
+    /** Digestion as a fixed share of intake, or null to use each day's
+     *  macros (foodTef). */
+    tefFraction: number | null;
+}
 
 export interface EnergyDay {
     date: string;
@@ -30,6 +37,8 @@ export interface EnergyDay {
     active_kcal: number | null;
     /** Formula (Mifflin-St Jeor) BMR for that day, or null. */
     bmr_kcal: number | null;
+    /** Thermic effect of that day's food, kcal (foodTef). */
+    tef_kcal: number;
     /** Whether the day counts: complete, logged, synced and not excluded. */
     counted: boolean;
 }
@@ -85,8 +94,18 @@ export interface EnergyWindow {
  *  uncertainty falls roughly with span^1.5), short enough to follow a real
  *  change in metabolism within weeks. */
 export const WINDOW_DAYS = 42;
+/** The longest lookback the what-if lab offers (and the fetch covers). */
+export const MAX_WINDOW_DAYS = 56;
+export const MIN_WINDOW_DAYS = 21;
+export const DEFAULT_PARAMS: ModelParams = {
+    windowDays: WINDOW_DAYS,
+    kcalPerGram: KCAL_PER_GRAM,
+    tefFraction: null,
+};
 export const MIN_SPAN = 21;
-export const MIN_WEIGHIN_DAYS = 4;
+/** Weigh-in days needed: about two a week. With only 4 points the slope's
+ *  uncertainty rests on 2 degrees of freedom and means little. */
+export const MIN_WEIGHIN_DAYS = 8;
 export const MIN_COVERAGE = 0.7;
 export const MAX_UNCERTAINTY_KCAL = 150;
 export const CLAMP = 0.25;
@@ -106,7 +125,13 @@ export function energyWindow(
     weighIns: WeighIn[],
     from: string,
     to: string,
+    params: ModelParams = DEFAULT_PARAMS,
 ): EnergyWindow {
+    const k = params.kcalPerGram;
+    const tefOf = (d: EnergyDay) =>
+        params.tefFraction == null
+            ? d.tef_kcal
+            : params.tefFraction * d.calories;
     const inside = weighIns.filter((w) => w.date >= from && w.date <= to);
     const slope = weightSlope(inside);
     const out: EnergyWindow = {
@@ -145,13 +170,13 @@ export function energyWindow(
     out.trend_change_g = Math.round(slope.g_per_day * span);
     out.slope_g_per_day = Math.round(slope.g_per_day * 10) / 10;
     out.se_g_per_day = Math.round(slope.se_g_per_day * 10) / 10;
-    out.uncertainty_kcal = Math.round(slope.se_g_per_day * KCAL_PER_GRAM);
+    out.uncertainty_kcal = Math.round(slope.se_g_per_day * k);
     if (!counted.length) return { ...out, status: "no_estimate" };
 
     const intake = mean(counted.map((d) => d.calories));
     const active = mean(counted.map((d) => d.active_kcal ?? 0));
-    const tef = TEF_FRACTION * intake;
-    const tdee = intake - slope.g_per_day * KCAL_PER_GRAM;
+    const tef = mean(counted.map(tefOf));
+    const tdee = intake - slope.g_per_day * k;
     const baseline = tdee - active - tef;
     Object.assign(out, {
         mean_intake_kcal: Math.round(intake),
@@ -169,11 +194,12 @@ export function energyWindow(
             withBmr.reduce(
                 (s, d) =>
                     s +
-                    (d.calories * (1 - TEF_FRACTION) -
+                    (d.calories -
+                        tefOf(d) -
                         d.bmr_kcal! -
                         (d.active_kcal ?? 0)),
                 0,
-            ) / KCAL_PER_GRAM;
+            ) / k;
         const scaled =
             counted.length < span ? (logged * span) / counted.length : null;
         Object.assign(out, {
@@ -227,12 +253,14 @@ export function buildCalibration(
     weighIns: WeighIn[],
     today: string,
     basis: "formula" | "calibrated",
+    params: ModelParams = DEFAULT_PARAMS,
 ): Calibration {
     const window = energyWindow(
         days,
         weighIns,
-        shiftDate(today, -WINDOW_DAYS),
+        shiftDate(today, -params.windowDays),
         shiftDate(today, -1),
+        params,
     );
     const bmr =
         days.filter((d) => d.date <= today && d.bmr_kcal != null).at(-1)
@@ -245,7 +273,7 @@ export function buildCalibration(
             window.status === "ok" && bmr == null
                 ? "missing_bmr"
                 : window.status,
-        window_days: WINDOW_DAYS,
+        window_days: params.windowDays,
         counted_days: window.counted_days,
         implied_kcal_per_day: window.offset_kcal,
         bmr_kcal: bmr,

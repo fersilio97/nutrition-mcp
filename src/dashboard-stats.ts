@@ -19,6 +19,8 @@ import {
     weightTrend,
     ageOn,
     TEF_FRACTION,
+    breakEvenKcal,
+    foodTef,
     type BmiCategory,
     type BodyDetails,
     type WeighIn,
@@ -47,7 +49,10 @@ export interface DashboardDay {
     /** That day's resting burn (Mifflin-St Jeor BMR from the weight in effect
      *  that day — so it moves as weight does), or null without body data. */
     bmr_kcal: number | null;
-    /** Estimated total burn (resting + active), or null without body data. */
+    /** Thermic effect of the day's food (digestion), kcal. */
+    tef_kcal: number;
+    /** Estimated total burn (resting + active + digestion), or null
+     *  without body data. */
     burn_kcal: number | null;
     /** Estimated grams gained (+) / lost (−). Null on a day with no meals —
      *  an unlogged day is unknown, not a day of eating nothing. */
@@ -179,12 +184,15 @@ export function buildDashboardDays(
     weighIns: WeighIn[],
     today: string,
 ): DashboardDay[] {
+    const hasStoredGoal =
+        goals?.daily_calories != null && goals.daily_calories > 0;
     return buckets.map((b) => {
         const active = activeByDate.get(b.date) ?? null;
         const bmr = bmrFor(body, weightOn(weighIns, b.date), b.date);
         const adj = adjustGoalsForActivity(withBurnDefault(goals, bmr), active);
         const g = adj.goals;
-        const burn = bmr == null ? null : dailyBurn(bmr, active, b.calories);
+        const tef = Math.round(foodTef(b));
+        const burn = bmr == null ? null : dailyBurn(bmr, active, tef);
         return {
             date: b.date,
             calories: b.calories,
@@ -196,11 +204,18 @@ export function buildDashboardDays(
             waterMl: b.waterMl,
             mealCount: b.meals.length,
             active_kcal: active,
-            goal_calories: g?.daily_calories || null,
+            // No stored goal: the exact break-even intake (resting +
+            // active, grossed up for digestion). adjustGoalsForActivity adds
+            // active 1:1, which left the default ~11% of active kcal short.
+            goal_calories:
+                !hasStoredGoal && bmr != null
+                    ? breakEvenKcal(bmr, active)
+                    : g?.daily_calories || null,
             goal_protein_g: g?.daily_protein_g || null,
             goal_carbs_g: g?.daily_carbs_g || null,
             goal_fat_g: g?.daily_fat_g || null,
             bmr_kcal: bmr,
+            tef_kcal: tef,
             burn_kcal: burn,
             balance_g:
                 burn != null && b.meals.length > 0
@@ -248,7 +263,7 @@ export function buildWeightStats(
     goals: NutritionGoals | null,
     todayActiveKcal: number | null,
     today: string,
-    todayEatenKcal = 0,
+    todayTefKcal = 0,
 ): WeightStats {
     const missing: WeightStats["missing"] = [];
     if (body.height_cm == null) missing.push("height");
@@ -285,9 +300,7 @@ export function buildWeightStats(
                 : null,
         bmr_kcal: bmr,
         burn_today_kcal:
-            bmr == null
-                ? null
-                : dailyBurn(bmr, todayActiveKcal, todayEatenKcal),
+            bmr == null ? null : dailyBurn(bmr, todayActiveKcal, todayTefKcal),
         missing,
     };
 }

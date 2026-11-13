@@ -45,7 +45,7 @@ describe("basic formulas", () => {
         // "sedentary" credit; eating adds 10% of the kcal as TEF.
         expect(dailyBurn(1768, null)).toBe(1768);
         expect(dailyBurn(1768, 300)).toBe(2068);
-        expect(dailyBurn(1768, 300, 2000)).toBe(2268);
+        expect(dailyBurn(1768, 300, 200)).toBe(2268); // 200 kcal digestion
         expect(balanceGrams(2068, 2068)).toBe(0);
         expect(balanceGrams(1468, 2068)).toBe(-100);
         expect(balanceGrams(2368, 2068)).toBe(50);

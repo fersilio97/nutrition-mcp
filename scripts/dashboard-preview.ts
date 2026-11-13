@@ -35,10 +35,13 @@ import {
     checkCalorieGoal,
     DASHBOARD_CSP,
     dashboardFontResponse,
+    parseModelParams,
+    whatIf,
 } from "../src/dashboard.js";
 import {
     SCENARIOS,
     isScenario,
+    previewInputsFor,
     previewPayload,
     scenarioTz,
     scenarioWithEdits,
@@ -158,6 +161,17 @@ const server = Bun.serve({
             if (email === "bad@test")
                 return json({ error: "invalid_credentials" }, 401);
             return json({ access_token: TOKEN });
+        }
+
+        if (req.method === "GET" && path === "/api/dashboard/whatif") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const params = parseModelParams(
+                Object.fromEntries(url.searchParams),
+            );
+            if (!params) return json({ error: "invalid_request" }, 400);
+            return json(
+                whatIf(previewInputsFor(state.scenario, 30, edits()), params),
+            );
         }
 
         if (req.method === "GET" && path === "/api/dashboard/data") {

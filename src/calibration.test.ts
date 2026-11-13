@@ -2,11 +2,18 @@ import { describe, expect, test } from "bun:test";
 import {
     buildCalibration,
     calibratedBaseline,
+    DEFAULT_PARAMS,
     energyWindow,
     metabolismSeries,
     type EnergyDay,
 } from "./calibration.js";
-import { buildDashboardPayload, dashboardWindow } from "./dashboard.js";
+import {
+    buildDashboardPayload,
+    dashboardWindow,
+    parseModelParams,
+    whatIf,
+} from "./dashboard.js";
+import { foodTef } from "./body.js";
 import { countDay, typicalDayKcal } from "./dashboard-stats.js";
 import { buildScenario, previewInputs } from "./dashboard-fixture.js";
 
@@ -22,6 +29,7 @@ function days(len: number, counted = (_i: number) => true): EnergyDay[] {
         calories: 2000,
         active_kcal: 300,
         bmr_kcal: 1700,
+        tef_kcal: 200,
         counted: counted(i),
     }));
 }
@@ -78,16 +86,16 @@ describe("energyWindow", () => {
         expect(wet.uncertainty_kcal!).toBeGreaterThan(0);
     });
 
-    test("needs 21 days, 4 weigh-in days, 80% counted, and a quiet trend", () => {
+    test("needs 21 days, 8 weigh-in days, 70% counted, and a quiet trend", () => {
         expect(
-            energyWindow(days(28), weighIns(18, 3, 0), iso(0), iso(27)).status,
-        ).toBe("too_few_days");
+            energyWindow(days(28), weighIns(18, 2, 0), iso(0), iso(27)).status,
+        ).toBe("too_few_days"); // 10 weigh-ins but an 18-day span
+        expect(
+            energyWindow(days(28), weighIns(21, 3, 0), iso(0), iso(27)).status,
+        ).toBe("ok"); // days 0, 3, … 21: exactly 8
         expect(
             energyWindow(days(28), weighIns(21, 7, 0), iso(0), iso(27)).status,
-        ).toBe("ok"); // days 0, 7, 14, 21: exactly 4
-        expect(
-            energyWindow(days(28), weighIns(21, 10, 0), iso(0), iso(27)).status,
-        ).toBe("too_few_weighins");
+        ).toBe("too_few_weighins"); // weekly: 4
         const sparse = days(28, (i) => i % 3 !== 0); // 67% counted
         expect(
             energyWindow(sparse, weighIns(21, 3, 0), iso(0), iso(27)).status,
@@ -293,18 +301,127 @@ describe("dashboard payload", () => {
         );
         expect(p.calibration.applied).toBe(true);
         const row = p.daily.find((r) => (r.active_kcal ?? 0) > 0)!;
-        const expected = Math.round(row.bmr_kcal! / 0.9) + row.active_kcal!;
+        // Break-even: (baseline + active) ÷ 0.9 — active counted once.
+        const expected = Math.round((row.bmr_kcal! + row.active_kcal!) / 0.9);
         expect(Math.abs(row.goal_calories! - expected)).toBeLessThanOrEqual(1);
     });
 });
 
 describe("dashboardWindow", () => {
-    test("fetches the 42 calibration days before the range's first day", () => {
+    test("fetches the 56 days the what-if lab can look back before the range's first day", () => {
         const w = dashboardWindow("2026-11-11", 7);
         expect(w.startDate).toBe("2026-11-05");
-        expect(w.fetchStart).toBe("2026-09-24");
+        expect(w.fetchStart).toBe("2026-09-10");
         expect(dashboardWindow("2026-11-11", 365).weightFetchStart).toBe(
-            "2025-10-01",
+            "2025-09-17",
         );
+    });
+});
+
+describe("foodTef", () => {
+    test("per macro, with the unexplained kcal at 10%", () => {
+        // 150 g protein (600 kcal) × 25% + 200 g carbs (800) × 7.5% + 70 g
+        // fat (630) × 2% + 0 kcal rest = 150 + 60 + 12.6.
+        expect(
+            foodTef({
+                calories: 2030,
+                protein_g: 150,
+                carbs_g: 200,
+                fat_g: 70,
+            }),
+        ).toBeCloseTo(222.6, 5);
+        // A high-protein day burns more digesting than a high-fat one.
+        const lean = foodTef({
+            calories: 2000,
+            protein_g: 250,
+            carbs_g: 150,
+            fat_g: 44,
+        });
+        const fatty = foodTef({
+            calories: 2000,
+            protein_g: 80,
+            carbs_g: 150,
+            fat_g: 120,
+        });
+        expect(lean).toBeGreaterThan(fatty);
+    });
+    test("falls back to 10% when macros explain under half the kcal", () => {
+        expect(
+            foodTef({
+                calories: 1000,
+                protein_g: 10,
+                carbs_g: 10,
+                fat_g: null,
+            }),
+        ).toBe(100);
+        expect(
+            foodTef({
+                calories: 0,
+                protein_g: null,
+                carbs_g: null,
+                fat_g: null,
+            }),
+        ).toBe(0);
+    });
+});
+
+describe("what-if lab", () => {
+    const TODAY = "2026-12-01";
+    const fx = buildScenario("calibrate", TODAY);
+    const inputs = previewInputs(fx, 30, TODAY);
+
+    test("parses and bounds the parameters", () => {
+        expect(parseModelParams({})).toEqual({
+            windowDays: 42,
+            kcalPerGram: 6,
+            tefFraction: null,
+        });
+        expect(
+            parseModelParams({ window: "28", k: "7.7", tef: "0.12" }),
+        ).toEqual({ windowDays: 28, kcalPerGram: 7.7, tefFraction: 0.12 });
+        for (const bad of [
+            { window: "14" },
+            { window: "57" },
+            { window: "30.5" },
+            { k: "4.9" },
+            { k: "8" },
+            { tef: "0.2" },
+            { tef: "abc" },
+        ])
+            expect(parseModelParams(bad)).toBeNull();
+    });
+
+    test("default side is the dashboard's own calibration; custom differs", () => {
+        const r = whatIf(inputs, {
+            windowDays: 28,
+            kcalPerGram: 7.7,
+            tefFraction: 0.15,
+        });
+        expect(r.default.calibration).toEqual(
+            buildDashboardPayload(inputs).calibration,
+        );
+        expect(r.custom.calibration.window_days).toBe(28);
+        expect(r.custom.calibration.window.offset_kcal).not.toBe(
+            r.default.calibration.window.offset_kcal,
+        );
+        // Default parameters reproduce the dashboard exactly.
+        expect(whatIf(inputs, DEFAULT_PARAMS).custom.calibration).toEqual(
+            r.default.calibration,
+        );
+    });
+});
+
+describe("break-even goal", () => {
+    test("with no stored goal the goal is (resting + active) ÷ 0.9", () => {
+        const TODAY = "2026-12-01";
+        const fx = buildScenario("offset", TODAY); // formula basis
+        const p = buildDashboardPayload(
+            previewInputs({ ...fx, goals: null }, 30, TODAY),
+        );
+        expect(p.calibration.applied).toBe(false);
+        for (const r of p.daily.filter((r) => r.bmr_kcal != null))
+            expect(r.goal_calories).toBe(
+                Math.round((r.bmr_kcal! + (r.active_kcal ?? 0)) / 0.9),
+            );
     });
 });

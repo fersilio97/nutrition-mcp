@@ -20,6 +20,7 @@ import {
     dailyBurn,
     KCAL_PER_GRAM,
     TEF_FRACTION,
+    foodTef,
     type BodyDetails,
 } from "./body.js";
 import {
@@ -476,13 +477,20 @@ function calibrateScenario(
         // Eat ~400-650 kcal under the formula's break-even intake.
         const eaten = (bmr + active) / (1 - TEF_FRACTION) - 400 - rnd() * 250;
         const roll = rnd();
-        if (roll >= 0.04) {
-            const all = dayMeals(date, eaten, 3, rnd, tz, `m-${date}`);
-            // Incomplete: only breakfast got logged.
-            meals.push(...(roll < 0.1 ? all.slice(0, 1) : all));
-        }
-        const trueBurn = dailyBurn(bmr, active, eaten) - CALIBRATE_OFFSET_KCAL;
-        w += (eaten - trueBurn) / KCAL_PER_GRAM;
+        // What was really eaten (logged or not): its macros set digestion.
+        const all = dayMeals(date, eaten, 3, rnd, tz, `m-${date}`);
+        const sum = (key: "calories" | "protein_g" | "carbs_g" | "fat_g") =>
+            all.reduce((t, m) => t + (m[key] ?? 0), 0);
+        const tef = foodTef({
+            calories: sum("calories"),
+            protein_g: sum("protein_g"),
+            carbs_g: sum("carbs_g"),
+            fat_g: sum("fat_g"),
+        });
+        // ~4% unlogged; ~6% incomplete: only breakfast got logged.
+        if (roll >= 0.04) meals.push(...(roll < 0.1 ? all.slice(0, 1) : all));
+        const trueBurn = dailyBurn(bmr, active, tef) - CALIBRATE_OFFSET_KCAL;
+        w += (sum("calories") - trueBurn) / KCAL_PER_GRAM;
     }
     return {
         profile,
@@ -590,17 +598,27 @@ export function scenarioWithEdits(
     return fx;
 }
 
+/** The rows production would fetch for a scenario, with the preview's
+ *  in-memory writes applied. */
+export function previewInputsFor(
+    name: ScenarioName,
+    days: number,
+    edits: PreviewEdits = {},
+): DashboardInputs {
+    const tz = scenarioTz(name);
+    const today = todayInTz(tz);
+    const fx = scenarioWithEdits(name, today, edits);
+    return {
+        ...previewInputs(fx, days, today),
+        dayOverrides: edits.dayOverrides,
+    };
+}
+
 /** The /api/dashboard/data JSON the preview serves for a scenario. */
 export function previewPayload(
     name: ScenarioName,
     days: number,
     edits: PreviewEdits = {},
 ) {
-    const tz = scenarioTz(name);
-    const today = todayInTz(tz);
-    const fx = scenarioWithEdits(name, today, edits);
-    return buildDashboardPayload({
-        ...previewInputs(fx, days, today),
-        dayOverrides: edits.dayOverrides,
-    });
+    return buildDashboardPayload(previewInputsFor(name, days, edits));
 }

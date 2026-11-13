@@ -48,19 +48,26 @@ import {
     calibratedBaseline,
     metabolismSeries,
     CLAMP,
+    DEFAULT_PARAMS,
+    MAX_WINDOW_DAYS,
+    MIN_WINDOW_DAYS,
     MAX_UNCERTAINTY_KCAL,
     MIN_COVERAGE,
     MIN_SPAN,
     MIN_WEIGHIN_DAYS,
-    WINDOW_DAYS,
     type EnergyDay,
+    type ModelParams,
 } from "./calibration.js";
 import {
     ageOn,
     balanceGrams,
+    breakEvenKcal,
     dailyBurn,
     KCAL_PER_GRAM,
+    TEF_CARBS,
+    TEF_FAT,
     TEF_FRACTION,
+    TEF_PROTEIN,
 } from "./body.js";
 import {
     todayInTz,
@@ -173,12 +180,12 @@ export function dashboardWindow(
         fetchStart: [
             startDate,
             last7Start,
-            shiftLocalDate(startDate, -WINDOW_DAYS),
+            shiftLocalDate(startDate, -MAX_WINDOW_DAYS),
         ].sort()[0]!,
         // Weigh-ins for the same calibration windows, and the weight tracker.
         weightFetchStart: [
             shiftLocalDate(today, -(Math.max(days, WEIGHT_WINDOW_DAYS) - 1)),
-            shiftLocalDate(startDate, -WINDOW_DAYS),
+            shiftLocalDate(startDate, -MAX_WINDOW_DAYS),
         ].sort()[0]!,
     };
 }
@@ -194,6 +201,9 @@ export interface DashboardInputs {
     activityRows: ActivityDay[];
     /** Manual calibration choices by date: true = count, false = exclude. */
     dayOverrides?: Record<string, boolean>;
+    /** Model parameters; omitted = the defaults. Only the what-if lab
+     *  passes others. */
+    model?: ModelParams;
     days: number;
     /** The user's local today, YYYY-MM-DD. */
     today: string;
@@ -205,6 +215,14 @@ export interface DashboardInputs {
  * the shared Supabase mock).
  */
 export async function dashboardPayload(userId: string, days: number) {
+    return buildDashboardPayload(await loadDashboardInputs(userId, days));
+}
+
+/** Fetch everything one dashboard request needs (see dashboardWindow). */
+export async function loadDashboardInputs(
+    userId: string,
+    days: number,
+): Promise<DashboardInputs> {
     const profile = await getProfile(userId);
     const tz = timezoneFromProfile(profile) ?? "UTC";
     const today = todayInTz(tz);
@@ -231,7 +249,7 @@ export async function dashboardPayload(userId: string, days: number) {
         endDate,
     ).catch(() => ({}));
 
-    return buildDashboardPayload({
+    return {
         profile,
         meals,
         water,
@@ -242,7 +260,7 @@ export async function dashboardPayload(userId: string, days: number) {
         dayOverrides,
         days,
         today,
-    });
+    };
 }
 
 /**
@@ -260,6 +278,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         latestWeight,
         activityRows,
         dayOverrides = {},
+        model = DEFAULT_PARAMS,
         days,
         today,
     } = inputs;
@@ -308,7 +327,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
     const hasWatch = allRows.some((r) => r.active_kcal != null);
     // "Typical" is judged once, over the calibration window ending
     // yesterday, so a day's verdict does not depend on the chart range.
-    const windowFrom = shiftLocalDate(endDate, -WINDOW_DAYS);
+    const windowFrom = shiftLocalDate(endDate, -model.windowDays);
     const windowTo = shiftLocalDate(endDate, -1);
     const typicalKcal = typicalDayKcal(allRows, windowFrom, windowTo);
     for (const row of allRows) {
@@ -324,6 +343,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         calories: r.calories,
         active_kcal: r.active_kcal,
         bmr_kcal: r.bmr_kcal,
+        tef_kcal: r.tef_kcal,
         counted: r.counts_in_calibration === true,
     }));
     const calibration = buildCalibration(
@@ -331,6 +351,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         allWeighIns,
         endDate,
         profile?.resting_basis === "calibrated" ? "calibrated" : "formula",
+        model,
     );
     const metabolism = metabolismSeries(
         energyDays,
@@ -344,9 +365,8 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
                 row.bmr_kcal,
                 calibration.implied_kcal_per_day,
             ).kcal;
-            const delta = baseline - row.bmr_kcal;
             row.bmr_kcal = baseline;
-            row.burn_kcal = dailyBurn(baseline, row.active_kcal, row.calories);
+            row.burn_kcal = dailyBurn(baseline, row.active_kcal, row.tef_kcal);
             row.balance_g =
                 row.mealCount > 0
                     ? balanceGrams(row.calories, row.burn_kcal)
@@ -355,17 +375,10 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
                 row.mealCount > 0
                     ? Math.round(row.calories - row.burn_kcal)
                     : null;
-            // No stored goal: the default goal (break-even, see
-            // withBurnDefault) already holds the active kcal, so only the
-            // baseline's change moves it — scaled by 1 ÷ (1 − TEF) like the
-            // default itself. Adding active again counted it twice.
-            if (
-                (goals?.daily_calories == null || goals.daily_calories <= 0) &&
-                row.goal_calories != null
-            )
-                row.goal_calories = Math.round(
-                    row.goal_calories + delta / (1 - TEF_FRACTION),
-                );
+            // No stored goal: the break-even intake on the calibrated
+            // baseline (active counted once, grossed up for digestion).
+            if (goals?.daily_calories == null || goals.daily_calories <= 0)
+                row.goal_calories = breakEvenKcal(baseline, row.active_kcal);
         }
     }
     const dayRows = allRows.filter((r) => r.date >= startDate);
@@ -386,9 +399,17 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         // its verdict, so each figure can be traced back to logged data.
         calibrationDetail: {
             constants: {
-                window_days: WINDOW_DAYS,
-                kcal_per_gram: KCAL_PER_GRAM,
-                tef_fraction: TEF_FRACTION,
+                window_days: model.windowDays,
+                kcal_per_gram: model.kcalPerGram,
+                // Digestion: per-macro shares of kcal (null tef_fraction),
+                // with TEF_FRACTION for a day without macros.
+                tef_fraction: model.tefFraction,
+                tef_rates: {
+                    protein: TEF_PROTEIN,
+                    carbs: TEF_CARBS,
+                    fat: TEF_FAT,
+                    fallback: TEF_FRACTION,
+                },
                 min_span_days: MIN_SPAN,
                 min_weighin_days: MIN_WEIGHIN_DAYS,
                 min_coverage: MIN_COVERAGE,
@@ -425,7 +446,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
             goals,
             activeByDate.get(endDate) ?? null,
             endDate,
-            allRows.find((r) => r.date === endDate)?.calories ?? 0,
+            allRows.find((r) => r.date === endDate)?.tef_kcal ?? 0,
         ),
         weightWindowStart: weightStart,
         goals: goals
@@ -488,6 +509,41 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
                 sugar_g: m.sugar_g,
             })),
     };
+}
+
+/** The what-if lab's query: window (21-56 days), k (5.0-7.7 kcal/g) and tef
+ *  ("macros" or a share 0.05-0.15). Null when any value is out of range. */
+export function parseModelParams(
+    q: Record<string, string | undefined>,
+): ModelParams | null {
+    const windowDays =
+        q.window == null ? DEFAULT_PARAMS.windowDays : Number(q.window);
+    const kcalPerGram = q.k == null ? DEFAULT_PARAMS.kcalPerGram : Number(q.k);
+    const tefFraction =
+        q.tef == null || q.tef === "macros" ? null : Number(q.tef);
+    if (
+        !Number.isInteger(windowDays) ||
+        windowDays < MIN_WINDOW_DAYS ||
+        windowDays > MAX_WINDOW_DAYS ||
+        !Number.isFinite(kcalPerGram) ||
+        kcalPerGram < 5 ||
+        kcalPerGram > 7.7 ||
+        (tefFraction != null &&
+            (!Number.isFinite(tefFraction) ||
+                tefFraction < 0.05 ||
+                tefFraction > 0.15))
+    )
+        return null;
+    return { windowDays, kcalPerGram, tefFraction };
+}
+
+/** Default and custom calibrations side by side, for the what-if lab. */
+export function whatIf(inputs: DashboardInputs, params: ModelParams) {
+    const pick = (model: ModelParams) => {
+        const p = buildDashboardPayload({ ...inputs, model });
+        return { params: model, calibration: p.calibration };
+    };
+    return { default: pick(DEFAULT_PARAMS), custom: pick(params) };
 }
 
 /** Validate and save the Body form (same rules as set_body_profile). */
@@ -901,6 +957,17 @@ export function createDashboardRouter(): Hono {
         return c.json(
             await dashboardPayload(userId, clampDays(c.req.query("days"))),
         );
+    });
+
+    // The what-if lab: the calibration under other model parameters, next
+    // to the default. Read-only — nothing here reaches goals, balances or
+    // the MCP tools, which always use the defaults.
+    dash.get("/api/dashboard/whatif", authenticateBearer, async (c) => {
+        const userId = c.get("userId") as string;
+        const params = parseModelParams(c.req.query());
+        if (!params) return c.json({ error: "invalid_request" }, 400);
+        const inputs = await loadDashboardInputs(userId, 30);
+        return c.json(whatIf(inputs, params));
     });
 
     // Save body details from the page's Body form. Same validation as the

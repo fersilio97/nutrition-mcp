@@ -182,6 +182,7 @@ describe("buildEstimateVsScale", () => {
             calories: 2000,
             active_kcal: 300,
             bmr_kcal: 1700,
+            tef_kcal: 200,
             counted,
         };
     };

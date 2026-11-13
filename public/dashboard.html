@@ -1206,16 +1206,76 @@
                 opacity: 0.18;
                 stroke: none;
             }
-            .cal2-surplus {
-                fill: var(--over);
-                opacity: 0.22;
-                stroke: none;
-            }
             .cal2-goal {
                 fill: none;
                 stroke: var(--ink-2);
                 stroke-dasharray: 4 4;
                 stroke-width: 1.5;
+            }
+            .cal2-break {
+                fill: none;
+                stroke: var(--ink-2);
+                stroke-width: 1.5;
+            }
+            .cal2-eaten-line {
+                fill: none;
+                stroke: var(--ink);
+                stroke-width: 2.5;
+                stroke-linejoin: round;
+                stroke-linecap: round;
+            }
+            .cal2-eaten-dot {
+                fill: var(--ink);
+                stroke: var(--bg);
+                stroke-width: 1.5;
+            }
+            .cal2-eaten-dot.over {
+                fill: url(#hatch-over);
+            }
+            .cal2-area-base {
+                fill: var(--burn);
+                opacity: 0.14;
+                stroke: none;
+            }
+            .cal2-area-digestion {
+                fill: var(--accent);
+                opacity: 0.35;
+                stroke: none;
+            }
+            .cal2-area-workout {
+                fill: var(--burn);
+                opacity: 0.55;
+                stroke: none;
+            }
+            .cal2-burn-top {
+                fill: none;
+                stroke: var(--burn);
+                stroke-width: 1.5;
+            }
+            .cal2-surplus {
+                fill: var(--over);
+                opacity: 0.35;
+            }
+            .cal2-why {
+                margin: -8px 0 16px;
+                color: var(--ink-2);
+                font-size: var(--fs-small);
+            }
+            .cal2-legend-base {
+                fill: var(--burn);
+                opacity: 0.14;
+            }
+            .cal2-legend-digestion {
+                fill: var(--accent);
+                opacity: 0.35;
+            }
+            .cal2-legend-workout {
+                fill: var(--burn);
+                opacity: 0.55;
+            }
+            .cal2-legend-surplus {
+                fill: var(--over);
+                opacity: 0.55;
             }
             .met-band {
                 fill: var(--accent);
@@ -2488,7 +2548,8 @@
                     grid-template-areas:
                         "panel chart"
                         "goal chart"
-                        "details chart";
+                        "details chart"
+                        "lab lab";
                     column-gap: clamp(2rem, 4vw, 3.5rem);
                     align-items: start;
                 }
@@ -2503,6 +2564,9 @@
                 }
                 .body-grid > .details-sec {
                     grid-area: details;
+                }
+                .body-grid > .lab-sec {
+                    grid-area: lab;
                 }
             }
             .w-now .fig-hero b {
@@ -2649,6 +2713,71 @@
             }
             .body-form .form-foot {
                 margin-top: var(--s4);
+            }
+            .lab-controls {
+                display: grid;
+                gap: var(--s4);
+                margin: var(--s4) 0;
+            }
+            .lab-row {
+                display: grid;
+                grid-template-columns: minmax(12rem, 1fr) minmax(0, 2fr);
+                gap: var(--s4);
+                align-items: start;
+            }
+            .lab-row > label,
+            .lab-label {
+                font-weight: 600;
+            }
+            .lab-control {
+                min-width: 0;
+            }
+            .lab-control .seg {
+                flex-wrap: wrap;
+            }
+            .lab-control .seg button {
+                min-width: 0;
+            }
+            .lab-help {
+                margin: var(--s2) 0 0;
+                color: var(--ink-2);
+                font-size: 0.8rem;
+                line-height: 1.45;
+            }
+            .lab-range {
+                display: flex;
+                align-items: center;
+                gap: var(--s3);
+            }
+            .lab-range input {
+                width: 100%;
+                accent-color: var(--accent);
+            }
+            .lab-range output {
+                min-width: 2.5em;
+                font-family: var(--font-mono);
+            }
+            .lab-reset {
+                border: 0;
+                padding: 0;
+                background: none;
+                color: var(--accent-text);
+                text-decoration: underline;
+                cursor: pointer;
+            }
+            .lab-status {
+                min-height: 1.2em;
+                color: var(--ink-2);
+                font-size: 0.8rem;
+            }
+            .lab-table .lab-today td {
+                font-weight: 700;
+            }
+            @media (max-width: 600px) {
+                .lab-row {
+                    grid-template-columns: 1fr;
+                    gap: var(--s2);
+                }
             }
 
             /* ================= Meals ================= */
@@ -4015,7 +4144,9 @@
                     }
                     const b =
                         ev.target.closest && ev.target.closest(".seg button");
-                    if (!b || loading) return;
+                    // Only the date-range pills carry data-days; other .seg
+                    // groups (the what-if lab) handle their own clicks.
+                    if (!b || loading || b.dataset.days == null) return;
                     const n = +b.dataset.days;
                     if (n === range) return;
                     range = n;
@@ -5201,27 +5332,34 @@
                     const rows = data.daily || [];
                     const hasBurn = rows.some((r) => r.burn_kcal != null);
                     const logged = rows.some(
-                        (r) => r.mealCount > 0 && !r.in_progress,
+                        (r) => r.counts_in_calibration && !r.in_progress,
                     );
                     const smooth = data.days > 14;
-                    const legendSvg = (cls, dashed) =>
+                    const svgLine = (cls) =>
                         '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="' +
                         cls +
-                        '"' +
-                        (dashed ? ' stroke-dasharray="4 4"' : "") +
-                        "/></svg>";
+                        '"/></svg>';
+                    const swatch = (cls) =>
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="1" width="12" height="12" class="' +
+                        cls +
+                        '"/></svg>';
+                    const eatenLegend =
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="cal2-eaten-line"/><circle cx="7" cy="7" r="3" class="cal2-eaten-dot"/></svg>';
                     const head = secHead({
                         wide: true,
                         eyebrow: "Energy · mock",
                         id: "h-cal2",
                         title: 'Eaten vs burned <span class="est">(estimate)</span>',
                         note:
-                            "What you ate each day next to what you burned (resting + watch activity + digestion). Green where you ate under your burn (deficit), pink where you ate over it (surplus). The dashed line is your goal. Days that look partly logged are left out (see the Meals tab)." +
+                            "What you ate each day against what you burned, split into baseline, digestion and workout (watch active kcal). Pink shows days you ate over your burn; dots turn red over your goal; the dashed line is your goal. Days that look partly logged are left out (see the Meals tab)." +
                             (smooth ? " Lines are 7-day averages." : ""),
                         legend: legend([
-                            [legendSvg("met-est", false), "Eaten"],
-                            [legendSvg("met-scale", false), "Est. burn"],
-                            [legendSvg("cal2-goal", true), "Goal"],
+                            [eatenLegend, "Eaten"],
+                            [swatch("cal2-legend-base"), "Baseline"],
+                            [swatch("cal2-legend-digestion"), "Digestion"],
+                            [swatch("cal2-legend-workout"), "Workout / active"],
+                            [swatch("cal2-legend-surplus"), "Surplus"],
+                            [svgLine("cal2-goal"), "Goal"],
                         ]),
                     });
                     if (!hasBurn || !logged)
@@ -5233,7 +5371,7 @@
                         );
                     return (
                         head +
-                        '<div class="plot" id="cal2-plot"></div><div class="strip three rv" id="cal2-stats"></div><p class="met-highlight" id="cal2-today"></p>'
+                        '<div class="plot" id="cal2-plot"></div><p class="cal2-why">Why goal and est. burn differ: est. burn includes digesting what you actually ate (about 10%). Your goal is the break-even intake — eat exactly that and the two match; eat less and you also burn a little less digesting it.</p><div class="strip four rv" id="cal2-stats"></div><p class="met-highlight" id="cal2-today"></p>'
                     );
                 }
                 function calcHtml() {
@@ -5531,7 +5669,7 @@
                                     ")"
                                 );
                             })(),
-                            "Today's BMR uses today's weight, so it can differ slightly from the 42-day average in step 5. This is the “From your data” figure above and the Body tab's calibrated baseline.",
+                            "Today's BMR uses today's weight, so it can differ slightly from the lookback average in step 5. This is the “From your data” figure above and the Body tab's calibrated baseline.",
                         ) +
                         step(
                             7,
@@ -6550,83 +6688,103 @@
                         (r) => !r.in_progress,
                     );
                     const smooth = data.days > 14;
+                    const components = (r) => {
+                        if (r.burn_kcal == null) return null;
+                        const baseline = r.bmr_kcal || 0;
+                        const workout = r.active_kcal || 0;
+                        return {
+                            baseline,
+                            digestion: r.burn_kcal - baseline - workout,
+                            workout,
+                            burn: r.burn_kcal,
+                        };
+                    };
                     const points = raw.map((r, i) => {
-                        if (!smooth)
+                        if (!smooth) {
+                            const burn = components(r);
                             return {
                                 ...r,
-                                // A day that does not look completely
-                                // logged leaves a gap, not a fake deficit.
+                                ...burn,
                                 eaten: r.counts_in_calibration
                                     ? r.calories
                                     : null,
-                                burn: r.counts_in_calibration
-                                    ? r.burn_kcal
-                                    : null,
                                 goal: r.goal_calories,
                             };
+                        }
                         const window = raw.slice(Math.max(0, i - 6), i + 1);
-                        // Only days that look completely logged (the same
-                        // rule as the calibration): a half-logged day would
-                        // drag the average toward a deficit that never was.
                         const counted = window.filter(
-                            (x) => x.mealCount > 0 && x.counts_in_calibration,
+                            (x) =>
+                                x.counts_in_calibration && x.calories != null,
                         );
+                        const burns = window.map(components).filter(Boolean);
                         const goals = window.filter(
                             (x) => x.goal_calories != null,
                         );
                         const mean = (arr, key) =>
                             arr.length
-                                ? arr.reduce((a, x) => a + (x[key] || 0), 0) /
+                                ? arr.reduce((sum, x) => sum + x[key], 0) /
                                   arr.length
                                 : null;
+                        const vals = {};
+                        ["baseline", "digestion", "workout", "burn"].forEach(
+                            (key) => (vals[key] = mean(burns, key)),
+                        );
                         return {
                             ...r,
+                            ...vals,
                             eaten:
                                 counted.length >= 4
                                     ? mean(counted, "calories")
-                                    : null,
-                            burn:
-                                counted.length >= 4
-                                    ? mean(
-                                          counted.filter(
-                                              (x) => x.burn_kcal != null,
-                                          ),
-                                          "burn_kcal",
-                                      )
                                     : null,
                             goal: mean(goals, "goal_calories"),
                         };
                     });
                     const vals = points
-                        .flatMap((p) => [p.eaten, p.burn, p.goal])
+                        .flatMap((p) => [
+                            p.baseline,
+                            p.baseline + (p.digestion || 0),
+                            p.burn,
+                            p.eaten,
+                            p.goal,
+                        ])
                         .filter((v) => v != null);
                     if (!vals.length) return;
-                    // Round ticks: a step of 50/100/200/250/500 kcal giving
-                    // about four intervals, the axis snapped to it.
-                    const span0 = Math.max(
-                        1,
-                        Math.max(...vals) - Math.min(...vals),
+                    // The axis starts a little below the lowest baseline (the
+                    // baseline band is cut, marked with a break), so the part
+                    // that changes day to day — eaten, digestion, workout —
+                    // gets the height instead of a solid block from zero.
+                    const maxValue = Math.max(1, ...vals);
+                    const baseMin = Math.min(
+                        ...points
+                            .map((p) => p.baseline)
+                            .filter((v) => v != null),
+                        ...vals,
                     );
+                    const floor0 = Math.max(0, baseMin - 300);
                     const step =
-                        [50, 100, 200, 250, 500, 1000].find(
-                            (x) => span0 / x <= 4,
+                        [100, 200, 250, 500].find(
+                            (x) =>
+                                Math.ceil(maxValue / x) -
+                                    Math.floor(floor0 / x) <=
+                                6,
                         ) || 1000;
-                    const lo = Math.floor(Math.min(...vals) / step) * step,
-                        hi = Math.ceil(Math.max(...vals) / step) * step,
-                        ticks = Math.round((hi - lo) / step);
+                    const lo = Math.floor(floor0 / step) * step;
+                    const hi = Math.ceil(maxValue / step) * step;
+                    const ticks = Math.round((hi - lo) / step);
                     const c = chartSvg(
                         host,
                         innerWidth <= 480 ? 240 : 280,
-                        "Eaten, estimated burn and calorie goal, kcal per day.",
+                        "Eaten, baseline, digestion, workout, estimated burn and calorie goal, kcal per day.",
                     );
                     const base = c.h - PAD.b,
                         L = gutter(yLabels(hi, 4)),
                         W = c.w - L - PAD.r,
-                        H = base - PAD.t;
-                    const yAt = (v) => base - ((v - lo) / (hi - lo)) * H,
+                        H = base - PAD.t,
+                        yAt = (v) =>
+                            base - ((Math.max(v, lo) - lo) / (hi - lo)) * H,
                         svg = c.svg;
                     for (let i = 0; i <= ticks; i++) {
-                        const v = lo + step * i,
+                        const v = lo + i * step,
                             y = yAt(v);
                         if (i)
                             svg.appendChild(
@@ -6645,6 +6803,59 @@
                         (points.length < 2
                             ? W / 2
                             : (W * i) / (points.length - 1));
+                    const area = (lower, upper, cls) => {
+                        let seg = [];
+                        const flush = () => {
+                            if (!seg.length) return;
+                            let d = "M" + xAt(seg[0][0]) + "," + yAt(seg[0][1]);
+                            seg.forEach(
+                                (q) => (d += "L" + xAt(q[0]) + "," + yAt(q[2])),
+                            );
+                            for (let j = seg.length - 1; j >= 0; j--)
+                                d +=
+                                    "L" + xAt(seg[j][0]) + "," + yAt(seg[j][1]);
+                            svg.appendChild(
+                                svgEl("path", { d: d + "Z", class: cls }),
+                            );
+                            seg = [];
+                        };
+                        points.forEach((p, i) => {
+                            if (p.burn == null) return flush();
+                            seg.push([i, lower(p), upper(p)]);
+                        });
+                        flush();
+                    };
+                    area(
+                        () => lo,
+                        (p) => p.baseline,
+                        "cal2-area-base",
+                    );
+                    if (lo > 0) {
+                        // Axis break: the scale does not start at zero.
+                        const zx = L - 4,
+                            zy = base - 6;
+                        svg.appendChild(
+                            svgEl("path", {
+                                d:
+                                    "M" +
+                                    (zx - 6) +
+                                    "," +
+                                    (zy + 3) +
+                                    "l4,-4l4,4l4,-4",
+                                class: "cal2-break",
+                            }),
+                        );
+                    }
+                    area(
+                        (p) => p.baseline,
+                        (p) => p.baseline + p.digestion,
+                        "cal2-area-digestion",
+                    );
+                    area(
+                        (p) => p.baseline + p.digestion,
+                        (p) => p.burn,
+                        "cal2-area-workout",
+                    );
                     const line = (key) => {
                         let d = "",
                             prev = false;
@@ -6659,7 +6870,25 @@
                         });
                         return d;
                     };
-                    // Each adjacent pair forms a quad; when signs differ, interpolate the exact crossing and split the quad there.
+                    svg.appendChild(
+                        svgEl("path", {
+                            d: line("burn"),
+                            class: "cal2-burn-top",
+                        }),
+                    );
+                    // Pink surplus quads are split at the exact line crossing.
+                    const polygon = (coords) =>
+                        svg.appendChild(
+                            svgEl("path", {
+                                d:
+                                    "M" +
+                                    coords
+                                        .map((q) => q[0] + "," + q[1])
+                                        .join("L") +
+                                    "Z",
+                                class: "cal2-surplus",
+                            }),
+                        );
                     for (let i = 0; i < points.length - 1; i++) {
                         const a = points[i],
                             b = points[i + 1];
@@ -6671,15 +6900,8 @@
                         )
                             continue;
                         const d0 = a.eaten - a.burn,
-                            d1 = b.eaten - b.burn,
-                            cls = d0 <= 0 ? "cal2-deficit" : "cal2-surplus";
-                        const polygon = (coords, klass) => {
-                            let d =
-                                "M" +
-                                coords.map((q) => q[0] + "," + q[1]).join("L") +
-                                "Z";
-                            svg.appendChild(svgEl("path", { d, class: klass }));
-                        };
+                            d1 = b.eaten - b.burn;
+                        if (d0 <= 0 && d1 <= 0) continue;
                         const A = [xAt(i), yAt(a.eaten)],
                             B = [xAt(i + 1), yAt(b.eaten)],
                             C = [xAt(i + 1), yAt(b.burn)],
@@ -6687,38 +6909,18 @@
                         if (d0 * d1 < 0) {
                             const t = d0 / (d0 - d1),
                                 x = xAt(i) + (xAt(i + 1) - xAt(i)) * t,
-                                v = a.eaten + (b.eaten - a.eaten) * t,
-                                X = [x, yAt(v)];
-                            polygon(
-                                [
-                                    A,
-                                    X,
-                                    [x, yAt(a.burn + (b.burn - a.burn) * t)],
-                                    D,
-                                ],
-                                d0 < 0 ? "cal2-deficit" : "cal2-surplus",
-                            );
-                            polygon(
-                                [
-                                    X,
-                                    B,
-                                    C,
-                                    [x, yAt(a.burn + (b.burn - a.burn) * t)],
-                                ],
-                                d1 < 0 ? "cal2-deficit" : "cal2-surplus",
-                            );
-                        } else polygon([A, B, C, D], cls);
+                                eaten = a.eaten + (b.eaten - a.eaten) * t,
+                                burn = a.burn + (b.burn - a.burn) * t,
+                                X = [x, yAt(eaten)],
+                                Y = [x, yAt(burn)];
+                            if (d0 > 0) polygon([A, X, Y, D]);
+                            else polygon([X, B, C, Y]);
+                        } else polygon([A, B, C, D]);
                     }
                     svg.appendChild(
                         svgEl("path", {
                             d: line("eaten"),
-                            class: "met-line met-est",
-                        }),
-                    );
-                    svg.appendChild(
-                        svgEl("path", {
-                            d: line("burn"),
-                            class: "met-line met-scale",
+                            class: "cal2-eaten-line",
                         }),
                     );
                     svg.appendChild(
@@ -6731,8 +6933,12 @@
                                     svgEl("circle", {
                                         cx: xAt(i),
                                         cy: yAt(p.eaten),
-                                        r: 2.5,
-                                        class: "met-est",
+                                        r: 3,
+                                        class:
+                                            "cal2-eaten-dot" +
+                                            (p.goal != null && p.eaten > p.goal
+                                                ? " over"
+                                                : ""),
                                     }),
                                 );
                         });
@@ -6771,34 +6977,58 @@
                     }
                     inspect(
                         svg,
-                        points.map((p, i) => {
+                        points.map((p) => {
                             const delta =
-                                    p.eaten == null || p.burn == null
-                                        ? null
-                                        : Math.round(p.eaten - p.burn),
-                                rows = [
-                                    [
-                                        null,
-                                        "Eaten",
-                                        p.eaten == null
+                                p.eaten == null || p.burn == null
+                                    ? null
+                                    : Math.round(p.eaten - p.burn);
+                            const rows = [
+                                [
+                                    "cal2-eaten-dot",
+                                    "Eaten",
+                                    p.eaten == null
+                                        ? p.counts_in_calibration
                                             ? "not logged"
-                                            : fmt(p.eaten) + " kcal",
-                                    ],
-                                    [
-                                        null,
-                                        "Est. burn",
-                                        p.burn == null
-                                            ? "—"
-                                            : fmt(p.burn) + " kcal",
-                                    ],
-                                    [
-                                        null,
-                                        "Goal",
-                                        p.goal == null
-                                            ? "—"
-                                            : fmt(p.goal) + " kcal",
-                                    ],
-                                ];
+                                            : "not counted"
+                                        : fmt(p.eaten) + " kcal",
+                                ],
+                                [
+                                    "cal2-area-base",
+                                    "Baseline",
+                                    p.baseline == null
+                                        ? "—"
+                                        : fmt(p.baseline) + " kcal",
+                                ],
+                                [
+                                    "cal2-area-workout",
+                                    "Workout / active",
+                                    p.workout == null
+                                        ? "—"
+                                        : fmt(p.workout) + " kcal",
+                                ],
+                                [
+                                    "cal2-area-digestion",
+                                    "Digestion",
+                                    p.digestion == null
+                                        ? "—"
+                                        : fmt(p.digestion) + " kcal",
+                                ],
+                                [
+                                    "cal2-burn-top",
+                                    "Est. burn",
+                                    p.burn == null
+                                        ? "—"
+                                        : fmt(p.burn) + " kcal",
+                                    1,
+                                ],
+                                [
+                                    "cal2-goal",
+                                    "Goal",
+                                    p.goal == null
+                                        ? "—"
+                                        : fmt(p.goal) + " kcal",
+                                ],
+                            ];
                             if (delta != null)
                                 rows.push([
                                     null,
@@ -6811,29 +7041,41 @@
                                     (smooth ? " · 7-day avg" : ""),
                                 rows,
                             );
-                            return { x: xAt(i), html: t.html, text: t.text };
+                            return {
+                                x: xAt(points.indexOf(p)),
+                                html: t.html,
+                                text: t.text,
+                            };
                         }),
                         PAD.t,
                         base,
                     );
-                    // Eaten and burn over the SAME days: those that count
-                    // (look completely logged) and have a burn estimate.
                     const logged = raw.filter(
                             (r) =>
-                                r.mealCount > 0 &&
                                 r.counts_in_calibration &&
+                                r.calories != null &&
                                 r.burn_kcal != null,
                         ),
-                        eatenRows = logged,
-                        avgE = eatenRows.length
-                            ? eatenRows.reduce((s, r) => s + r.calories, 0) /
-                              eatenRows.length
-                            : null,
-                        avgB = logged.length
-                            ? logged.reduce((s, r) => s + r.burn_kcal, 0) /
-                              logged.length
-                            : null,
-                        bal = avgE == null || avgB == null ? null : avgE - avgB;
+                        avg = (key) =>
+                            logged.length
+                                ? logged.reduce(
+                                      (sum, r) =>
+                                          sum +
+                                          (key === "eaten"
+                                              ? r.calories
+                                              : key === "workout"
+                                                ? r.active_kcal || 0
+                                                : key === "burn"
+                                                  ? r.burn_kcal
+                                                  : r[key]),
+                                      0,
+                                  ) / logged.length
+                                : null,
+                        avgE = avg("eaten"),
+                        avgB = avg("burn"),
+                        avgW = avg("workout"),
+                        avgBal =
+                            avgE == null || avgB == null ? null : avgE - avgB;
                     $("cal2-stats").innerHTML =
                         stat(
                             "Avg eaten",
@@ -6844,32 +7086,41 @@
                             "Avg est. burn",
                             avgB == null ? "—" : fmt(avgB),
                             "kcal/day",
+                            "of which workout " +
+                                (avgW == null ? "—" : fmt(avgW)) +
+                                " kcal/day",
+                        ) +
+                        stat(
+                            "Avg workout",
+                            avgW == null ? "—" : fmt(avgW),
+                            "kcal/day",
                         ) +
                         stat(
                             "Avg balance",
-                            bal == null ? "—" : fmtSigned(bal),
+                            avgBal == null ? "—" : fmtSigned(avgBal),
                             "kcal/day",
                         );
                     const n = logged.length,
-                        weekly = bal == null ? 0 : (Math.abs(bal) * 7) / 6;
+                        weekly =
+                            avgBal == null ? 0 : (Math.abs(avgBal) * 7) / 6;
                     $("cal2-today").textContent =
-                        bal == null
+                        avgBal == null
                             ? "Est. burn is available on logged days only."
-                            : Math.abs(bal) < 50
+                            : Math.abs(avgBal) < 50
                               ? "You ate about what you burned (within 50 kcal/day)."
                               : "Over these " +
                                 n +
                                 " fully logged days you ate ~" +
-                                fmt(Math.abs(bal)) +
+                                fmt(Math.abs(avgBal)) +
                                 " kcal/day " +
-                                (bal < 0 ? "under" : "over") +
+                                (avgBal < 0 ? "under" : "over") +
                                 " your burn — about " +
                                 wDelta(weekly, data.weightUnit).replace(
                                     /^[+−-]/,
                                     "",
                                 ) +
                                 " per week of " +
-                                (bal < 0 ? "loss" : "gain") +
+                                (avgBal < 0 ? "loss" : "gain") +
                                 " at 6 kcal per gram.";
                 }
 
@@ -7444,6 +7695,13 @@
                 let goalStatus = { text: "", cls: "" };
                 let goalStatusTimer = 0;
                 let bodyOpen = false;
+                let labOpen = false;
+                let labWindow = 42;
+                let labK = 6.0;
+                let labTef = "macros";
+                let labResult = null;
+                let labSequence = 0;
+                let labTimer = 0;
                 let calcOpen = load("nutrition-dash-calc-open") === "1";
                 let bodyDraft = null;
                 let bodyStatus = { text: "", cls: "" };
@@ -7836,6 +8094,337 @@
                         "</span></div></form></details></section>"
                     );
                 }
+                function whatIfHtml() {
+                    const windows = [21, 28, 35, 42, 49, 56];
+                    const tefs = [
+                        ["macros", "From your macros"],
+                        ["0.05", "5%"],
+                        ["0.075", "7.5%"],
+                        ["0.1", "10%"],
+                        ["0.125", "12.5%"],
+                        ["0.15", "15%"],
+                    ];
+                    return (
+                        '<section class="lab-sec rv"><details class="body-box" id="lab-box"' +
+                        (labOpen ? " open" : "") +
+                        '><summary>What-if lab</summary><p class="note">Try other model settings and see what they would do. This is a sandbox: your goals, balances, charts and what Claude tells you always use the defaults.</p><div class="lab-controls">' +
+                        '<div class="lab-row"><span class="lab-label">Lookback</span><div class="lab-control"><div class="seg" role="group" aria-label="Lookback days">' +
+                        windows
+                            .map(
+                                (n) =>
+                                    '<button type="button" data-lab-window="' +
+                                    n +
+                                    '" aria-pressed="' +
+                                    (labWindow === n) +
+                                    '">' +
+                                    n +
+                                    (n === 42
+                                        ? " <small>default</small>"
+                                        : "") +
+                                    "</button>",
+                            )
+                            .join("") +
+                        '</div><p class="lab-help">Shorter follows a recent change faster but is noisier (21 days is about 3× noisier than 42). Weigh-ins in the first week of a diet are mostly water.</p></div></div>' +
+                        '<div class="lab-row"><label for="lab-k">kcal per gram of weight change</label><div class="lab-control"><div class="lab-range"><input id="lab-k" type="range" min="5" max="7.7" step="0.1" value="' +
+                        labK +
+                        '"><output id="lab-k-out" for="lab-k">' +
+                        labK.toFixed(1) +
+                        '</output></div><p class="lab-help">6.0 suits 2-6 week changes (fat + water + glycogen); 7.7 is pure fat. It barely matters when your weight is flat. Lower values also loosen the noise check.</p></div></div>' +
+                        '<div class="lab-row"><span class="lab-label">Digestion</span><div class="lab-control"><div class="seg" role="group" aria-label="Digestion">' +
+                        tefs
+                            .map(
+                                (x) =>
+                                    '<button type="button" data-lab-tef="' +
+                                    x[0] +
+                                    '" aria-pressed="' +
+                                    (labTef === x[0]) +
+                                    '">' +
+                                    x[1] +
+                                    (x[0] === "macros"
+                                        ? " <small>default</small>"
+                                        : "") +
+                                    "</button>",
+                            )
+                            .join("") +
+                        '</div><p class="lab-help">Once calibrated, this mostly cancels out: what it adds to each day\'s burn it removes from the baseline.</p></div></div><button type="button" class="lab-reset" id="lab-reset">Reset to defaults</button></div><div id="lab-results" aria-live="polite"></div><p class="lab-help">Not adjustable on purpose: the reliability checks (21-day span, 8 weigh-in days, 70% of days counted, ±150 kcal/day) and the ±25% limit. They stop the estimate from being tuned to a number you would like.</p></details></section>'
+                    );
+                }
+                const labReasons = {
+                    no_weighins: "needs 8+ weigh-in days",
+                    too_few_weighins: "needs 8+ weigh-in days",
+                    too_few_days: "needs a 21-day span with 70% counted",
+                    too_noisy: "weigh-ins too scattered",
+                    no_estimate: "no counted days",
+                    missing_bmr: "body details missing",
+                };
+                function renderLabResults() {
+                    const host = $("lab-results");
+                    if (!host) return;
+                    if (!labResult) {
+                        host.innerHTML =
+                            '<p class="lab-status" role="status">Calculating…</p>';
+                        return;
+                    }
+                    const d = labResult.default,
+                        c = labResult.custom;
+                    const rows = [
+                        [
+                            "Lookback (days)",
+                            d.calibration.window_days,
+                            c.calibration.window_days,
+                            "",
+                        ],
+                        [
+                            "Weigh-in days",
+                            d.calibration.window &&
+                                d.calibration.window.weighin_days,
+                            c.calibration.window &&
+                                c.calibration.window.weighin_days,
+                            "",
+                        ],
+                        [
+                            "Counted days (counted/span)",
+                            d.calibration.counted_days == null ||
+                            !d.calibration.window
+                                ? null
+                                : d.calibration.counted_days +
+                                  "/" +
+                                  d.calibration.window.span_days,
+                            c.calibration.counted_days == null ||
+                            !c.calibration.window
+                                ? null
+                                : c.calibration.counted_days +
+                                  "/" +
+                                  c.calibration.window.span_days,
+                            "",
+                        ],
+                        [
+                            "What you burned (TDEE) kcal/day",
+                            d.calibration.window &&
+                                d.calibration.window.tdee_kcal,
+                            c.calibration.window &&
+                                c.calibration.window.tdee_kcal,
+                            "",
+                        ],
+                        [
+                            "Average digestion kcal/day",
+                            d.calibration.window &&
+                                d.calibration.window.tef_kcal,
+                            c.calibration.window &&
+                                c.calibration.window.tef_kcal,
+                            "",
+                        ],
+                        [
+                            "Baseline (lookback average) kcal/day",
+                            d.calibration.window &&
+                                d.calibration.window.baseline_kcal,
+                            c.calibration.window &&
+                                c.calibration.window.baseline_kcal,
+                            "",
+                        ],
+                        [
+                            "Offset vs formula kcal/day",
+                            d.calibration.window &&
+                                d.calibration.window.offset_kcal,
+                            c.calibration.window &&
+                                c.calibration.window.offset_kcal,
+                            "",
+                        ],
+                        [
+                            "Uncertainty ±kcal/day",
+                            d.calibration.window &&
+                                d.calibration.window.uncertainty_kcal,
+                            c.calibration.window &&
+                                c.calibration.window.uncertainty_kcal,
+                            "",
+                        ],
+                        [
+                            "Today's baseline kcal/day",
+                            d.calibration.resting_kcal,
+                            c.calibration.resting_kcal,
+                            "today",
+                        ],
+                    ];
+                    const cell = (x) =>
+                        x == null
+                            ? "—"
+                            : typeof x === "string"
+                              ? x
+                              : !Number.isFinite(Number(x))
+                                ? "—"
+                                : fmt(x);
+                    const tableRows = rows
+                        .map(
+                            (r) =>
+                                '<tr class="' +
+                                (r[3] === "today" ? "lab-today" : "") +
+                                '"><td>' +
+                                r[0] +
+                                "</td><td>" +
+                                cell(r[1]) +
+                                "</td><td>" +
+                                cell(r[2]) +
+                                "</td><td>" +
+                                (typeof r[1] !== "number" ||
+                                typeof r[2] !== "number" ||
+                                r[1] === r[2]
+                                    ? ""
+                                    : fmtSigned(Number(r[2]) - Number(r[1]))) +
+                                "</td></tr>",
+                        )
+                        .join("");
+                    // Reliable = passes the checks; whether the user has
+                    // switched calibration on in Body details is separate.
+                    const reliable = c.calibration.status === "ok";
+                    const dBase = d.calibration.resting_kcal,
+                        cBase = c.calibration.resting_kcal;
+                    let sentence = "Same as the default.";
+                    if (!reliable)
+                        sentence =
+                            "With these settings the estimate is not reliable (" +
+                            (labReasons[c.calibration.status] ||
+                                c.calibration.status) +
+                            "), so the dashboard would fall back to the formula BMR.";
+                    else if (cBase != null && dBase != null && cBase !== dBase)
+                        sentence =
+                            "These settings would put today's baseline at " +
+                            fmt(cBase) +
+                            " kcal/day (±" +
+                            cell(
+                                c.calibration.window &&
+                                    c.calibration.window.uncertainty_kcal,
+                            ) +
+                            "), " +
+                            fmt(Math.abs(cBase - dBase)) +
+                            " kcal/day " +
+                            (cBase > dBase ? "higher" : "lower") +
+                            " than the default.";
+                    host.innerHTML =
+                        '<div class="lab-table-wrap calc-table-wrap"><table class="calc-table lab-table"><thead><tr><th></th><th>Default</th><th>What-if</th><th>Change</th></tr></thead><tbody>' +
+                        tableRows +
+                        "<tr><td>Reliability</td><td>" +
+                        (d.calibration.status === "ok" && d.calibration.applied
+                            ? "✓ reliable"
+                            : "✗ " +
+                              (labReasons[d.calibration.status] ||
+                                  d.calibration.status)) +
+                        "</td><td>" +
+                        (reliable
+                            ? "✓ reliable"
+                            : "✗ " +
+                              (labReasons[c.calibration.status] ||
+                                  c.calibration.status)) +
+                        '</td><td></td></tr></tbody></table></div><p class="lab-help">' +
+                        esc(sentence) +
+                        "</p>";
+                }
+                function fetchLab() {
+                    const mine = ++labSequence;
+                    labResult = null;
+                    renderLabResults();
+                    clearTimeout(labTimer);
+                    labTimer = setTimeout(function () {
+                        fetch(
+                            "/api/dashboard/whatif?window=" +
+                                labWindow +
+                                "&k=" +
+                                labK.toFixed(1) +
+                                "&tef=" +
+                                encodeURIComponent(labTef),
+                            { headers: { Authorization: "Bearer " + token } },
+                        )
+                            .then(function (r) {
+                                if (r.status === 401) {
+                                    signOut();
+                                    throw new Error("unauthorized");
+                                }
+                                if (!r.ok) throw new Error("request failed");
+                                return r.json();
+                            })
+                            .then(function (result) {
+                                if (mine !== labSequence) return;
+                                labResult = result;
+                                renderLabResults();
+                            })
+                            .catch(function (e) {
+                                if (
+                                    mine !== labSequence ||
+                                    e.message === "unauthorized"
+                                )
+                                    return;
+                                const host = $("lab-results");
+                                if (host)
+                                    host.innerHTML =
+                                        '<p class="lab-status" role="status">Could not calculate.</p>';
+                            });
+                    }, 250);
+                }
+                function wireLab() {
+                    const box = $("lab-box");
+                    box.addEventListener("toggle", function () {
+                        labOpen = box.open;
+                        if (box.open) fetchLab();
+                    });
+                    box.addEventListener("click", function (ev) {
+                        const w = ev.target.closest("[data-lab-window]"),
+                            t = ev.target.closest("[data-lab-tef]");
+                        if (w) {
+                            labWindow = Number(w.dataset.labWindow);
+                            box.querySelectorAll("[data-lab-window]").forEach(
+                                (b) =>
+                                    b.setAttribute(
+                                        "aria-pressed",
+                                        String(
+                                            Number(b.dataset.labWindow) ===
+                                                labWindow,
+                                        ),
+                                    ),
+                            );
+                            fetchLab();
+                        }
+                        if (t) {
+                            labTef = t.dataset.labTef;
+                            box.querySelectorAll("[data-lab-tef]").forEach(
+                                (b) =>
+                                    b.setAttribute(
+                                        "aria-pressed",
+                                        String(b.dataset.labTef === labTef),
+                                    ),
+                            );
+                            fetchLab();
+                        }
+                        if (ev.target.id === "lab-reset") {
+                            labWindow = 42;
+                            labK = 6;
+                            labTef = "macros";
+                            $("lab-k").value = "6";
+                            $("lab-k-out").textContent = "6.0";
+                            box.querySelectorAll("[data-lab-window]").forEach(
+                                (b) =>
+                                    b.setAttribute(
+                                        "aria-pressed",
+                                        String(
+                                            Number(b.dataset.labWindow) === 42,
+                                        ),
+                                    ),
+                            );
+                            box.querySelectorAll("[data-lab-tef]").forEach(
+                                (b) =>
+                                    b.setAttribute(
+                                        "aria-pressed",
+                                        String(b.dataset.labTef === "macros"),
+                                    ),
+                            );
+                            fetchLab();
+                        }
+                    });
+                    $("lab-k").addEventListener("input", function () {
+                        labK = Number(this.value);
+                        $("lab-k-out").textContent = labK.toFixed(1);
+                        fetchLab();
+                    });
+                    if (labOpen) fetchLab();
+                }
                 function fillBodyForm() {
                     const body = data.body;
                     const d = bodyDraft;
@@ -8020,9 +8609,11 @@
                         "</section>" +
                         goalFormHtml() +
                         bodyFormHtml() +
+                        whatIfHtml() +
                         "</div></div>";
                     fillBodyForm();
                     wireBodyForm();
+                    wireLab();
                     wireGoalForm();
                     wireLogWeight();
                 };
