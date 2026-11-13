@@ -530,6 +530,7 @@ type GroupRow = Pick<
     | "balance_g"
     | "balance_kcal"
     | "in_progress"
+    | "counts_in_calibration"
 >;
 
 const avgOf = (xs: number[]): number | null =>
@@ -551,7 +552,14 @@ function bucketOf(
     const pick = (list: GroupRow[], f: (r: GroupRow) => number | null) =>
         list.map(f).filter((v): v is number => v != null);
     const withBurn = (r: GroupRow) => r.burn_kcal != null;
-    const balanced = rows.filter((r) => !r.in_progress && r.balance_g != null);
+    // Complete days only (the calibration verdict), like Eaten vs burned,
+    // the Today panel and buildLast7: one rule for "a day that counts".
+    const balanced = rows.filter(
+        (r) =>
+            !r.in_progress &&
+            r.counts_in_calibration !== false &&
+            r.balance_g != null,
+    );
     const sumG = balanced.reduce((a, r) => a + r.balance_g!, 0);
     const sumK = balanced.reduce((a, r) => a + (r.balance_kcal ?? 0), 0);
     return {

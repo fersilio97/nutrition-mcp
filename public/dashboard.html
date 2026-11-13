@@ -6155,7 +6155,11 @@
                     const logged = rows.filter((r) => r.mealCount > 0);
                     const complete = rows.filter((r) => !r.in_progress);
                     const withGoal = complete.filter((r) => r.goal_calories);
-                    const done = complete.filter((r) => r.balance_g != null);
+                    const done = complete.filter(
+                        (r) =>
+                            r.counts_in_calibration !== false &&
+                            r.balance_g != null,
+                    );
                     return {
                         logged: logged,
                         avgKcal: logged.length
@@ -6450,6 +6454,7 @@
                     return shortDay(start) + "–" + shortDay(end);
                 }
                 function dayRow(r) {
+                    const countsDay = r.counts_in_calibration !== false;
                     return {
                         date: r.date,
                         title:
@@ -6473,9 +6478,15 @@
                         mealCount: r.mealCount,
                         // The body-change band: today is never counted
                         // while it runs.
-                        band_g: r.in_progress ? null : r.balance_g,
-                        band_kcal: r.in_progress ? null : r.balance_kcal,
-                        band_days: r.in_progress || r.balance_g == null ? 0 : 1,
+                        // Nor a day the calibration leaves out (partly logged).
+                        band_g:
+                            r.in_progress || !countsDay ? null : r.balance_g,
+                        band_kcal:
+                            r.in_progress || !countsDay ? null : r.balance_kcal,
+                        band_days:
+                            r.in_progress || !countsDay || r.balance_g == null
+                                ? 0
+                                : 1,
                     };
                 }
                 function bucketRow(b) {
