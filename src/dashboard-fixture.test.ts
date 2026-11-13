@@ -154,14 +154,18 @@ describe("preview scenarios say what they claim", () => {
         expect(d.timezone).toBe("Asia/Tokyo");
     });
 
-    test("calibrate: the estimate reads ~150 kcal/day high", () => {
+    test("calibrate: applied calibration keeps the ~150 kcal/day formula offset visible", () => {
         for (const days of [30, 90]) {
-            const s = payloadAt("calibrate", days).estimateVsScale;
-            expect(s.status).toBe("ok");
-            expect(s.calibrated).toBe(true);
-            expect(s.span_days!).toBeGreaterThanOrEqual(14);
-            expect(s.implied_kcal_per_day!).toBeGreaterThan(120);
-            expect(s.implied_kcal_per_day!).toBeLessThan(180);
+            const d = payloadAt("calibrate", days);
+            expect(d.calibration.status).toBe("ok");
+            expect(d.calibration.applied).toBe(true);
+            // The fixture's weigh-ins carry ±250 g of water noise, so the
+            // trend finds 150 within a few standard errors, not exactly.
+            const w = d.calibration.window;
+            expect(
+                Math.abs(d.calibration.implied_kcal_per_day! - 150),
+            ).toBeLessThan(Math.max(60, 3 * w.uncertainty_kcal!));
+            expect(d.calibration.resting_kcal).not.toBe(d.calibration.bmr_kcal);
         }
     });
 

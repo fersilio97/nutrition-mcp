@@ -16,8 +16,15 @@
 //           more than predicted), the dashboard's "Estimate vs reality" card
 //           shows it as a negative kcal/day offset — that card, not a guessed
 //           multiplier, is how to calibrate.
-//   Balance (eaten − burned) ÷ 7.7 kcal per gram — the classic ~7,700 kcal per
-//           kg of body fat. Real day-to-day scale weight swings far more than
+//   TEF     + the thermic effect of food (foodTef): 25% of protein kcal,
+//           7.5% of carbohydrate, 2% of fat — ~10% on a mixed diet
+//           (Westerterp 2004). Mifflin predicts a FASTING
+//           resting rate and the watch's active kcal excludes it, so without
+//           this term the burn ran ~150-250 kcal/day low.
+//   Balance (eaten − burned) ÷ 6.0 kcal per gram. Not the classic 7.7 (pure
+//           adipose): over 2-4 weeks a change in scale weight is fat, lean
+//           tissue, water and glycogen together, measured at ~5-6.6 kcal/g
+//           (Hall 2008; CALERIE). Day-to-day scale weight swings far more than
 //           this (water, glycogen, salt), which is why it is a trend aid, not a
 //           prediction of tomorrow's weigh-in.
 
@@ -25,7 +32,37 @@ import type { BodySex } from "./supabase.js";
 
 /** Multiplier on BMR for the day's base burn. 1 = resting only; see above. */
 export const BASE_FACTOR = 1.0;
-export const KCAL_PER_GRAM = 7.7;
+/** kcal per gram of short-window (2-4 week) scale-weight change. */
+export const KCAL_PER_GRAM = 6.0;
+/** Thermic effect of food, as a share of the day's logged kcal: the
+ *  fallback when a day has no macros, and the break-even goal's factor. */
+export const TEF_FRACTION = 0.1;
+/** Thermic effect per macronutrient, as a share of its kcal (mid-points of
+ *  the usual ranges: protein 20-30%, carbohydrate 5-10%, fat 0-3%;
+ *  Westerterp 2004). A high-protein day therefore burns more digesting. */
+export const TEF_PROTEIN = 0.25;
+export const TEF_CARBS = 0.075;
+export const TEF_FAT = 0.02;
+
+/** A day's thermic effect of food, kcal. From its macros when they account
+ *  for at least half its kcal (protein and carbs 4 kcal/g, fat 9), with any
+ *  kcal the macros do not explain (alcohol, rounding) at TEF_FRACTION;
+ *  otherwise TEF_FRACTION of everything. */
+export function foodTef(day: {
+    calories: number;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+}): number {
+    const p = (day.protein_g ?? 0) * 4,
+        c = (day.carbs_g ?? 0) * 4,
+        f = (day.fat_g ?? 0) * 9;
+    const macro = p + c + f;
+    if (day.calories <= 0) return 0;
+    if (macro < day.calories * 0.5) return TEF_FRACTION * day.calories;
+    const rest = Math.max(0, day.calories - macro);
+    return TEF_PROTEIN * p + TEF_CARBS * c + TEF_FAT * f + TEF_FRACTION * rest;
+}
 export const MIN_HEIGHT_CM = 50;
 export const MAX_HEIGHT_CM = 272;
 const BMI_HEALTHY_LOW = 18.5;
@@ -88,9 +125,20 @@ export function bmrMifflin(
     return Math.round(base + (sex === "male" ? 5 : -161));
 }
 
-/** Estimated total burn for a day: resting (BMR × BASE_FACTOR) + active kcal. */
-export function dailyBurn(bmr: number, activeKcal: number | null): number {
-    return Math.round(bmr * BASE_FACTOR + (activeKcal ?? 0));
+/** Estimated total burn for a day: resting (BMR × BASE_FACTOR) + active kcal
+ *  + the thermic effect of what was eaten (foodTef). */
+export function dailyBurn(
+    bmr: number,
+    activeKcal: number | null,
+    tefKcal = 0,
+): number {
+    return Math.round(bmr * BASE_FACTOR + (activeKcal ?? 0) + tefKcal);
+}
+
+/** The intake at which a day breaks even: I = resting + active + TEF(I),
+ *  solved with TEF at TEF_FRACTION. The dashboard's default goal. */
+export function breakEvenKcal(bmr: number, activeKcal: number | null): number {
+    return Math.round((bmr + (activeKcal ?? 0)) / (1 - TEF_FRACTION));
 }
 
 /** Estimated grams gained (+) or lost (−) for a day's energy balance. */
@@ -150,6 +198,74 @@ function addDays(date: string, n: number): string {
     const d = new Date(`${date}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() + n);
     return d.toISOString().slice(0, 10);
+}
+
+export interface WeightSlope {
+    /** Least-squares slope, grams per day (negative = losing). */
+    g_per_day: number;
+    /** Standard error of that slope, grams per day (0 with two days). */
+    se_g_per_day: number;
+    /** Distinct weigh-in days used. */
+    days: number;
+    first_date: string;
+    last_date: string;
+    span_days: number;
+    /** Each weigh-in day (same-day readings averaged) and the trend line's
+     *  value that day, grams — so the fit can be shown, not just used. */
+    points: { date: string; weight_g: number; fit_g: number }[];
+}
+
+/**
+ * The weight trend through every weigh-in, by least squares. Same-day
+ * readings are averaged first, so a morning with three weigh-ins counts once.
+ * The slope uses all of them, so one water-heavy morning at either end moves
+ * it far less than (last − first) / span does. Null with fewer than two days.
+ */
+export function weightSlope(weighIns: WeighIn[]): WeightSlope | null {
+    const byDay = new Map<string, number[]>();
+    for (const w of weighIns) {
+        const list = byDay.get(w.date) ?? [];
+        list.push(w.weight_g);
+        byDay.set(w.date, list);
+    }
+    const dates = [...byDay.keys()].sort();
+    if (dates.length < 2) return null;
+    const first = dates[0]!,
+        last = dates.at(-1)!;
+    const xs = dates.map((d) => daysBetween(first, d));
+    const ys = dates.map((d) => {
+        const v = byDay.get(d)!;
+        return v.reduce((a, b) => a + b, 0) / v.length;
+    });
+    const n = xs.length;
+    const mx = xs.reduce((a, b) => a + b, 0) / n;
+    const my = ys.reduce((a, b) => a + b, 0) / n;
+    let sxy = 0,
+        sxx = 0;
+    for (let i = 0; i < n; i++) {
+        sxy += (xs[i]! - mx) * (ys[i]! - my);
+        sxx += (xs[i]! - mx) ** 2;
+    }
+    const slope = sxy / sxx;
+    let sse = 0;
+    for (let i = 0; i < n; i++) {
+        const fit = my + slope * (xs[i]! - mx);
+        sse += (ys[i]! - fit) ** 2;
+    }
+    const se = n > 2 ? Math.sqrt(sse / (n - 2) / sxx) : 0;
+    return {
+        g_per_day: slope,
+        se_g_per_day: se,
+        days: n,
+        first_date: first,
+        last_date: last,
+        span_days: daysBetween(first, last),
+        points: dates.map((d, i) => ({
+            date: d,
+            weight_g: Math.round(ys[i]!),
+            fit_g: Math.round(my + slope * (xs[i]! - mx)),
+        })),
+    };
 }
 
 export interface WeightTrend {

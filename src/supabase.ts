@@ -644,6 +644,7 @@ export interface Profile {
     height_cm?: number | null;
     birth_date?: string | null;
     sex?: BodySex | null;
+    resting_basis?: "formula" | "calibrated";
     created_at: string;
     updated_at: string;
 }
@@ -786,6 +787,7 @@ export async function upsertProfile(
         height_cm?: number | null;
         birth_date?: string | null;
         sex?: BodySex | null;
+        resting_basis?: "formula" | "calibrated";
     },
 ): Promise<Profile> {
     const payload: Record<string, unknown> = {
@@ -808,6 +810,8 @@ export async function upsertProfile(
     if (patch.height_cm !== undefined) payload.height_cm = patch.height_cm;
     if (patch.birth_date !== undefined) payload.birth_date = patch.birth_date;
     if (patch.sex !== undefined) payload.sex = patch.sex;
+    if (patch.resting_basis !== undefined)
+        payload.resting_basis = patch.resting_basis;
 
     const { data, error } = await getSupabase()
         .from("profiles")
@@ -973,6 +977,45 @@ export async function getActivityInRange(
         .order("date", { ascending: true });
     if (error) throw new Error(`Failed to get activity: ${error.message}`);
     return (data as ActivityDay[]) ?? [];
+}
+
+/** Manual calibration choices by local date: true = count the day, false =
+ *  exclude it. A date with no row follows the automatic rule. */
+export async function getCalibrationDayOverrides(
+    userId: string,
+    startDate: string,
+    endDate: string,
+): Promise<Record<string, boolean>> {
+    const { data, error } = await getSupabase()
+        .from("calibration_day_overrides")
+        .select("day, counted")
+        .eq("user_id", userId)
+        .gte("day", startDate)
+        .lte("day", endDate);
+    if (error)
+        throw new Error(`Failed to get calibration days: ${error.message}`);
+    const out: Record<string, boolean> = {};
+    for (const r of (data ?? []) as { day: string; counted: boolean }[])
+        out[r.day] = r.counted;
+    return out;
+}
+
+/** Save a day's manual choice; null removes it (back to automatic). */
+export async function setCalibrationDayOverride(
+    userId: string,
+    day: string,
+    counted: boolean | null,
+): Promise<void> {
+    const query = getSupabase().from("calibration_day_overrides");
+    const { error } =
+        counted === null
+            ? await query.delete().eq("user_id", userId).eq("day", day)
+            : await query.upsert(
+                  { user_id: userId, day, counted },
+                  { onConflict: "user_id,day" },
+              );
+    if (error)
+        throw new Error(`Failed to save calibration day: ${error.message}`);
 }
 
 /** Every activity row for the export, oldest first. Paged and reconciled
@@ -1498,6 +1541,15 @@ export async function deleteAllUserData(userId: string): Promise<void> {
         .eq("user_id", userId);
     if (activityErr)
         throw new Error(`Failed to delete activity: ${activityErr.message}`);
+
+    const { error: calibrationErr } = await sb
+        .from("calibration_day_overrides")
+        .delete()
+        .eq("user_id", userId);
+    if (calibrationErr && !calibrationErr.message.includes("does not exist"))
+        throw new Error(
+            `Failed to delete calibration settings: ${calibrationErr.message}`,
+        );
 
     const { error: ingestErr } = await sb
         .from("ingest_tokens")

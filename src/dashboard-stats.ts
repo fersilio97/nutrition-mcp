@@ -18,11 +18,14 @@ import {
     weightOn,
     weightTrend,
     ageOn,
-    KCAL_PER_GRAM,
+    TEF_FRACTION,
+    breakEvenKcal,
+    foodTef,
     type BmiCategory,
     type BodyDetails,
     type WeighIn,
 } from "./body.js";
+import type { EnergyStatus, EnergyWindow } from "./calibration.js";
 import type { DailyBucket } from "./insights.js";
 import type { Meal, NutritionGoals } from "./supabase.js";
 
@@ -46,7 +49,10 @@ export interface DashboardDay {
     /** That day's resting burn (Mifflin-St Jeor BMR from the weight in effect
      *  that day — so it moves as weight does), or null without body data. */
     bmr_kcal: number | null;
-    /** Estimated total burn (resting + active), or null without body data. */
+    /** Thermic effect of the day's food (digestion), kcal. */
+    tef_kcal: number;
+    /** Estimated total burn (resting + active + digestion), or null
+     *  without body data. */
     burn_kcal: number | null;
     /** Estimated grams gained (+) / lost (−). Null on a day with no meals —
      *  an unlogged day is unknown, not a day of eating nothing. */
@@ -56,12 +62,94 @@ export interface DashboardDay {
     balance_kcal: number | null;
     /** True for today: the day is still running, so its balance is partial. */
     in_progress: boolean;
+    /** The user's manual choice for the calibration (true = count, false =
+     *  exclude), or null to follow the automatic rule. */
+    count_override?: boolean | null;
+    /** Whether the day counts in the calibration, and why. */
+    counts_in_calibration?: boolean;
+    count_reason?: CountReason;
+}
+
+export type CountReason =
+    | "auto_complete" // 2+ entries and at least half a typical day's kcal
+    | "auto_few_entries" // fewer than 2 entries logged
+    | "auto_low_kcal" // under half the typical logged day
+    | "manual_on"
+    | "manual_off"
+    | "in_progress"
+    | "no_meals"
+    | "no_watch"; // the user has a watch, but this day did not sync
+
+/** Entries a day needs before it looks completely logged. */
+export const MIN_DAY_ENTRIES = 2;
+/** ...and the share of a typical logged day's kcal it needs. */
+export const MIN_DAY_SHARE = 0.5;
+/** Logged days needed before "typical" means anything. */
+const MIN_TYPICAL_DAYS = 7;
+
+/**
+ * The typical logged day: median kcal of the complete days with meals in
+ * [from, to]. A median, so a feast or a half-logged day does not move it.
+ * Null with fewer than 7 such days (the kcal test is then skipped).
+ */
+export function typicalDayKcal(
+    rows: Pick<
+        DashboardDay,
+        "date" | "calories" | "mealCount" | "in_progress"
+    >[],
+    from: string,
+    to: string,
+): number | null {
+    const kcal = rows
+        .filter(
+            (r) =>
+                r.date >= from &&
+                r.date <= to &&
+                r.mealCount > 0 &&
+                !r.in_progress,
+        )
+        .map((r) => r.calories)
+        .sort((a, b) => a - b);
+    if (kcal.length < MIN_TYPICAL_DAYS) return null;
+    const mid = kcal.length >> 1;
+    return Math.round(
+        kcal.length % 2 ? kcal[mid]! : (kcal[mid - 1]! + kcal[mid]!) / 2,
+    );
+}
+
+/** Whether a day counts in the calibration. Today, an empty day and (for a
+ *  user who syncs a watch) an unsynced day never count: a null active kcal
+ *  is unknown, not zero. Otherwise the manual choice wins over the rule:
+ *  2+ entries and at least half of the typical logged day's kcal. */
+export function countDay(
+    row: Pick<
+        DashboardDay,
+        "in_progress" | "mealCount" | "active_kcal" | "calories"
+    >,
+    override: boolean | null,
+    hasWatch: boolean,
+    typicalKcal: number | null,
+): { counted: boolean; reason: CountReason } {
+    if (row.in_progress) return { counted: false, reason: "in_progress" };
+    if (!row.mealCount) return { counted: false, reason: "no_meals" };
+    // A manual choice beats a missing watch sync: the user may know the day
+    // is fine (the burn then has no workout part).
+    if (override === true) return { counted: true, reason: "manual_on" };
+    if (override === false) return { counted: false, reason: "manual_off" };
+    if (hasWatch && row.active_kcal == null)
+        return { counted: false, reason: "no_watch" };
+    if (row.mealCount < MIN_DAY_ENTRIES)
+        return { counted: false, reason: "auto_few_entries" };
+    if (typicalKcal != null && row.calories < typicalKcal * MIN_DAY_SHARE)
+        return { counted: false, reason: "auto_low_kcal" };
+    return { counted: true, reason: "auto_complete" };
 }
 
 /** The calorie goal the dashboard shows. A stored goal wins; with none set,
- *  the baseline is the day's resting burn, so the effective goal (baseline +
- *  active kcal) is the estimated burn itself — eat to break even until the
- *  user picks a target. Without body details there is no burn to default to,
+ *  the baseline is the break-even intake on a rest day — resting ÷ (1 − TEF),
+ *  since eating I kcal also burns TEF_FRACTION × I digesting it — so the
+ *  effective goal (baseline + active kcal) is about the estimated burn: eat
+ *  to break even until the user picks a target. Without body details there is no burn to default to,
  *  so the goal stays unset. Dashboard-only: the MCP tools keep reading the
  *  stored goal, so "no goal set" there still means no goal. */
 export function withBurnDefault(
@@ -84,7 +172,10 @@ export function withBurnDefault(
         target_weight_g: null,
         updated_at: "",
     };
-    return { ...(goals ?? blank), daily_calories: Math.round(bmr) };
+    return {
+        ...(goals ?? blank),
+        daily_calories: Math.round(bmr / (1 - TEF_FRACTION)),
+    };
 }
 
 export function buildDashboardDays(
@@ -95,12 +186,15 @@ export function buildDashboardDays(
     weighIns: WeighIn[],
     today: string,
 ): DashboardDay[] {
+    const hasStoredGoal =
+        goals?.daily_calories != null && goals.daily_calories > 0;
     return buckets.map((b) => {
         const active = activeByDate.get(b.date) ?? null;
         const bmr = bmrFor(body, weightOn(weighIns, b.date), b.date);
         const adj = adjustGoalsForActivity(withBurnDefault(goals, bmr), active);
         const g = adj.goals;
-        const burn = bmr == null ? null : dailyBurn(bmr, active);
+        const tef = Math.round(foodTef(b));
+        const burn = bmr == null ? null : dailyBurn(bmr, active, tef);
         return {
             date: b.date,
             calories: b.calories,
@@ -112,11 +206,18 @@ export function buildDashboardDays(
             waterMl: b.waterMl,
             mealCount: b.meals.length,
             active_kcal: active,
-            goal_calories: g?.daily_calories || null,
+            // No stored goal: the exact break-even intake (resting +
+            // active, grossed up for digestion). adjustGoalsForActivity adds
+            // active 1:1, which left the default ~11% of active kcal short.
+            goal_calories:
+                !hasStoredGoal && bmr != null
+                    ? breakEvenKcal(bmr, active)
+                    : g?.daily_calories || null,
             goal_protein_g: g?.daily_protein_g || null,
             goal_carbs_g: g?.daily_carbs_g || null,
             goal_fat_g: g?.daily_fat_g || null,
             bmr_kcal: bmr,
+            tef_kcal: tef,
             burn_kcal: burn,
             balance_g:
                 burn != null && b.meals.length > 0
@@ -164,6 +265,7 @@ export function buildWeightStats(
     goals: NutritionGoals | null,
     todayActiveKcal: number | null,
     today: string,
+    todayTefKcal = 0,
 ): WeightStats {
     const missing: WeightStats["missing"] = [];
     if (body.height_cm == null) missing.push("height");
@@ -199,129 +301,71 @@ export function buildWeightStats(
                 ? projectTargetDate(latest, target, trend.weekly_rate_g)
                 : null,
         bmr_kcal: bmr,
-        burn_today_kcal: bmr == null ? null : dailyBurn(bmr, todayActiveKcal),
+        burn_today_kcal:
+            bmr == null ? null : dailyBurn(bmr, todayActiveKcal, todayTefKcal),
         missing,
     };
 }
 
 export interface EstimateVsScale {
     /**
-     * "ok": both sides are known. "no_weighins": fewer than two weigh-ins on
-     * different dates inside the period. "no_estimate": the scale moved, but
-     * no day in the span has an estimated balance (no body details, or no
-     * meals logged), so there is nothing to compare it with.
+     * "ok": both sides are known. "no_weighins": fewer than two weigh-in days
+     * inside the window. "no_estimate": the scale moved, but no counted day
+     * in the span has an estimate to compare it with.
      */
     status: "ok" | "no_weighins" | "no_estimate";
     first_date: string | null;
     last_date: string | null;
     /** last_date − first_date, in days. */
     span_days: number | null;
-    /** Complete days in [first_date, last_date) that carry a balance_g. */
+    /** Counted days in [first_date, last_date). */
     covered_days: number | null;
-    /** What the scale did: last − first weigh-in, grams. */
+    /** Distinct weigh-in days the trend goes through. */
+    weighin_days: number;
+    /** What the scale did ALONG ITS TREND (least squares over every
+     *  weigh-in, not last − first), grams. */
     actual_g: number | null;
-    /** Sum of balance_g over the covered days only. */
+    /** Formula-predicted change summed over the counted days. */
     est_logged_g: number | null;
-    /** est_logged_g × span ÷ covered, only when some days are uncovered. */
+    /** est_logged_g × span ÷ counted, only when some days are not counted. */
     est_scaled_g: number | null;
     /** actual − estimate (the scaled one when present, else the logged one). */
     gap_g: number | null;
-    /**
-     * gap × 7.7 ÷ span. POSITIVE means the burn estimate runs HIGH: the scale
-     * lost less (or gained more) than predicted, so the real burn is lower.
-     * REQUIREMENTS §4.11 writes the formula as −gap × 7.7 ÷ span but then
-     * says "positive → runs high"; only the sign used here satisfies both
-     * that sentence and its worked example, so the leading minus is a typo.
-     */
+    /** gap × KCAL_PER_GRAM ÷ span. POSITIVE means the burn estimate runs
+     *  HIGH: the scale lost less (or gained more) than predicted. Identical to
+     *  the calibration's offset — the same window, days and trend. */
     implied_kcal_per_day: number | null;
-    /** True when span ≥ 14 days and ≥ 70% of it is covered — only then is the
-     *  implied offset worth stating; shorter spans are water and glycogen. */
+    /** ± kcal/day from the weigh-ins' scatter around the trend. */
+    uncertainty_kcal: number | null;
+    /** The calibration's verdict on the window (see EnergyStatus). */
+    quality: EnergyStatus;
+    /** True only when the window qualifies (quality "ok"). */
     calibrated: boolean;
 }
 
-const CALIBRATE_MIN_SPAN = 14;
-const CALIBRATE_MIN_COVERAGE = 0.7;
-
-function dayDiff(a: string, b: string): number {
-    return Math.round(
-        (Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) /
-            86_400_000,
-    );
-}
-
-/**
- * The estimated gain/loss over a period next to what the scale actually did.
- *
- * The span runs from the first to the last weigh-in inside [startDate,
- * endDate]. The estimate covers days first ≤ d < last: a morning weigh-in on
- * the last day precedes that day's eating, so that day belongs to the next
- * span. Only complete days count (never in_progress), and only days that have
- * a balance — an unlogged day is unknown, not a day of eating nothing.
- *
- * Every state returns the same complete literal, so the payload's shape never
- * depends on the data.
- */
-export function buildEstimateVsScale(
-    dayRows: Pick<DashboardDay, "date" | "balance_g" | "in_progress">[],
-    weighIns: WeighIn[],
-    startDate: string,
-    endDate: string,
-): EstimateVsScale {
-    const empty: EstimateVsScale = {
-        status: "no_weighins",
-        first_date: null,
-        last_date: null,
-        span_days: null,
-        covered_days: null,
-        actual_g: null,
-        est_logged_g: null,
-        est_scaled_g: null,
-        gap_g: null,
-        implied_kcal_per_day: null,
-        calibrated: false,
-    };
-    // Stable sort: same-day weigh-ins keep their logged order, so "first"
-    // is the earliest reading and "last" the latest.
-    const inside = weighIns
-        .filter((w) => w.date >= startDate && w.date <= endDate)
-        .sort((a, b) => a.date.localeCompare(b.date));
-    if (inside.length < 2) return empty;
-    const first = inside[0]!;
-    const last = inside[inside.length - 1]!;
-    const span = dayDiff(first.date, last.date);
-    if (span <= 0) return empty;
-
-    const actual = last.weight_g - first.weight_g;
-    let covered = 0;
-    let est = 0;
-    for (const r of dayRows) {
-        if (r.date < first.date || r.date >= last.date) continue;
-        if (r.in_progress || r.balance_g == null) continue;
-        covered += 1;
-        est += r.balance_g;
-    }
-    const base: EstimateVsScale = {
-        ...empty,
-        first_date: first.date,
-        last_date: last.date,
-        span_days: span,
-        covered_days: covered,
-        actual_g: actual,
-    };
-    if (covered === 0) return { ...base, status: "no_estimate" };
-
-    const scaled = covered < span ? Math.round((est * span) / covered) : null;
-    const gap = actual - (scaled ?? est);
+/** The Estimate-vs-reality card: the calibration window, as the card shows it. */
+export function buildEstimateVsScale(w: EnergyWindow): EstimateVsScale {
+    const status: EstimateVsScale["status"] =
+        w.status === "no_weighins"
+            ? "no_weighins"
+            : w.gap_g == null
+              ? "no_estimate"
+              : "ok";
     return {
-        ...base,
-        status: "ok",
-        est_logged_g: est,
-        est_scaled_g: scaled,
-        gap_g: gap,
-        implied_kcal_per_day: Math.round((gap * KCAL_PER_GRAM) / span),
-        calibrated:
-            span >= CALIBRATE_MIN_SPAN &&
-            covered / span >= CALIBRATE_MIN_COVERAGE,
+        status,
+        first_date: w.first_date,
+        last_date: w.last_date,
+        span_days: w.span_days,
+        covered_days: w.span_days == null ? null : w.counted_days,
+        weighin_days: w.weighin_days,
+        actual_g: w.trend_change_g,
+        est_logged_g: w.est_logged_g,
+        est_scaled_g: w.est_scaled_g,
+        gap_g: w.gap_g,
+        implied_kcal_per_day: status === "ok" ? w.offset_kcal : null,
+        uncertainty_kcal: w.uncertainty_kcal,
+        quality: w.status,
+        calibrated: w.status === "ok",
     };
 }
 
@@ -360,16 +404,39 @@ export const LAST7_DAYS = 7;
 export function buildLast7(
     dayRows: Pick<
         DashboardDay,
-        "date" | "balance_g" | "balance_kcal" | "burn_kcal" | "in_progress"
+        | "date"
+        | "balance_g"
+        | "balance_kcal"
+        | "burn_kcal"
+        | "in_progress"
+        | "counts_in_calibration"
     >[],
     weighIns: WeighIn[],
     today: string,
 ): Last7 {
     const from = shiftDay(today, -LAST7_DAYS);
-    // The scale side is exactly the Estimate-vs-reality span logic.
-    const scale = buildEstimateVsScale(dayRows, weighIns, from, today);
+    // What the scale did this week: first and last weigh-in inside it. A
+    // plain readout, not the calibration (that needs 3+ weeks and a trend).
+    const inside = weighIns
+        .filter((w) => w.date >= from && w.date <= today)
+        .sort((a, b) => a.date.localeCompare(b.date));
+    const first = inside[0],
+        last = inside.at(-1);
+    const moved = first && last && first.date < last.date;
+    const scale = {
+        actual_g: moved ? last.weight_g - first.weight_g : null,
+        first_date: moved ? first.date : null,
+        last_date: moved ? last.date : null,
+    };
+    // Complete days only — the same verdict (`counts_in_calibration`) the
+    // Trends "Eaten vs burned" chart uses, so a half-logged day cannot show
+    // as a huge deficit here while Trends leaves it out.
     const week = dayRows.filter(
-        (r) => r.date >= from && r.date < today && !r.in_progress,
+        (r) =>
+            r.date >= from &&
+            r.date < today &&
+            !r.in_progress &&
+            r.counts_in_calibration === true,
     );
     const logged = week.filter((r) => r.balance_g != null);
     const netKcal = logged.reduce((a, r) => a + (r.balance_kcal ?? 0), 0);
@@ -465,6 +532,7 @@ type GroupRow = Pick<
     | "balance_g"
     | "balance_kcal"
     | "in_progress"
+    | "counts_in_calibration"
 >;
 
 const avgOf = (xs: number[]): number | null =>
@@ -486,7 +554,14 @@ function bucketOf(
     const pick = (list: GroupRow[], f: (r: GroupRow) => number | null) =>
         list.map(f).filter((v): v is number => v != null);
     const withBurn = (r: GroupRow) => r.burn_kcal != null;
-    const balanced = rows.filter((r) => !r.in_progress && r.balance_g != null);
+    // Complete days only (the calibration verdict), like Eaten vs burned,
+    // the Today panel and buildLast7: one rule for "a day that counts".
+    const balanced = rows.filter(
+        (r) =>
+            !r.in_progress &&
+            r.counts_in_calibration !== false &&
+            r.balance_g != null,
+    );
     const sumG = balanced.reduce((a, r) => a + r.balance_g!, 0);
     const sumK = balanced.reduce((a, r) => a + (r.balance_kcal ?? 0), 0);
     return {

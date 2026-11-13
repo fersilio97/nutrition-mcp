@@ -29,6 +29,8 @@ import {
     updateWeight,
     deleteWeight,
     getActivityInRange,
+    getCalibrationDayOverrides,
+    setCalibrationDayOverride,
     activityByDate,
     upsertProfile,
     insertWeight,
@@ -47,6 +49,32 @@ import {
     type WeightEntry,
 } from "./supabase.js";
 import { buildDailyBuckets } from "./insights.js";
+import {
+    buildCalibration,
+    calibratedBaseline,
+    metabolismSeries,
+    CLAMP,
+    DEFAULT_PARAMS,
+    MAX_WINDOW_DAYS,
+    MIN_WINDOW_DAYS,
+    MAX_UNCERTAINTY_KCAL,
+    MIN_COVERAGE,
+    MIN_SPAN,
+    MIN_WEIGHIN_DAYS,
+    type EnergyDay,
+    type ModelParams,
+} from "./calibration.js";
+import {
+    ageOn,
+    balanceGrams,
+    breakEvenKcal,
+    dailyBurn,
+    KCAL_PER_GRAM,
+    TEF_CARBS,
+    TEF_FAT,
+    TEF_FRACTION,
+    TEF_PROTEIN,
+} from "./body.js";
 import {
     todayInTz,
     shiftLocalDate,
@@ -76,6 +104,10 @@ import {
     buildEstimateVsScale,
     buildLast7,
     buildWeightStats,
+    countDay,
+    MIN_DAY_ENTRIES,
+    MIN_DAY_SHARE,
+    typicalDayKcal,
     buildFrequentMeals,
     FREQUENT_DAYS,
     granularityFor,
@@ -88,6 +120,21 @@ import { listFoods, suggestFood } from "./simple-foods.js";
 // so the weight tracker always looks back at least this far, whatever range
 // the calorie charts show.
 const WEIGHT_WINDOW_DAYS = 90;
+
+/** The inputs of today's Mifflin-St Jeor BMR, for the explanation panel:
+ *  the weigh-in in effect today (the last one on or before it, else the
+ *  first known), height, age that day and sex. */
+function bmrInputs(body: BodyDetails, weighIns: WeighIn[], today: string) {
+    const inEffect =
+        weighIns.filter((w) => w.date <= today).at(-1) ?? weighIns[0] ?? null;
+    return {
+        weight_g: inEffect?.weight_g ?? null,
+        weight_date: inEffect?.date ?? null,
+        height_cm: body.height_cm,
+        age: body.birth_date ? ageOn(body.birth_date, today) : null,
+        sex: body.sex,
+    };
+}
 
 export function bodyOf(profile: Profile | null): BodyDetails {
     return {
@@ -130,6 +177,7 @@ export function dashboardWindow(
     endDate: string;
     weightStart: string;
     fetchStart: string;
+    weightFetchStart: string;
 } {
     const startDate = shiftLocalDate(today, -(days - 1));
     const last7Start = shiftLocalDate(today, -LAST7_DAYS);
@@ -140,7 +188,20 @@ export function dashboardWindow(
             today,
             -(Math.max(days, WEIGHT_WINDOW_DAYS) - 1),
         ),
-        fetchStart: last7Start < startDate ? last7Start : startDate,
+        // Also the 28 calibration days before the range's first day: every
+        // plotted day of the metabolism chart is calibrated from the 28 days
+        // before it, and the latest of those windows is the Body tab's
+        // figure, so neither depends on the chart range picked.
+        fetchStart: [
+            startDate,
+            last7Start,
+            shiftLocalDate(startDate, -MAX_WINDOW_DAYS),
+        ].sort()[0]!,
+        // Weigh-ins for the same calibration windows, and the weight tracker.
+        weightFetchStart: [
+            shiftLocalDate(today, -(Math.max(days, WEIGHT_WINDOW_DAYS) - 1)),
+            shiftLocalDate(startDate, -MAX_WINDOW_DAYS),
+        ].sort()[0]!,
     };
 }
 
@@ -153,6 +214,11 @@ export interface DashboardInputs {
     goals: NutritionGoals | null;
     latestWeight: WeightEntry | null;
     activityRows: ActivityDay[];
+    /** Manual calibration choices by date: true = count, false = exclude. */
+    dayOverrides?: Record<string, boolean>;
+    /** Model parameters; omitted = the defaults. Only the what-if lab
+     *  passes others. */
+    model?: ModelParams;
     days: number;
     /** The user's local today, YYYY-MM-DD. */
     today: string;
@@ -164,16 +230,27 @@ export interface DashboardInputs {
  * the shared Supabase mock).
  */
 export async function dashboardPayload(userId: string, days: number) {
+    return buildDashboardPayload(await loadDashboardInputs(userId, days));
+}
+
+/** Fetch everything one dashboard request needs (see dashboardWindow). */
+export async function loadDashboardInputs(
+    userId: string,
+    days: number,
+): Promise<DashboardInputs> {
     const profile = await getProfile(userId);
     const tz = timezoneFromProfile(profile) ?? "UTC";
     const today = todayInTz(tz);
-    const { endDate, weightStart, fetchStart } = dashboardWindow(today, days);
+    const { endDate, weightFetchStart, fetchStart } = dashboardWindow(
+        today,
+        days,
+    );
 
     const [meals, water, weight, goals, latestWeight, activityRows] =
         await Promise.all([
             getMealsInRange(userId, fetchStart, endDate, tz),
             getWaterInRange(userId, fetchStart, endDate, tz),
-            getWeightInRange(userId, weightStart, endDate, tz),
+            getWeightInRange(userId, weightFetchStart, endDate, tz),
             getNutritionGoals(userId),
             getLatestWeight(userId),
             // Optional enrichment: a missing activity table must not take
@@ -181,7 +258,13 @@ export async function dashboardPayload(userId: string, days: number) {
             getActivityInRange(userId, fetchStart, endDate).catch(() => []),
         ]);
 
-    return buildDashboardPayload({
+    const dayOverrides = await getCalibrationDayOverrides(
+        userId,
+        fetchStart,
+        endDate,
+    ).catch(() => ({}));
+
+    return {
         profile,
         meals,
         water,
@@ -189,9 +272,10 @@ export async function dashboardPayload(userId: string, days: number) {
         goals,
         latestWeight,
         activityRows,
+        dayOverrides,
         days,
         today,
-    });
+    };
 }
 
 /**
@@ -208,6 +292,8 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         goals,
         latestWeight,
         activityRows,
+        dayOverrides = {},
+        model = DEFAULT_PARAMS,
         days,
         today,
     } = inputs;
@@ -222,12 +308,15 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
     // figure the assistant quotes cannot disagree. Bucketed from fetchStart
     // (the range, widened for `last7`); `daily` is then cut back to the range.
     const buckets = buildDailyBuckets(meals, water, fetchStart, endDate, tz);
-    const weighIns: WeighIn[] = weight
+    // Every fetched weigh-in feeds the calibration windows; the weight
+    // tracker and the weights payload keep their own [weightStart, endDate].
+    const allWeighIns: WeighIn[] = weight
         .map((w) => ({
             date: dateInTz(w.logged_at, tz),
             weight_g: w.weight_g,
         }))
         .sort((a, b) => a.date.localeCompare(b.date));
+    const weighIns = allWeighIns.filter((w) => w.date >= weightStart);
     const latest: WeighIn | null = latestWeight
         ? {
               date: dateInTz(latestWeight.logged_at, tz),
@@ -236,7 +325,8 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         : null;
     // BMR needs a weight for every day, including days before the first
     // weigh-in in the window; the latest reading overall backs those.
-    const weightsForBmr = weighIns.length || !latest ? weighIns : [latest];
+    const weightsForBmr =
+        allWeighIns.length || !latest ? allWeighIns : [latest];
     const body = bodyOf(profile);
     const activeByDate = activityByDate(activityRows);
     const allRows = buildDashboardDays(
@@ -247,6 +337,65 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         weightsForBmr,
         endDate,
     );
+    // Which days count in the calibration: automatic (breakfast, lunch and
+    // dinner logged) unless the user chose otherwise for that day.
+    const hasWatch = allRows.some((r) => r.active_kcal != null);
+    // "Typical" is judged once, over the calibration window ending
+    // yesterday, so a day's verdict does not depend on the chart range.
+    const windowFrom = shiftLocalDate(endDate, -model.windowDays);
+    const windowTo = shiftLocalDate(endDate, -1);
+    const typicalKcal = typicalDayKcal(allRows, windowFrom, windowTo);
+    for (const row of allRows) {
+        const override = dayOverrides[row.date] ?? null;
+        const c = countDay(row, override, hasWatch, typicalKcal);
+        row.count_override = override;
+        row.counts_in_calibration = c.counted;
+        row.count_reason = c.reason;
+    }
+    // From the FORMULA rows, before any calibration is applied to them.
+    const energyDays: EnergyDay[] = allRows.map((r) => ({
+        date: r.date,
+        calories: r.calories,
+        active_kcal: r.active_kcal,
+        bmr_kcal: r.bmr_kcal,
+        tef_kcal: r.tef_kcal,
+        counted: r.counts_in_calibration === true,
+    }));
+    const calibration = buildCalibration(
+        energyDays,
+        allWeighIns,
+        endDate,
+        profile?.resting_basis === "calibrated" ? "calibrated" : "formula",
+        model,
+    );
+    const metabolism = metabolismSeries(
+        energyDays,
+        allWeighIns,
+        allRows.filter((r) => r.date >= startDate).map((r) => r.date),
+    );
+    if (calibration.applied && calibration.implied_kcal_per_day != null) {
+        for (const row of allRows) {
+            if (row.bmr_kcal == null) continue;
+            const baseline = calibratedBaseline(
+                row.bmr_kcal,
+                calibration.implied_kcal_per_day,
+            ).kcal;
+            row.bmr_kcal = baseline;
+            row.burn_kcal = dailyBurn(baseline, row.active_kcal, row.tef_kcal);
+            row.balance_g =
+                row.mealCount > 0
+                    ? balanceGrams(row.calories, row.burn_kcal)
+                    : null;
+            row.balance_kcal =
+                row.mealCount > 0
+                    ? Math.round(row.calories - row.burn_kcal)
+                    : null;
+            // No stored goal: the break-even intake on the calibrated
+            // baseline (active counted once, grossed up for digestion).
+            if (goals?.daily_calories == null || goals.daily_calories <= 0)
+                row.goal_calories = breakEvenKcal(baseline, row.active_kcal);
+        }
+    }
     const dayRows = allRows.filter((r) => r.date >= startDate);
     const inRange = (iso: string) => {
         const d = dateInTz(iso, tz);
@@ -259,6 +408,51 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         startDate,
         endDate,
         days,
+        calibration,
+        // Everything the "How this is calculated" panel shows: the rules,
+        // the constants, the BMR inputs and every day of the window with
+        // its verdict, so each figure can be traced back to logged data.
+        calibrationDetail: {
+            constants: {
+                window_days: model.windowDays,
+                kcal_per_gram: model.kcalPerGram,
+                // Digestion: per-macro shares of kcal (null tef_fraction),
+                // with TEF_FRACTION for a day without macros.
+                tef_fraction: model.tefFraction,
+                tef_rates: {
+                    protein: TEF_PROTEIN,
+                    carbs: TEF_CARBS,
+                    fat: TEF_FAT,
+                    fallback: TEF_FRACTION,
+                },
+                min_span_days: MIN_SPAN,
+                min_weighin_days: MIN_WEIGHIN_DAYS,
+                min_coverage: MIN_COVERAGE,
+                max_uncertainty_kcal: MAX_UNCERTAINTY_KCAL,
+                clamp: CLAMP,
+                min_day_entries: MIN_DAY_ENTRIES,
+                min_day_share: MIN_DAY_SHARE,
+            },
+            typical_day_kcal: typicalKcal,
+            min_day_kcal:
+                typicalKcal == null
+                    ? null
+                    : Math.round(typicalKcal * MIN_DAY_SHARE),
+            has_watch: hasWatch,
+            bmr_inputs: bmrInputs(body, weightsForBmr, endDate),
+            days: allRows
+                .filter((r) => r.date >= windowFrom && r.date <= windowTo)
+                .map((r) => ({
+                    date: r.date,
+                    calories: r.calories,
+                    entries: r.mealCount,
+                    active_kcal: r.active_kcal,
+                    bmr_kcal: energyDays.find((d) => d.date === r.date)!
+                        .bmr_kcal,
+                    counted: r.counts_in_calibration === true,
+                    reason: r.count_reason!,
+                })),
+        },
         body,
         weightStats: buildWeightStats(
             weighIns,
@@ -267,6 +461,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
             goals,
             activeByDate.get(endDate) ?? null,
             endDate,
+            allRows.find((r) => r.date === endDate)?.tef_kcal ?? 0,
         ),
         weightWindowStart: weightStart,
         goals: goals
@@ -286,14 +481,14 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         // Built field by field (dashboard-stats.ts), so the bucket's
         // mealTypes Set — which JSON.stringify renders as {} — never ships.
         daily: dayRows,
-        // The period's estimated change next to what the scale did. The
-        // weigh-ins cover max(days, 90), so every range has them all.
-        estimateVsScale: buildEstimateVsScale(
-            dayRows,
-            weighIns,
-            startDate,
-            endDate,
-        ),
+        // The calibration window (28 days ending yesterday) as the
+        // Estimate-vs-reality card shows it: the same days, trend and offset
+        // as `calibration`, so the card and the Body tab cannot disagree.
+        estimateVsScale: buildEstimateVsScale(calibration.window),
+        // One point per day of the range: the formula BMR next to the
+        // baseline the 28 days before it imply. The last point is exactly
+        // the Body tab's calibrated figure.
+        metabolism,
         // Today's two 7-day figures, from the widened rows: fixed to the
         // last week whatever the selected range.
         last7: buildLast7(allRows, weighIns, endDate),
@@ -302,13 +497,15 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         // `daily` above is unchanged and still feeds the tiles and Today.
         granularity: granularityFor(days),
         trendBuckets: groupDays(dayRows, granularityFor(days)),
-        weights: weight.map((w) => ({
-            // Local calendar day, resolved here: the page slicing the UTC
-            // ISO string would file an evening weigh-in under tomorrow.
-            date: dateInTz(w.logged_at, tz),
-            logged_at: w.logged_at,
-            weight_g: w.weight_g,
-        })),
+        weights: weight
+            .filter((w) => dateInTz(w.logged_at, tz) >= weightStart)
+            .map((w) => ({
+                // Local calendar day, resolved here: the page slicing the UTC
+                // ISO string would file an evening weigh-in under tomorrow.
+                date: dateInTz(w.logged_at, tz),
+                logged_at: w.logged_at,
+                weight_g: w.weight_g,
+            })),
         // Only the range's meals: the fetch reaches back further for last7.
         meals: meals
             .filter((m) => inRange(m.logged_at))
@@ -329,6 +526,41 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
     };
 }
 
+/** The what-if lab's query: window (21-56 days), k (5.0-7.7 kcal/g) and tef
+ *  ("macros" or a share 0.05-0.15). Null when any value is out of range. */
+export function parseModelParams(
+    q: Record<string, string | undefined>,
+): ModelParams | null {
+    const windowDays =
+        q.window == null ? DEFAULT_PARAMS.windowDays : Number(q.window);
+    const kcalPerGram = q.k == null ? DEFAULT_PARAMS.kcalPerGram : Number(q.k);
+    const tefFraction =
+        q.tef == null || q.tef === "macros" ? null : Number(q.tef);
+    if (
+        !Number.isInteger(windowDays) ||
+        windowDays < MIN_WINDOW_DAYS ||
+        windowDays > MAX_WINDOW_DAYS ||
+        !Number.isFinite(kcalPerGram) ||
+        kcalPerGram < 5 ||
+        kcalPerGram > 7.7 ||
+        (tefFraction != null &&
+            (!Number.isFinite(tefFraction) ||
+                tefFraction < 0.05 ||
+                tefFraction > 0.15))
+    )
+        return null;
+    return { windowDays, kcalPerGram, tefFraction };
+}
+
+/** Default and custom calibrations side by side, for the what-if lab. */
+export function whatIf(inputs: DashboardInputs, params: ModelParams) {
+    const pick = (model: ModelParams) => {
+        const p = buildDashboardPayload({ ...inputs, model });
+        return { params: model, calibration: p.calibration };
+    };
+    return { default: pick(DEFAULT_PARAMS), custom: pick(params) };
+}
+
 /** Validate and save the Body form (same rules as set_body_profile). */
 export async function saveBodyDetails(
     userId: string,
@@ -336,7 +568,21 @@ export async function saveBodyDetails(
 ): Promise<{ status: 200 | 400; json: Record<string, unknown> }> {
     const profile = await getProfile(userId);
     const today = todayInTz(timezoneFromProfile(profile) ?? "UTC");
-    const checked = checkBodyPatch(input, today);
+    const { resting_basis, ...bodyInput } = input;
+    if (
+        resting_basis !== undefined &&
+        resting_basis !== "formula" &&
+        resting_basis !== "calibrated"
+    )
+        return {
+            status: 400,
+            json: {
+                error: "invalid_request",
+                error_description:
+                    "resting_basis must be formula or calibrated.",
+            },
+        };
+    const checked = checkBodyPatch(bodyInput, today);
     if (!checked.ok)
         return {
             status: 400,
@@ -345,7 +591,10 @@ export async function saveBodyDetails(
                 error_description: checked.error,
             },
         };
-    const saved = await upsertProfile(userId, checked.patch);
+    const saved = await upsertProfile(userId, {
+        ...checked.patch,
+        ...(resting_basis ? { resting_basis } : {}),
+    });
     return { status: 200, json: { ok: true, body: bodyOf(saved) } };
 }
 
@@ -1030,6 +1279,17 @@ export function createDashboardRouter(): Hono {
         );
     });
 
+    // The what-if lab: the calibration under other model parameters, next
+    // to the default. Read-only — nothing here reaches goals, balances or
+    // the MCP tools, which always use the defaults.
+    dash.get("/api/dashboard/whatif", authenticateBearer, async (c) => {
+        const userId = c.get("userId") as string;
+        const params = parseModelParams(c.req.query());
+        if (!params) return c.json({ error: "invalid_request" }, 400);
+        const inputs = await loadDashboardInputs(userId, 30);
+        return c.json(whatIf(inputs, params));
+    });
+
     // Save body details from the page's Body form. Same validation as the
     // set_body_profile tool (checkBodyPatch), so the two doors agree.
     dash.post("/api/dashboard/body", authenticateBearer, async (c) => {
@@ -1046,6 +1306,40 @@ export function createDashboardRouter(): Hono {
         const res = await saveBodyDetails(userId, body);
         return c.json(res.json, res.status);
     });
+
+    dash.post(
+        "/api/dashboard/calibration/day",
+        authenticateBearer,
+        async (c) => {
+            const body = await readObject(c);
+            if (
+                !body ||
+                typeof body.date !== "string" ||
+                !/^\d{4}-\d{2}-\d{2}$/.test(body.date) ||
+                !Number.isFinite(Date.parse(`${body.date}T00:00:00Z`)) ||
+                new Date(`${body.date}T00:00:00Z`)
+                    .toISOString()
+                    .slice(0, 10) !== body.date ||
+                // true = count, false = exclude, null = back to automatic.
+                !(body.counted === null || typeof body.counted === "boolean")
+            )
+                return c.json({ error: "invalid_request" }, 400);
+            const userId = c.get("userId") as string;
+            const profile = await getProfile(userId);
+            if (body.date > todayInTz(timezoneFromProfile(profile) ?? "UTC"))
+                return c.json({ error: "invalid_request" }, 400);
+            try {
+                await setCalibrationDayOverride(
+                    userId,
+                    body.date,
+                    body.counted as boolean | null,
+                );
+            } catch {
+                return c.json({ error: "unavailable" }, 503);
+            }
+            return c.json({ ok: true });
+        },
+    );
 
     // Set (or reset to the estimated burn) the daily calorie goal.
     dash.post("/api/dashboard/goal", authenticateBearer, async (c) => {

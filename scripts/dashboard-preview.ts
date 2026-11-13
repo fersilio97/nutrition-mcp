@@ -12,11 +12,11 @@
 // any Body form saves; a load with none keeps the current state (single-user
 // dev tool, held in memory):
 //
-//   ?scenario=full|over-goal|no-body|no-goals|empty|lb|calibrate
+//   ?scenario=full|over-goal|no-body|no-goals|empty|lb|calibrate|offset
 //   ?delay=2000        delay every data response (shows the skeletons)
 //   ?fail=500|401      fail every data response
 //
-// Writes (Body form, "Log weight", meal edits) run the production validators
+// Writes (Body form, "Log weight", meal edits, calibration skips) run the production validators
 // and are kept in memory per scenario; a page load with params forgets them.
 //
 // Login error states: email 429@test → 429, bad@test → 401.
@@ -38,10 +38,13 @@ import {
     checkCalorieGoal,
     DASHBOARD_CSP,
     dashboardFontResponse,
+    parseModelParams,
+    whatIf,
 } from "../src/dashboard.js";
 import {
     SCENARIOS,
     isScenario,
+    previewInputsFor,
     previewPayload,
     scenarioTz,
     scenarioWithEdits,
@@ -165,6 +168,17 @@ const server = Bun.serve({
             return json({ access_token: TOKEN });
         }
 
+        if (req.method === "GET" && path === "/api/dashboard/whatif") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const params = parseModelParams(
+                Object.fromEntries(url.searchParams),
+            );
+            if (!params) return json({ error: "invalid_request" }, 400);
+            return json(
+                whatIf(previewInputsFor(state.scenario, 30, edits()), params),
+            );
+        }
+
         if (req.method === "GET" && path === "/api/dashboard/data") {
             if (!authed(req)) return json({ error: "invalid_token" }, 401);
             if (state.delay) await Bun.sleep(state.delay);
@@ -185,14 +199,47 @@ const server = Bun.serve({
             const b = await readJson(req);
             if (!b) return json({ error: "invalid_request" }, 400);
             const tz = scenarioTz(state.scenario);
-            const checked = checkBodyPatch(b, todayInTz(tz));
+            const { resting_basis, ...bodyInput } = b;
+            if (
+                resting_basis !== undefined &&
+                resting_basis !== "formula" &&
+                resting_basis !== "calibrated"
+            )
+                return invalid("resting_basis must be formula or calibrated.");
+            const checked = checkBodyPatch(bodyInput, todayInTz(tz));
             if (!checked.ok) return invalid(checked.error);
             const e = edits();
             const current =
                 e.body ??
                 bodyOf(buildScenario(state.scenario, todayInTz(tz)).profile);
             e.body = { ...current, ...checked.patch };
+            if (resting_basis) e.restingBasis = resting_basis;
             return json({ ok: true, body: e.body });
+        }
+
+        if (
+            req.method === "POST" &&
+            path === "/api/dashboard/calibration/day"
+        ) {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const b = await readJson(req);
+            if (
+                !b ||
+                typeof b.date !== "string" ||
+                !/^\d{4}-\d{2}-\d{2}$/.test(b.date) ||
+                !Number.isFinite(Date.parse(`${b.date}T00:00:00Z`)) ||
+                new Date(`${b.date}T00:00:00Z`).toISOString().slice(0, 10) !==
+                    b.date ||
+                !(b.counted === null || typeof b.counted === "boolean")
+            )
+                return json({ error: "invalid_request" }, 400);
+            const tz = scenarioTz(state.scenario);
+            if (b.date > todayInTz(tz))
+                return json({ error: "invalid_request" }, 400);
+            const overrides = (edits().dayOverrides ??= {});
+            if (b.counted === null) delete overrides[b.date];
+            else overrides[b.date] = b.counted;
+            return json({ ok: true });
         }
 
         if (req.method === "POST" && path === "/api/dashboard/goal") {

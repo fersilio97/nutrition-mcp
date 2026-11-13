@@ -7,6 +7,7 @@ import {
     granularityFor,
     groupDays,
 } from "./dashboard-stats.js";
+import { energyWindow } from "./calibration.js";
 import { buildDailyBuckets } from "./insights.js";
 import type { Meal, NutritionGoals } from "./supabase.js";
 
@@ -78,7 +79,7 @@ describe("buildDashboardDays", () => {
         expect(days[0]!.active_kcal).toBeNull();
     });
 
-    test("burn and balance: BMR × 1.2 + active, ÷ 7.7 kcal/g", () => {
+    test("burn and balance: BMR + active + 10% TEF, ÷ 6.0 kcal/g", () => {
         const days = buildDashboardDays(
             buckets,
             new Map([["2026-11-08", 300]]),
@@ -87,11 +88,12 @@ describe("buildDashboardDays", () => {
             [{ date: "2026-11-01", weight_g: 80_000 }],
             "2026-11-09",
         );
-        // BMR 1768 (80 kg, 178 cm, 30 y, male) → 1768 resting + 300 = 2068.
+        // BMR 1768 (80 kg, 178 cm, 30 y, male) + 300 active + 10% of the
+        // 2000 eaten (TEF) = 2268.
         expect(days[0]!.bmr_kcal).toBe(1768);
-        expect(days[0]!.burn_kcal).toBe(2068);
-        // 2000 eaten − 2068 burned = −68 kcal → −9 g.
-        expect(days[0]!.balance_g).toBe(-9);
+        expect(days[0]!.burn_kcal).toBe(2268);
+        // 2000 eaten − 2268 burned = −268 kcal → −45 g at 6 kcal/g.
+        expect(days[0]!.balance_g).toBe(-45);
     });
 
     test("no meals → balance unknown, not a full day's deficit", () => {
@@ -171,169 +173,56 @@ describe("buildWeightStats", () => {
 });
 
 describe("buildEstimateVsScale", () => {
-    // Day rows from `start`, one per balance (null = an unlogged day). The
-    // last row is today, still in progress.
-    const rows = (start: string, balances: (number | null)[]) =>
-        balances.map((balance_g, i) => {
-            const d = new Date(`${start}T00:00:00Z`);
-            d.setUTCDate(d.getUTCDate() + i);
-            return {
-                date: d.toISOString().slice(0, 10),
-                balance_g,
-                in_progress: i === balances.length - 1,
-            };
-        });
+    const day = (i: number, counted = true) => {
+        const d = new Date(Date.parse("2026-10-01T00:00:00Z") + i * 86_400_000)
+            .toISOString()
+            .slice(0, 10);
+        return {
+            date: d,
+            calories: 2000,
+            active_kcal: 300,
+            bmr_kcal: 1700,
+            tef_kcal: 200,
+            counted,
+        };
+    };
+    const iso = (i: number) => day(i).date;
 
-    test("fully covered span: lost less than estimated → burn runs high", () => {
-        // Weigh-ins Oct 20 and Nov 9 → a 20-day span; days Oct 20 … Nov 8
-        // (20 of them) all logged at −40 g.
-        const r = rows("2026-10-20", [...Array(20).fill(-40), -300]);
-        const s = buildEstimateVsScale(
-            r,
-            [
-                { date: "2026-10-20", weight_g: 84_000 },
-                { date: "2026-11-09", weight_g: 83_600 },
-            ],
-            "2026-10-20",
-            "2026-11-09",
-        );
+    test("is the calibration window: same offset, trend change, days", () => {
+        const days = Array.from({ length: 28 }, (_, i) => day(i));
+        const weighIns = Array.from({ length: 8 }, (_, k) => ({
+            date: iso(k * 3),
+            weight_g: 80_000 - k * 60,
+        }));
+        const w = energyWindow(days, weighIns, iso(0), iso(27));
+        const s = buildEstimateVsScale(w);
         expect(s.status).toBe("ok");
-        expect(s.span_days).toBe(20);
-        expect(s.covered_days).toBe(20);
-        expect(s.actual_g).toBe(-400);
-        expect(s.est_logged_g).toBe(-800);
-        // Fully covered: no scaled figure at all.
-        expect(s.est_scaled_g).toBeNull();
-        expect(s.gap_g).toBe(400);
-        // 400 g × 7.7 ÷ 20 days = 154 kcal/day; positive = estimate HIGH.
-        expect(s.implied_kcal_per_day).toBe(154);
         expect(s.calibrated).toBe(true);
+        expect(s.implied_kcal_per_day).toBe(w.offset_kcal);
+        expect(s.actual_g).toBe(w.trend_change_g);
+        expect(s.covered_days).toBe(21);
+        expect(s.weighin_days).toBe(8);
     });
 
-    test("the mirror case: lost more than estimated → negative (burn low)", () => {
-        const r = rows("2026-10-20", [...Array(20).fill(-40), null]);
-        const s = buildEstimateVsScale(
-            r,
-            [
-                { date: "2026-10-20", weight_g: 84_000 },
-                { date: "2026-11-09", weight_g: 82_800 },
-            ],
-            "2026-10-20",
-            "2026-11-09",
+    test("no weigh-ins / no counted days map to the card's empty states", () => {
+        const none = buildEstimateVsScale(
+            energyWindow([], [], iso(0), iso(27)),
         );
-        expect(s.gap_g).toBe(-400);
-        expect(s.implied_kcal_per_day).toBe(-154);
-    });
-
-    test("gappy span: scaled figure beside the logged one; gap uses scaled", () => {
-        // 20-day span, 10 logged days at −50 g → logged −500, scaled −1000.
-        const balances: (number | null)[] = [];
-        for (let i = 0; i < 20; i++) balances.push(i % 2 ? null : -50);
-        balances.push(null);
-        const s = buildEstimateVsScale(
-            rows("2026-10-20", balances),
-            [
-                { date: "2026-10-20", weight_g: 84_000 },
-                { date: "2026-11-09", weight_g: 83_200 },
-            ],
-            "2026-10-20",
-            "2026-11-09",
+        expect(none.status).toBe("no_weighins");
+        const uncounted = buildEstimateVsScale(
+            energyWindow(
+                [day(1, false)],
+                [
+                    { date: iso(0), weight_g: 80_000 },
+                    { date: iso(5), weight_g: 80_000 },
+                ],
+                iso(0),
+                iso(27),
+            ),
         );
-        expect(s.status).toBe("ok");
-        expect(s.covered_days).toBe(10);
-        expect(s.est_logged_g).toBe(-500);
-        expect(s.est_scaled_g).toBe(-1000);
-        expect(s.gap_g).toBe(200);
-        // 50% logged: the offset is computed but must not be stated.
-        expect(s.calibrated).toBe(false);
-    });
-
-    test("a short span is never calibrated, even fully logged", () => {
-        const s = buildEstimateVsScale(
-            rows("2026-11-01", [-10, -10, -10, -10, -10, -10, -10, -10, null]),
-            [
-                { date: "2026-11-01", weight_g: 84_000 },
-                { date: "2026-11-08", weight_g: 83_900 },
-            ],
-            "2026-11-01",
-            "2026-11-09",
-        );
-        expect(s.span_days).toBe(7);
-        expect(s.covered_days).toBe(7);
-        expect(s.calibrated).toBe(false);
-    });
-
-    test("the last weigh-in's own day and today's partial day are excluded", () => {
-        // Weigh-ins Nov 1 and Nov 9 (today). Nov 9's −999 must not count:
-        // it is both the last day and in progress.
-        const r = rows(
-            "2026-11-01",
-            [-10, -10, -10, -10, -10, -10, -10, -10, -999],
-        );
-        const s = buildEstimateVsScale(
-            r,
-            [
-                { date: "2026-11-01", weight_g: 84_000 },
-                { date: "2026-11-09", weight_g: 83_900 },
-            ],
-            "2026-11-01",
-            "2026-11-09",
-        );
-        expect(s.est_logged_g).toBe(-80);
-        expect(s.covered_days).toBe(8);
-    });
-
-    test("< 2 weigh-ins (or two on one date) → no_weighins, every field null", () => {
-        const r = rows("2026-11-01", [-10, -10, null]);
-        for (const w of [
-            [],
-            [{ date: "2026-11-02", weight_g: 80_000 }],
-            [
-                { date: "2026-11-02", weight_g: 80_000 },
-                { date: "2026-11-02", weight_g: 79_800 },
-            ],
-            // A weigh-in outside the period does not count.
-            [
-                { date: "2026-10-01", weight_g: 80_000 },
-                { date: "2026-11-02", weight_g: 79_800 },
-            ],
-        ]) {
-            const s = buildEstimateVsScale(r, w, "2026-11-01", "2026-11-03");
-            expect(s).toEqual({
-                status: "no_weighins",
-                first_date: null,
-                last_date: null,
-                span_days: null,
-                covered_days: null,
-                actual_g: null,
-                est_logged_g: null,
-                est_scaled_g: null,
-                gap_g: null,
-                implied_kcal_per_day: null,
-                calibrated: false,
-            });
-        }
-    });
-
-    test("no balance in the span (no body details) → no_estimate, scale only", () => {
-        const s = buildEstimateVsScale(
-            rows("2026-11-01", [null, null, null, null]),
-            [
-                { date: "2026-11-01", weight_g: 80_000 },
-                { date: "2026-11-03", weight_g: 79_500 },
-            ],
-            "2026-11-01",
-            "2026-11-04",
-        );
-        expect(s.status).toBe("no_estimate");
-        expect(s.actual_g).toBe(-500);
-        expect(s.covered_days).toBe(0);
-        expect(s.est_logged_g).toBeNull();
-        expect(s.implied_kcal_per_day).toBeNull();
-        // Same key set as every other state.
-        expect(Object.keys(s).sort()).toEqual(
-            Object.keys(buildEstimateVsScale([], [], "a", "b")).sort(),
-        );
+        expect(uncounted.status).toBe("no_estimate");
+        expect(uncounted.implied_kcal_per_day).toBeNull();
+        expect(Object.keys(uncounted).sort()).toEqual(Object.keys(none).sort());
     });
 });
 
@@ -348,7 +237,17 @@ describe("buildLast7", () => {
             balance_kcal: balance_g == null ? null : balance_g * 10,
             burn_kcal: noBurn ? null : 2000,
             in_progress: i === balances.length - 1,
+            counts_in_calibration: true,
         }));
+
+    test("a day the calibration leaves out (partly logged) is not counted", () => {
+        const rows = days([-10, -20, -30, -40, -50, -60, -70, -80, -500]);
+        rows[3]!.counts_in_calibration = false; // Nov 4: looks partial
+        const r = buildLast7(rows, [], "2026-11-09");
+        // Nov 2 … Nov 8 is 7 complete days; Nov 4 is left out → 6.
+        expect(r.est_days).toBe(6);
+        expect(r.est_net_g).toBe(-310);
+    });
 
     test("scale change in grams and the net estimate over the 7 complete days", () => {
         // Window Nov 2 … Nov 9; complete days Nov 2 … Nov 8.
@@ -423,9 +322,9 @@ describe("balance_kcal on each day", () => {
             [{ date: "2026-11-01", weight_g: 80_000 }],
             "2026-11-09",
         );
-        // 2000 eaten − (1768 + 300) = −68 kcal → −9 g.
-        expect(days[0]!.balance_kcal).toBe(-68);
-        expect(days[0]!.balance_g).toBe(-9);
+        // 2000 eaten − (1768 + 300 + 200 TEF) = −268 kcal → −45 g.
+        expect(days[0]!.balance_kcal).toBe(-268);
+        expect(days[0]!.balance_g).toBe(-45);
         // Nov 9: nothing eaten → both unknown.
         expect(days[1]!.balance_kcal).toBeNull();
         expect(days[1]!.balance_g).toBeNull();
@@ -559,11 +458,11 @@ describe("calorie goal default and editor", () => {
         expect(withBurnDefault(g, 1740)).toBe(g);
     });
 
-    test("no goal defaults the baseline to resting burn; no body data leaves it unset", async () => {
+    test("no goal defaults the baseline to break-even (resting ÷ 0.9 for TEF); no body data leaves it unset", async () => {
         const { withBurnDefault } = await import("./dashboard-stats.js");
-        expect(withBurnDefault(null, 1739.6)?.daily_calories).toBe(1740);
-        expect(withBurnDefault(blank(null), 1740)?.daily_calories).toBe(1740);
-        expect(withBurnDefault(blank(0), 1740)?.daily_calories).toBe(1740);
+        expect(withBurnDefault(null, 1739.6)?.daily_calories).toBe(1933);
+        expect(withBurnDefault(blank(null), 1740)?.daily_calories).toBe(1933);
+        expect(withBurnDefault(blank(0), 1740)?.daily_calories).toBe(1933);
         expect(withBurnDefault(null, null)).toBeNull();
     });
 
