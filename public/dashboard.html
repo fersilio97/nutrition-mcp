@@ -4508,36 +4508,15 @@
                                   1,
                               ],
                     ];
-                    if (r.goal_calories)
-                        rows.push([
-                            null,
-                            "Goal" + per + (goalCustom() ? "" : " (est. burn)"),
-                            fmt(r.goal_calories),
-                        ]);
-                    if (isOver(r))
-                        rows.push([
-                            null,
-                            "Over goal by",
-                            fmt(r.calories - r.goal_calories) + " kcal",
-                            1,
-                        ]);
+                    // Same card as the Trends chart: Eaten, then the burn
+                    // built from its parts, then deficit/surplus = eaten −
+                    // est. burn. Goal comparisons stay out of it.
                     if (r.burn_kcal) {
                         if (r.bmr_kcal != null) {
                             rows.push([
                                 "cal2-area-base",
                                 baselineLabel(),
                                 fmt(r.bmr_kcal),
-                            ]);
-                            if (data.calibration && data.calibration.applied)
-                                rows.push([
-                                    null,
-                                    "BMR (formula reference)",
-                                    fmt(data.calibration.bmr_kcal),
-                                ]);
-                            rows.push([
-                                "cal2-area-workout",
-                                "Workout / active",
-                                "+" + fmt(r.active_kcal || 0),
                             ]);
                             // Whatever the burn holds beyond baseline and
                             // workout is digestion, as in the Energy chart.
@@ -4554,48 +4533,39 @@
                                         ),
                                     ),
                             ]);
+                            rows.push([
+                                "cal2-area-workout",
+                                "Workout / active",
+                                "+" + fmt(r.active_kcal || 0),
+                            ]);
                         }
                         rows.push([
                             "cal2-burn-top",
-                            "Est. burn total",
-                            fmt(r.burn_kcal),
+                            "Est. burn" + per,
+                            fmt(r.burn_kcal) + " kcal",
+                            1,
+                        ]);
+                    } else if (r.goal_calories) {
+                        rows.push([
+                            null,
+                            "Goal" + per,
+                            fmt(r.goal_calories) + " kcal",
                         ]);
                     }
                     if (r.balance_kcal != null)
                         rows.push([
-                            r.balance_kcal >= 0 ? "s-gain" : "s-loss",
-                            "Balance vs est. burn" + per,
-                            fmtSigned(r.balance_kcal) + " kcal",
+                            r.balance_kcal >= 0 ? "cal2-surplus" : "s-loss",
+                            (r.balance_kcal < 0 ? "Deficit" : "Surplus") + per,
+                            fmt(Math.abs(r.balance_kcal)) + " kcal",
+                            1,
                         ]);
-                    // Burn = break-even, goal = target: the difference is the
-                    // deficit the goal plans for, so it sits right under the
-                    // balance (balance = over-goal + planned deficit unused).
-                    if (r.burn_kcal && r.goal_calories) {
-                        const gap = r.burn_kcal - r.goal_calories;
-                        if (gap !== 0)
-                            rows.push([
-                                null,
-                                "Planned deficit (burn − goal)",
-                                fmtSigned(gap) + " kcal",
-                            ]);
-                    }
                     if (r.balance_g != null)
                         rows.push([
                             null,
                             "Est. change" + per,
                             fmtSigned(r.balance_g) + " g",
                         ]);
-                    rows.push(
-                        r.avg
-                            ? [null, "Logged", loggedText(r)]
-                            : [null, "Meals", String(r.mealCount)],
-                    );
-                    if (r.burn_kcal && r.goal_calories)
-                        rows.push([
-                            null,
-                            "Over goal compares with your goal; Balance compares with est. burn (break-even). The gap between them is your planned deficit.",
-                            "",
-                        ]);
+                    if (r.avg) rows.push([null, "Logged", loggedText(r)]);
                     return tipContent(r.title, rows);
                 }
                 function mealTypeLabel(t) {
@@ -7241,18 +7211,18 @@
                                         : fmt(p.baseline) + " kcal",
                                 ],
                                 [
-                                    "cal2-area-workout",
-                                    "Workout / active",
-                                    p.workout == null
-                                        ? "—"
-                                        : fmt(p.workout) + " kcal",
-                                ],
-                                [
                                     "cal2-area-digestion",
                                     "Digestion",
                                     p.digestion == null
                                         ? "—"
                                         : fmt(p.digestion) + " kcal",
+                                ],
+                                [
+                                    "cal2-area-workout",
+                                    "Workout / active",
+                                    p.workout == null
+                                        ? "—"
+                                        : fmt(p.workout) + " kcal",
                                 ],
                                 [
                                     "cal2-burn-top",
