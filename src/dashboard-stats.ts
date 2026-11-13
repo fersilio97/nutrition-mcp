@@ -57,9 +57,6 @@ export interface DashboardDay {
     balance_kcal: number | null;
     /** True for today: the day is still running, so its balance is partial. */
     in_progress: boolean;
-    /** Breakfast, lunch and dinner are all logged: the automatic "complete
-     *  day" rule for the calibration. */
-    meals_complete: boolean;
     /** The user's manual choice for the calibration (true = count, false =
      *  exclude), or null to follow the automatic rule. */
     count_override?: boolean | null;
@@ -69,24 +66,64 @@ export interface DashboardDay {
 }
 
 export type CountReason =
-    | "auto_complete" // breakfast, lunch and dinner logged
-    | "auto_incomplete" // a main meal is missing
+    | "auto_complete" // 2+ entries and at least half a typical day's kcal
+    | "auto_few_entries" // fewer than 2 entries logged
+    | "auto_low_kcal" // under half the typical logged day
     | "manual_on"
     | "manual_off"
     | "in_progress"
     | "no_meals"
     | "no_watch"; // the user has a watch, but this day did not sync
 
+/** Entries a day needs before it looks completely logged. */
+export const MIN_DAY_ENTRIES = 2;
+/** ...and the share of a typical logged day's kcal it needs. */
+export const MIN_DAY_SHARE = 0.5;
+/** Logged days needed before "typical" means anything. */
+const MIN_TYPICAL_DAYS = 7;
+
+/**
+ * The typical logged day: median kcal of the complete days with meals in
+ * [from, to]. A median, so a feast or a half-logged day does not move it.
+ * Null with fewer than 7 such days (the kcal test is then skipped).
+ */
+export function typicalDayKcal(
+    rows: Pick<
+        DashboardDay,
+        "date" | "calories" | "mealCount" | "in_progress"
+    >[],
+    from: string,
+    to: string,
+): number | null {
+    const kcal = rows
+        .filter(
+            (r) =>
+                r.date >= from &&
+                r.date <= to &&
+                r.mealCount > 0 &&
+                !r.in_progress,
+        )
+        .map((r) => r.calories)
+        .sort((a, b) => a - b);
+    if (kcal.length < MIN_TYPICAL_DAYS) return null;
+    const mid = kcal.length >> 1;
+    return Math.round(
+        kcal.length % 2 ? kcal[mid]! : (kcal[mid - 1]! + kcal[mid]!) / 2,
+    );
+}
+
 /** Whether a day counts in the calibration. Today, an empty day and (for a
  *  user who syncs a watch) an unsynced day never count: a null active kcal
- *  is unknown, not zero. Otherwise the manual choice wins over the rule. */
+ *  is unknown, not zero. Otherwise the manual choice wins over the rule:
+ *  2+ entries and at least half of the typical logged day's kcal. */
 export function countDay(
     row: Pick<
         DashboardDay,
-        "in_progress" | "mealCount" | "active_kcal" | "meals_complete"
+        "in_progress" | "mealCount" | "active_kcal" | "calories"
     >,
     override: boolean | null,
     hasWatch: boolean,
+    typicalKcal: number | null,
 ): { counted: boolean; reason: CountReason } {
     if (row.in_progress) return { counted: false, reason: "in_progress" };
     if (!row.mealCount) return { counted: false, reason: "no_meals" };
@@ -94,12 +131,12 @@ export function countDay(
         return { counted: false, reason: "no_watch" };
     if (override === true) return { counted: true, reason: "manual_on" };
     if (override === false) return { counted: false, reason: "manual_off" };
-    return row.meals_complete
-        ? { counted: true, reason: "auto_complete" }
-        : { counted: false, reason: "auto_incomplete" };
+    if (row.mealCount < MIN_DAY_ENTRIES)
+        return { counted: false, reason: "auto_few_entries" };
+    if (typicalKcal != null && row.calories < typicalKcal * MIN_DAY_SHARE)
+        return { counted: false, reason: "auto_low_kcal" };
+    return { counted: true, reason: "auto_complete" };
 }
-
-const MAIN_MEALS = ["breakfast", "lunch", "dinner"];
 
 /** The calorie goal the dashboard shows. A stored goal wins; with none set,
  *  the baseline is the break-even intake on a rest day — resting ÷ (1 − TEF),
@@ -174,7 +211,6 @@ export function buildDashboardDays(
                     ? Math.round(b.calories - burn)
                     : null,
             in_progress: b.date === today,
-            meals_complete: MAIN_MEALS.every((t) => b.mealTypes.has(t)),
         };
     });
 }

@@ -7,7 +7,7 @@ import {
     type EnergyDay,
 } from "./calibration.js";
 import { buildDashboardPayload, dashboardWindow } from "./dashboard.js";
-import { countDay } from "./dashboard-stats.js";
+import { countDay, typicalDayKcal } from "./dashboard-stats.js";
 import { buildScenario, previewInputs } from "./dashboard-fixture.js";
 
 const iso = (n: number) =>
@@ -131,14 +131,14 @@ describe("calibratedBaseline", () => {
 });
 
 describe("buildCalibration", () => {
-    test("28 days ending yesterday; applied only on the calibrated basis", () => {
-        const d = days(40);
-        const w = weighIns(39, 3, -20);
-        const today = iso(29);
+    test("42 days ending yesterday; applied only on the calibrated basis", () => {
+        const d = days(50);
+        const w = weighIns(49, 3, -20);
+        const today = iso(43);
         const formula = buildCalibration(d, w, today, "formula");
         const calibrated = buildCalibration(d, w, today, "calibrated");
         expect(formula.window.from).toBe(iso(1));
-        expect(formula.window.to).toBe(iso(28));
+        expect(formula.window.to).toBe(iso(42));
         expect(formula.status).toBe("ok");
         expect(formula.applied).toBe(false);
         expect(calibrated.applied).toBe(true);
@@ -146,7 +146,7 @@ describe("buildCalibration", () => {
     });
 
     test("falls back to the formula BMR when the window does not qualify", () => {
-        const c = buildCalibration(days(40), [], iso(29), "calibrated");
+        const c = buildCalibration(days(50), [], iso(43), "calibrated");
         expect(c.status).toBe("no_weighins");
         expect(c.applied).toBe(false);
         expect(c.resting_kcal).toBe(c.bmr_kcal);
@@ -165,41 +165,71 @@ describe("metabolismSeries", () => {
     });
 });
 
+describe("typicalDayKcal", () => {
+    const r = (i: number, calories: number, mealCount = 3) => ({
+        date: iso(i),
+        calories,
+        mealCount,
+        in_progress: false,
+    });
+    test("median of logged days in the window, null under 7 days", () => {
+        const rows = [1800, 2000, 1900, 300, 2100, 4000, 1950].map((k, i) =>
+            r(i, k),
+        );
+        expect(typicalDayKcal(rows, iso(0), iso(6))).toBe(1950);
+        expect(typicalDayKcal(rows.slice(0, 6), iso(0), iso(6))).toBeNull();
+        // Days without meals are not "typical" days at 0 kcal.
+        expect(typicalDayKcal([...rows, r(7, 0, 0)], iso(0), iso(7))).toBe(
+            1950,
+        );
+    });
+});
+
 describe("countDay", () => {
     const row = {
         in_progress: false,
         mealCount: 3,
         active_kcal: 300 as number | null,
-        meals_complete: true,
+        calories: 1900,
     };
-    test("automatic: breakfast, lunch and dinner logged", () => {
-        expect(countDay(row, null, true).counted).toBe(true);
-        expect(countDay({ ...row, meals_complete: false }, null, true)).toEqual(
-            {
-                counted: false,
-                reason: "auto_incomplete",
-            },
-        );
+    test("automatic: 2+ entries and at least half a typical day", () => {
+        expect(countDay(row, null, true, 2000)).toEqual({
+            counted: true,
+            reason: "auto_complete",
+        });
+        expect(
+            countDay({ ...row, mealCount: 1 }, null, true, 2000).reason,
+        ).toBe("auto_few_entries");
+        expect(
+            countDay({ ...row, calories: 999 }, null, true, 2000).reason,
+        ).toBe("auto_low_kcal");
+        expect(
+            countDay({ ...row, calories: 1000 }, null, true, 2000).counted,
+        ).toBe(true);
+        // No typical day yet: only the entries test applies.
+        expect(
+            countDay({ ...row, calories: 300 }, null, true, null).counted,
+        ).toBe(true);
     });
     test("a manual choice wins over the rule, both ways", () => {
         expect(
-            countDay({ ...row, meals_complete: false }, true, true).reason,
+            countDay({ ...row, mealCount: 1 }, true, true, 2000).reason,
         ).toBe("manual_on");
-        expect(countDay(row, false, true).reason).toBe("manual_off");
+        expect(countDay(row, false, true, 2000).reason).toBe("manual_off");
     });
     test("today, empty days and unsynced watch days never count", () => {
-        expect(countDay({ ...row, in_progress: true }, true, true).reason).toBe(
-            "in_progress",
-        );
-        expect(countDay({ ...row, mealCount: 0 }, true, true).reason).toBe(
-            "no_meals",
-        );
-        expect(countDay({ ...row, active_kcal: null }, true, true).reason).toBe(
-            "no_watch",
-        );
+        expect(
+            countDay({ ...row, in_progress: true }, true, true, 2000).reason,
+        ).toBe("in_progress");
+        expect(
+            countDay({ ...row, mealCount: 0 }, true, true, 2000).reason,
+        ).toBe("no_meals");
+        expect(
+            countDay({ ...row, active_kcal: null }, true, true, 2000).reason,
+        ).toBe("no_watch");
         // No watch at all: a null active is just "no activity data".
         expect(
-            countDay({ ...row, active_kcal: null }, null, false).counted,
+            countDay({ ...row, active_kcal: null }, null, false, 2000).counted,
         ).toBe(true);
     });
 });
@@ -243,7 +273,7 @@ describe("dashboard payload", () => {
         const base = at(30);
         const incomplete = base.daily.find(
             (r) =>
-                r.count_reason === "auto_incomplete" &&
+                r.count_reason === "auto_few_entries" &&
                 r.date >= base.calibration.window.first_date! &&
                 r.date < base.calibration.window.last_date!,
         )!;
@@ -269,12 +299,12 @@ describe("dashboard payload", () => {
 });
 
 describe("dashboardWindow", () => {
-    test("fetches the 28 calibration days before the range's first day", () => {
+    test("fetches the 42 calibration days before the range's first day", () => {
         const w = dashboardWindow("2026-11-11", 7);
         expect(w.startDate).toBe("2026-11-05");
-        expect(w.fetchStart).toBe("2026-10-08");
+        expect(w.fetchStart).toBe("2026-09-24");
         expect(dashboardWindow("2026-11-11", 365).weightFetchStart).toBe(
-            "2025-10-15",
+            "2025-10-01",
         );
     });
 });

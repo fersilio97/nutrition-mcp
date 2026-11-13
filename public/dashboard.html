@@ -2528,6 +2528,103 @@
             details.body-box > summary:hover::after {
                 color: var(--ink);
             }
+            details.calc-box {
+                margin-top: var(--s5);
+            }
+            details.calc-box > summary,
+            .calc-box details > summary {
+                cursor: pointer;
+                list-style: none;
+                font-family: var(--font-mono);
+                font-size: var(--fs-micro, 0.75rem);
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                color: var(--ink-2);
+                padding: var(--s2) 0;
+            }
+            details.calc-box > summary {
+                border-top: 1px solid var(--line);
+                padding-top: var(--s3);
+                color: var(--ink);
+            }
+            details.calc-box > summary::-webkit-details-marker,
+            .calc-box details > summary::-webkit-details-marker {
+                display: none;
+            }
+            details.calc-box > summary::before,
+            .calc-box details > summary::before {
+                content: "+ ";
+            }
+            details.calc-box[open] > summary::before,
+            .calc-box details[open] > summary::before {
+                content: "− ";
+            }
+            .calc-step {
+                margin-top: var(--s4);
+            }
+            .calc-step h3 {
+                margin: 0 0 var(--s2);
+                font-size: 1rem;
+                font-weight: 600;
+            }
+            .calc-step p,
+            .calc-step ul {
+                margin: var(--s2) 0 0;
+                font-size: 0.9rem;
+                line-height: 1.5;
+            }
+            .calc-step ul {
+                padding-left: 0;
+                list-style: none;
+            }
+            .calc-step p:last-child {
+                color: var(--ink-2);
+            }
+            .calc-f {
+                font-family: var(--font-mono);
+                font-size: 0.8rem;
+                background: var(--surface-2);
+                padding: 6px 8px;
+                border-radius: 6px;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+            .calc-table-wrap {
+                overflow-x: auto;
+                max-width: 100%;
+            }
+            .calc-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.8rem;
+                font-variant-numeric: tabular-nums;
+            }
+            .calc-table th,
+            .calc-table td {
+                padding: 4px 8px;
+                border-bottom: 1px solid var(--line);
+                text-align: right;
+                white-space: nowrap;
+            }
+            .calc-table th:first-child,
+            .calc-table td:first-child,
+            .calc-table th:last-child,
+            .calc-table td:last-child {
+                text-align: left;
+            }
+            .calc-table th {
+                font-family: var(--font-mono);
+                font-weight: 400;
+                color: var(--ink-2);
+            }
+            .calc-table tr.off td {
+                color: var(--ink-2);
+            }
+            .calc-foot {
+                margin-top: var(--s4);
+                font-size: 0.8rem;
+                color: var(--ink-2);
+            }
             details.body-box > .note {
                 margin: var(--s3) 0 var(--s4);
             }
@@ -4315,10 +4412,14 @@
                               esc(row.date) +
                               '">Reset to auto</button>'
                             : row.count_reason === "auto_complete"
-                              ? "auto · breakfast, lunch & dinner logged"
-                              : row.count_reason === "auto_incomplete"
-                                ? "auto · a main meal is missing"
-                                : "") +
+                              ? "auto · looks complete"
+                              : row.count_reason === "auto_few_entries"
+                                ? "auto · fewer than 2 entries"
+                                : row.count_reason === "auto_low_kcal"
+                                  ? "auto · under half your typical day (< " +
+                                    fmt(data.calibrationDetail.min_day_kcal) +
+                                    " kcal)"
+                                  : "") +
                         '</span><span class="b-status err" role="status" data-cal-error="' +
                         esc(row.date) +
                         '">' +
@@ -5044,7 +5145,7 @@
                         eyebrow: "Calibration",
                         id: "h-met",
                         title: 'Resting metabolism <span class="est">(estimate)</span>',
-                        note: "Your baseline burn without exercise: the Mifflin-St Jeor formula next to what your meals and weight trend imply, each day calibrated from the 28 days before it. Watch activity and digestion are added on top every day.",
+                        note: "Your baseline burn without exercise: the Mifflin-St Jeor formula next to what your meals and weight trend imply, each day calibrated from the 42 days before it. Watch activity and digestion are added on top every day.",
                         legend: legend([
                             [
                                 '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="met-est"/></svg>',
@@ -5070,9 +5171,368 @@
                         );
                     return (
                         head +
-                        '<div class="plot" id="met-plot"></div><div class="strip two rv" id="met-stats"></div><p class="met-highlight" id="met-today"></p>'
+                        '<div class="plot" id="met-plot"></div><div class="strip two rv" id="met-stats"></div><p class="met-highlight" id="met-today"></p>' +
+                        calcHtml()
                     );
                 }
+                function calcHtml() {
+                    if (!data.calibration || !data.calibrationDetail) return "";
+                    const c = data.calibration,
+                        d = data.calibrationDetail,
+                        w = c.window || {};
+                    const v = (x) => (x == null ? "—" : fmt(x));
+                    const REASON = {
+                        auto_complete: "looks complete",
+                        auto_few_entries: "fewer than 2 entries",
+                        auto_low_kcal: "under half a typical day",
+                        manual_on: "counted by you",
+                        manual_off: "excluded by you",
+                        in_progress: "today",
+                        no_meals: "no meals",
+                        no_watch: "watch not synced",
+                    };
+                    const unit = data.weightUnit;
+                    const kgOf = (g) =>
+                        g == null ? "—" : wfmt(g, unit) + " " + unit;
+                    const days = d.days || [],
+                        counted = days.filter((x) => x.counted).length;
+                    const wi = w.weighins || [],
+                        first = w.first_date ? shortDay(w.first_date) : "—",
+                        last = w.last_date ? shortDay(w.last_date) : "—";
+                    const row = (x) =>
+                        (x.counted ? "<tr><td>" : '<tr class="off"><td>') +
+                        esc(shortDay(x.date)) +
+                        "</td><td>" +
+                        v(x.entries) +
+                        "</td><td>" +
+                        v(x.calories) +
+                        "</td><td>" +
+                        v(x.active_kcal) +
+                        "</td><td>" +
+                        v(x.bmr_kcal) +
+                        "</td><td>" +
+                        (x.counted ? "✓ " : "✗ ") +
+                        esc(REASON[x.reason] || x.reason || "") +
+                        "</td></tr>";
+                    const tbl = (heads, rows) =>
+                        '<div class="calc-table-wrap"><table class="calc-table"><thead><tr>' +
+                        heads.map((x) => "<th>" + x + "</th>").join("") +
+                        "</tr></thead><tbody>" +
+                        rows +
+                        "</tbody></table></div>";
+                    const step = (n, h, f, val, s) =>
+                        '<section class="calc-step"><h3>' +
+                        n +
+                        ". " +
+                        h +
+                        '</h3><div class="calc-f">' +
+                        f +
+                        "</div><p>" +
+                        val +
+                        "</p><p>" +
+                        s +
+                        "</p></section>";
+                    const slope = w.slope_g_per_day,
+                        se = w.se_g_per_day,
+                        intake = w.mean_intake_kcal,
+                        tdee = w.tdee_kcal,
+                        active = w.mean_active_kcal,
+                        tef = w.tef_kcal,
+                        baseline = w.baseline_kcal,
+                        offset = w.offset_kcal;
+                    const checks = [
+                        [
+                            "Span ≥ 21 days",
+                            w.span_days,
+                            d.constants.min_span_days,
+                        ],
+                        [
+                            "Weigh-in days ≥ 4",
+                            w.weighin_days,
+                            d.constants.min_weighin_days,
+                        ],
+                        [
+                            "≥ 70% of span counted",
+                            w.span_days ? w.counted_days / w.span_days : null,
+                            d.constants.min_coverage,
+                        ],
+                        [
+                            "Uncertainty ≤ ±150 kcal/day",
+                            w.uncertainty_kcal,
+                            d.constants.max_uncertainty_kcal,
+                        ],
+                    ];
+                    return (
+                        '<details class="calc-box" id="calc-box"' +
+                        (calcOpen ? " open" : "") +
+                        "><summary>How this is calculated</summary>" +
+                        step(
+                            1,
+                            "Which days count",
+                            "2+ entries and at least half your typical day",
+                            "A day counts automatically when it has at least 2 entries and at least half your typical logged day (median of the last " +
+                                d.constants.window_days +
+                                " days: " +
+                                v(d.typical_day_kcal) +
+                                " kcal → at least " +
+                                v(d.min_day_kcal) +
+                                " kcal). Today, days with no meals" +
+                                (d.has_watch
+                                    ? " and days your watch did not sync"
+                                    : "") +
+                                " never count. You can force any day in or out on the Meals tab.",
+                            counted +
+                                " of " +
+                                d.constants.window_days +
+                                " days count" +
+                                (() => {
+                                    const by = {};
+                                    days.forEach((x) => {
+                                        if (!x.counted)
+                                            by[x.reason] =
+                                                (by[x.reason] || 0) + 1;
+                                    });
+                                    const parts = Object.keys(by).map(
+                                        (k) => by[k] + " " + (REASON[k] || k),
+                                    );
+                                    return parts.length
+                                        ? " · not counted: " + parts.join(" · ")
+                                        : "";
+                                })(),
+                        ) +
+                        "<details><summary>Show all " +
+                        d.constants.window_days +
+                        " days</summary>" +
+                        tbl(
+                            [
+                                "Date",
+                                "Entries",
+                                "kcal",
+                                "Active",
+                                "BMR",
+                                "Counted",
+                            ],
+                            days.map(row).join(""),
+                        ) +
+                        "<p>Only days between the first and last weigh-in (" +
+                        first +
+                        " – " +
+                        last +
+                        ") enter the averages.</p></details>" +
+                        step(
+                            2,
+                            "Weight trend",
+                            "trend = least-squares line through every weigh-in day",
+                            wi.length +
+                                " weigh-in days from " +
+                                first +
+                                " to " +
+                                last +
+                                " (" +
+                                v(w.span_days) +
+                                " days): slope = " +
+                                (slope == null
+                                    ? "—"
+                                    : Number(slope).toFixed(1)) +
+                                " g/day (± " +
+                                (se == null ? "—" : Number(se).toFixed(1)) +
+                                ") → change along the trend = slope × days = " +
+                                (w.trend_change_g == null
+                                    ? "—"
+                                    : wDelta(w.trend_change_g, unit)),
+                            "A line through all weigh-ins, so a single watery morning barely moves it.",
+                        ) +
+                        "<details><summary>Show weigh-ins</summary>" +
+                        tbl(
+                            ["Date", "Scale", "Trend line", "Difference"],
+                            wi
+                                .map(
+                                    (x) =>
+                                        "<tr><td>" +
+                                        esc(shortDay(x.date)) +
+                                        "</td><td>" +
+                                        kgOf(x.weight_g) +
+                                        "</td><td>" +
+                                        kgOf(x.fit_g) +
+                                        "</td><td>" +
+                                        (x.weight_g != null && x.fit_g != null
+                                            ? wDelta(x.weight_g - x.fit_g, unit)
+                                            : "—") +
+                                        "</td></tr>",
+                                )
+                                .join(""),
+                        ) +
+                        "</details>" +
+                        step(
+                            3,
+                            "What you actually burned (TDEE)",
+                            "TDEE = average intake − slope × 6 kcal/g",
+                            " = " +
+                                v(intake) +
+                                " − (" +
+                                (slope == null
+                                    ? "—"
+                                    : Number(slope).toFixed(1)) +
+                                " × " +
+                                d.constants.kcal_per_gram +
+                                ") = <b>" +
+                                v(tdee) +
+                                " kcal/day</b>",
+                            "Average intake over the counted days, corrected by what the trend says you stored or lost (6 kcal per gram of weight change).",
+                        ) +
+                        step(
+                            4,
+                            "Your baseline (without exercise)",
+                            "baseline = TDEE − average watch active kcal − digestion (10% of intake)",
+                            " = " +
+                                v(tdee) +
+                                " − " +
+                                v(active) +
+                                " − " +
+                                v(tef) +
+                                " = <b>" +
+                                v(baseline) +
+                                " kcal/day</b>",
+                            "Watch activity and digestion are removed to estimate resting burn.",
+                        ) +
+                        step(
+                            5,
+                            "Formula vs your data",
+                            "offset = average formula BMR − baseline",
+                            " = " +
+                                v(w.mean_bmr_kcal) +
+                                " − " +
+                                v(baseline) +
+                                " = <b>" +
+                                v(offset) +
+                                " kcal/day</b> (positive: the formula runs high)",
+                            "This offset adjusts the formula to your observed trend.",
+                        ) +
+                        step(
+                            6,
+                            "Today's figure",
+                            "BMR = 10 × weight kg + 6.25 × height cm − 5 × age + (5 male | −161 female);  baseline today = BMR − offset, kept within ±25% of BMR",
+                            (() => {
+                                const b = d.bmr_inputs || {};
+                                const bmr = c.bmr_kcal;
+                                const mifflin =
+                                    b.weight_g != null &&
+                                    b.height_cm != null &&
+                                    b.age != null &&
+                                    b.sex
+                                        ? "BMR = 10 × " +
+                                          (b.weight_g / 1000).toFixed(1) +
+                                          " + 6.25 × " +
+                                          Number(b.height_cm).toFixed(0) +
+                                          " − 5 × " +
+                                          b.age +
+                                          (b.sex === "male"
+                                              ? " + 5"
+                                              : " − 161") +
+                                          " = " +
+                                          v(bmr) +
+                                          " kcal/day (weight from your weigh-in on " +
+                                          esc(shortDay(b.weight_date)) +
+                                          ")"
+                                        : "BMR = " + v(bmr) + " kcal/day";
+                                if (
+                                    c.status !== "ok" ||
+                                    bmr == null ||
+                                    offset == null
+                                )
+                                    return (
+                                        mifflin +
+                                        "<br>Not calibrated yet, so today's baseline is the formula BMR: <b>" +
+                                        v(c.resting_kcal) +
+                                        " kcal/day</b>"
+                                    );
+                                const lo = Math.round(
+                                        bmr * (1 - d.constants.clamp),
+                                    ),
+                                    hi = Math.round(
+                                        bmr * (1 + d.constants.clamp),
+                                    );
+                                return (
+                                    mifflin +
+                                    "<br>baseline today = " +
+                                    v(bmr) +
+                                    " − " +
+                                    v(offset) +
+                                    " = <b>" +
+                                    v(c.resting_kcal) +
+                                    " kcal/day</b> (allowed range " +
+                                    v(lo) +
+                                    "–" +
+                                    v(hi) +
+                                    (c.clamped
+                                        ? "; held at the limit — check your logging"
+                                        : "; within range") +
+                                    ")"
+                                );
+                            })(),
+                            "Today's BMR uses today's weight, so it can differ slightly from the 42-day average in step 5. This is the “From your data” figure above and the Body tab's calibrated baseline.",
+                        ) +
+                        step(
+                            7,
+                            "How sure is it",
+                            "± = slope uncertainty × 6 kcal/g",
+                            " = " +
+                                v(se) +
+                                " × 6 = <b>±" +
+                                v(w.uncertainty_kcal) +
+                                " kcal/day</b><ul>" +
+                                checks
+                                    .map(
+                                        (x) =>
+                                            "<li>" +
+                                            (x[1] != null &&
+                                            (x[0].startsWith("≥ 70")
+                                                ? x[1] >= x[2]
+                                                : x[0].startsWith("Uncertainty")
+                                                  ? x[1] <= x[2]
+                                                  : x[1] >= x[2])
+                                                ? "✓"
+                                                : "✗") +
+                                            " " +
+                                            x[0] +
+                                            " (" +
+                                            (x[0].startsWith("≥ 70") &&
+                                            x[1] != null
+                                                ? w.counted_days +
+                                                  " of " +
+                                                  w.span_days +
+                                                  " days = " +
+                                                  Math.round(x[1] * 100) +
+                                                  "%"
+                                                : v(x[1])) +
+                                            ")</li>",
+                                    )
+                                    .join("") +
+                                "</ul>" +
+                                (c.status !== "ok"
+                                    ? "<p>Not enough data yet — the figure falls back to the formula BMR.</p>"
+                                    : "") +
+                                "",
+                            "These checks determine whether the estimate is reliable.",
+                        ) +
+                        '<p class="calc-foot">Every day on the chart repeats these steps over the ' +
+                        d.constants.window_days +
+                        " days before it. 6 kcal per gram and 10% digestion are population averages. Figures are rounded, so the substituted numbers can differ from the result by a few kcal.</p></details>"
+                    );
+                }
+                document.addEventListener(
+                    "toggle",
+                    function (ev) {
+                        if (ev.target && ev.target.id === "calc-box") {
+                            calcOpen = ev.target.open;
+                            store(
+                                "nutrition-dash-calc-open",
+                                calcOpen ? "1" : "0",
+                            );
+                        }
+                    },
+                    true,
+                );
                 function metabolismChart() {
                     const host = $("met-plot");
                     if (!host || !host.clientWidth) return;
@@ -5415,12 +5875,12 @@
                         eyebrow: "Calibration",
                         id: "h-evs",
                         title: 'Estimate vs reality <span class="est">(estimate)</span>',
-                        note: "What the estimate predicted from eating vs estimated burn, next to what your weight trend did (a line through all your weigh-ins, so one watery morning does not swing it) over the last 4 weeks. Only days that count are used — see “Count this day in analysis” on the Meals tab.",
+                        note: "What the estimate predicted from eating vs estimated burn, next to what your weight trend did (a line through all your weigh-ins, so one watery morning does not swing it) over the last 6 weeks. Only days that count are used — see “Count this day in analysis” on the Meals tab.",
                     });
                     if (!e || e.status === "no_weighins")
                         return (
                             head +
-                            '<p class="empty">Needs weigh-ins on different days in the last 4 weeks — ask Claude to log a weigh-in.</p>'
+                            '<p class="empty">Needs weigh-ins on different days in the last 6 weeks — ask Claude to log a weigh-in.</p>'
                         );
                     const bars = [];
                     if (e.est_logged_g != null)
@@ -5482,7 +5942,7 @@
                     let verdict;
                     if (e.quality === "no_estimate")
                         verdict = hasBurn()
-                            ? "Calibration needs counted days between weigh-ins (breakfast, lunch and dinner logged, or marked on the Meals tab)."
+                            ? "Calibration needs counted days between weigh-ins (2+ entries and at least half your typical day, or marked on the Meals tab)."
                             : "No estimate for these days yet. " +
                               ADD_BODY +
                               " to estimate your burn.";
@@ -5495,10 +5955,10 @@
                                 : e.quality === "missing_bmr"
                                   ? "Calibration needs height, birth date and sex to calculate BMR."
                                   : e.quality === "no_estimate"
-                                    ? "Calibration needs counted days between weigh-ins (breakfast, lunch and dinner logged, or marked on the Meals tab)."
+                                    ? "Calibration needs counted days between weigh-ins (2+ entries and at least half your typical day, or marked on the Meals tab)."
                                     : e.quality === "too_few_days"
                                       ? "Calibration needs 3+ weeks between first and last weigh-in, with 70% of those days counted."
-                                      : "Calibration needs weigh-ins on at least 4 different days in the last 28 days.";
+                                      : "Calibration needs weigh-ins on at least 4 different days in the last 42 days.";
                     else {
                         const est =
                             e.est_scaled_g != null
@@ -6587,6 +7047,7 @@
                 let goalStatus = { text: "", cls: "" };
                 let goalStatusTimer = 0;
                 let bodyOpen = false;
+                let calcOpen = load("nutrition-dash-calc-open") === "1";
                 let bodyDraft = null;
                 let bodyStatus = { text: "", cls: "" };
                 let bodyStatusTimer = 0;
@@ -6923,7 +7384,7 @@
                         (data.calibration && data.calibration.applied
                             ? '<p class="note">Calibrated from ' +
                               data.calibration.counted_days +
-                              " counted days in the last 28 (" +
+                              " counted days in the last 42 (" +
                               data.calibration.window.weighin_days +
                               " weigh-in days, ±" +
                               fmt(data.calibration.window.uncertainty_kcal) +
@@ -6942,12 +7403,12 @@
                               ? '<p class="note">' +
                                 (data.calibration.status === "no_weighins" ||
                                 data.calibration.status === "too_few_weighins"
-                                    ? "Calibration needs weigh-ins on at least 4 different days in the last 28 days."
+                                    ? "Calibration needs weigh-ins on at least 4 different days in the last 42 days."
                                     : data.calibration.status === "missing_bmr"
                                       ? "Calibration needs height, birth date and sex to calculate BMR."
                                       : data.calibration.status ===
                                           "no_estimate"
-                                        ? "Calibration needs counted days between weigh-ins (breakfast, lunch and dinner logged, or marked on the Meals tab)."
+                                        ? "Calibration needs counted days between weigh-ins (2+ entries and at least half your typical day, or marked on the Meals tab)."
                                         : data.calibration.status ===
                                             "too_few_days"
                                           ? "Calibration needs 3+ weeks between first and last weigh-in, with 70% of those days counted."

@@ -47,10 +47,21 @@ import {
     buildCalibration,
     calibratedBaseline,
     metabolismSeries,
+    CLAMP,
+    MAX_UNCERTAINTY_KCAL,
+    MIN_COVERAGE,
+    MIN_SPAN,
+    MIN_WEIGHIN_DAYS,
     WINDOW_DAYS,
     type EnergyDay,
 } from "./calibration.js";
-import { balanceGrams, dailyBurn, TEF_FRACTION } from "./body.js";
+import {
+    ageOn,
+    balanceGrams,
+    dailyBurn,
+    KCAL_PER_GRAM,
+    TEF_FRACTION,
+} from "./body.js";
 import {
     todayInTz,
     shiftLocalDate,
@@ -75,6 +86,9 @@ import {
     buildLast7,
     buildWeightStats,
     countDay,
+    MIN_DAY_ENTRIES,
+    MIN_DAY_SHARE,
+    typicalDayKcal,
     granularityFor,
     groupDays,
     LAST7_DAYS,
@@ -84,6 +98,21 @@ import {
 // so the weight tracker always looks back at least this far, whatever range
 // the calorie charts show.
 const WEIGHT_WINDOW_DAYS = 90;
+
+/** The inputs of today's Mifflin-St Jeor BMR, for the explanation panel:
+ *  the weigh-in in effect today (the last one on or before it, else the
+ *  first known), height, age that day and sex. */
+function bmrInputs(body: BodyDetails, weighIns: WeighIn[], today: string) {
+    const inEffect =
+        weighIns.filter((w) => w.date <= today).at(-1) ?? weighIns[0] ?? null;
+    return {
+        weight_g: inEffect?.weight_g ?? null,
+        weight_date: inEffect?.date ?? null,
+        height_cm: body.height_cm,
+        age: body.birth_date ? ageOn(body.birth_date, today) : null,
+        sex: body.sex,
+    };
+}
 
 export function bodyOf(profile: Profile | null): BodyDetails {
     return {
@@ -277,9 +306,14 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
     // Which days count in the calibration: automatic (breakfast, lunch and
     // dinner logged) unless the user chose otherwise for that day.
     const hasWatch = allRows.some((r) => r.active_kcal != null);
+    // "Typical" is judged once, over the calibration window ending
+    // yesterday, so a day's verdict does not depend on the chart range.
+    const windowFrom = shiftLocalDate(endDate, -WINDOW_DAYS);
+    const windowTo = shiftLocalDate(endDate, -1);
+    const typicalKcal = typicalDayKcal(allRows, windowFrom, windowTo);
     for (const row of allRows) {
         const override = dayOverrides[row.date] ?? null;
-        const c = countDay(row, override, hasWatch);
+        const c = countDay(row, override, hasWatch, typicalKcal);
         row.count_override = override;
         row.counts_in_calibration = c.counted;
         row.count_reason = c.reason;
@@ -347,6 +381,42 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         endDate,
         days,
         calibration,
+        // Everything the "How this is calculated" panel shows: the rules,
+        // the constants, the BMR inputs and every day of the window with
+        // its verdict, so each figure can be traced back to logged data.
+        calibrationDetail: {
+            constants: {
+                window_days: WINDOW_DAYS,
+                kcal_per_gram: KCAL_PER_GRAM,
+                tef_fraction: TEF_FRACTION,
+                min_span_days: MIN_SPAN,
+                min_weighin_days: MIN_WEIGHIN_DAYS,
+                min_coverage: MIN_COVERAGE,
+                max_uncertainty_kcal: MAX_UNCERTAINTY_KCAL,
+                clamp: CLAMP,
+                min_day_entries: MIN_DAY_ENTRIES,
+                min_day_share: MIN_DAY_SHARE,
+            },
+            typical_day_kcal: typicalKcal,
+            min_day_kcal:
+                typicalKcal == null
+                    ? null
+                    : Math.round(typicalKcal * MIN_DAY_SHARE),
+            has_watch: hasWatch,
+            bmr_inputs: bmrInputs(body, weightsForBmr, endDate),
+            days: allRows
+                .filter((r) => r.date >= windowFrom && r.date <= windowTo)
+                .map((r) => ({
+                    date: r.date,
+                    calories: r.calories,
+                    entries: r.mealCount,
+                    active_kcal: r.active_kcal,
+                    bmr_kcal: energyDays.find((d) => d.date === r.date)!
+                        .bmr_kcal,
+                    counted: r.counts_in_calibration === true,
+                    reason: r.count_reason!,
+                })),
+        },
         body,
         weightStats: buildWeightStats(
             weighIns,

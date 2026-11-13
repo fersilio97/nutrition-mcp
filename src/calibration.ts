@@ -1,6 +1,6 @@
 // The energy-balance calibration: what the food log and the weight trend say
 // the body actually burns, next to what the formula says. One function
-// (energyWindow) backs the Body tab's calibrated baseline, the Trends
+// (energyWindow, over the 42 days ending yesterday) backs the Body tab's calibrated baseline, the Trends
 // "Estimate vs reality" card and the metabolism chart, so they cannot disagree.
 //
 //   T (observed TDEE)  = mean intake − weight slope (g/day) × KCAL_PER_GRAM
@@ -56,6 +56,11 @@ export interface EnergyWindow {
     counted_days: number;
     /** Weight change along the least-squares trend over the span, grams. */
     trend_change_g: number | null;
+    /** The trend's slope and its standard error, grams per day. */
+    slope_g_per_day: number | null;
+    se_g_per_day: number | null;
+    /** The weigh-in days the trend goes through, with the fitted value. */
+    weighins: { date: string; weight_g: number; fit_g: number }[];
     mean_intake_kcal: number | null;
     mean_active_kcal: number | null;
     tef_kcal: number | null;
@@ -76,7 +81,10 @@ export interface EnergyWindow {
     gap_g: number | null;
 }
 
-export const WINDOW_DAYS = 28;
+/** Six weeks: long enough that water swings average out (the trend's
+ *  uncertainty falls roughly with span^1.5), short enough to follow a real
+ *  change in metabolism within weeks. */
+export const WINDOW_DAYS = 42;
 export const MIN_SPAN = 21;
 export const MIN_WEIGHIN_DAYS = 4;
 export const MIN_COVERAGE = 0.7;
@@ -111,6 +119,9 @@ export function energyWindow(
         weighin_days: slope?.days ?? new Set(inside.map((w) => w.date)).size,
         counted_days: 0,
         trend_change_g: null,
+        slope_g_per_day: null,
+        se_g_per_day: null,
+        weighins: slope?.points ?? [],
         mean_intake_kcal: null,
         mean_active_kcal: null,
         tef_kcal: null,
@@ -132,6 +143,8 @@ export function energyWindow(
     );
     out.counted_days = counted.length;
     out.trend_change_g = Math.round(slope.g_per_day * span);
+    out.slope_g_per_day = Math.round(slope.g_per_day * 10) / 10;
+    out.se_g_per_day = Math.round(slope.se_g_per_day * 10) / 10;
     out.uncertainty_kcal = Math.round(slope.se_g_per_day * KCAL_PER_GRAM);
     if (!counted.length) return { ...out, status: "no_estimate" };
 
@@ -208,7 +221,7 @@ export interface Calibration {
     window: EnergyWindow;
 }
 
-/** The calibration for `today`: the 28 days ending yesterday. */
+/** The calibration for `today`: the WINDOW_DAYS ending yesterday. */
 export function buildCalibration(
     days: EnergyDay[],
     weighIns: WeighIn[],
@@ -247,7 +260,7 @@ export interface MetabolismPoint {
     date: string;
     /** Formula (Mifflin-St Jeor) BMR that day. */
     formula_kcal: number | null;
-    /** Calibrated baseline from the 28 days before that day, or null when
+    /** Calibrated baseline from the WINDOW_DAYS before that day, or null when
      *  that window does not qualify. */
     data_kcal: number | null;
     uncertainty_kcal: number | null;
@@ -255,7 +268,7 @@ export interface MetabolismPoint {
 }
 
 /** One point per date: the formula BMR next to the calibrated baseline the
- *  28 days before it imply. The last point is exactly the Body tab figure. */
+ *  WINDOW_DAYS before it imply. The last point is exactly the Body tab figure. */
 export function metabolismSeries(
     days: EnergyDay[],
     weighIns: WeighIn[],

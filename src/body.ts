@@ -178,6 +178,9 @@ export interface WeightSlope {
     first_date: string;
     last_date: string;
     span_days: number;
+    /** Each weigh-in day (same-day readings averaged) and the trend line's
+     *  value that day, grams — so the fit can be shown, not just used. */
+    points: { date: string; weight_g: number; fit_g: number }[];
 }
 
 /**
@@ -225,6 +228,11 @@ export function weightSlope(weighIns: WeighIn[]): WeightSlope | null {
         first_date: first,
         last_date: last,
         span_days: daysBetween(first, last),
+        points: dates.map((d, i) => ({
+            date: d,
+            weight_g: Math.round(ys[i]!),
+            fit_g: Math.round(my + slope * (xs[i]! - mx)),
+        })),
     };
 }
 

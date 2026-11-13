@@ -421,15 +421,15 @@ function generateScenario(name: ScenarioName, today: string): FixtureData {
 }
 
 /**
- * 75 days, enough for a 30-day chart whose every day is calibrated from the
- * 28 before it. The scale is driven by the SAME burn model the dashboard uses
+ * 90 days, enough for a 30-day chart whose every day is calibrated from the
+ * 42 before it. The scale is driven by the SAME burn model the dashboard uses
  * (BMR + active + TEF), minus 150 kcal/day: so the real baseline is 150 below
  * the formula, and the calibration should find an offset of about +150.
  *
  * Realistic mess, so the page shows what each rule does:
  *  - ~4% of days unlogged (the body still changes);
- *  - ~6% "incomplete" days: dinner eaten but not logged, so the automatic
- *    rule (breakfast + lunch + dinner) leaves them out;
+ *  - ~6% "incomplete" days: a full day eaten but only breakfast logged, so
+ *    the automatic rule (2+ entries, half a typical day) leaves them out;
  *  - ~3% of days the watch did not sync (no activity row): never counted;
  *  - weigh-ins every 3 days with ±250 g of water noise around the true
  *    weight — the least-squares trend sees through it, endpoints would not.
@@ -442,7 +442,7 @@ function calibrateScenario(
 ): FixtureData {
     profile = { ...profile, resting_basis: "calibrated" };
     const rnd = prng(0xca11b);
-    const span = 75;
+    const span = 90;
     const body = bodyOf(profile);
     const meals: Meal[] = [];
     const weight: WeightEntry[] = [];
@@ -478,8 +478,8 @@ function calibrateScenario(
         const roll = rnd();
         if (roll >= 0.04) {
             const all = dayMeals(date, eaten, 3, rnd, tz, `m-${date}`);
-            // Incomplete: the dinner went unlogged.
-            meals.push(...(roll < 0.1 ? all.slice(0, 2) : all));
+            // Incomplete: only breakfast got logged.
+            meals.push(...(roll < 0.1 ? all.slice(0, 1) : all));
         }
         const trueBurn = dailyBurn(bmr, active, eaten) - CALIBRATE_OFFSET_KCAL;
         w += (eaten - trueBurn) / KCAL_PER_GRAM;
