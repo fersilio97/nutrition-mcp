@@ -4488,6 +4488,14 @@
                 // old tooltip, plus Over by, the planned deficit and the kcal
                 // balance; a bar says it is a per-logged-day average and how
                 // many days it covers.
+                // The resting part of the burn, named per the Body tab's
+                // choice: the calibrated baseline when it is in force, else
+                // the plain formula BMR.
+                function baselineLabel() {
+                    return data.calibration && data.calibration.applied
+                        ? "Baseline (calibrated)"
+                        : "BMR";
+                }
                 function calTip(r) {
                     const per = r.avg ? " (avg/day)" : "";
                     const rows = [
@@ -4516,10 +4524,8 @@
                     if (r.burn_kcal) {
                         if (r.bmr_kcal != null) {
                             rows.push([
-                                "s-rest",
-                                data.calibration && data.calibration.applied
-                                    ? "Baseline (calibrated)"
-                                    : "Resting",
+                                "cal2-area-base",
+                                baselineLabel(),
                                 fmt(r.bmr_kcal),
                             ]);
                             if (data.calibration && data.calibration.applied)
@@ -5556,7 +5562,7 @@
                             (smooth ? " Lines are 7-day averages." : ""),
                         legend: legend([
                             [eatenLegend, "Eaten"],
-                            [swatch("cal2-legend-base"), "Baseline"],
+                            [swatch("cal2-legend-base"), baselineLabel()],
                             [swatch("cal2-legend-digestion"), "Digestion"],
                             [swatch("cal2-legend-workout"), "Workout / active"],
                             [swatch("cal2-legend-surplus"), "Surplus"],
@@ -7229,7 +7235,7 @@
                                 ],
                                 [
                                     "cal2-area-base",
-                                    "Baseline",
+                                    baselineLabel(),
                                     p.baseline == null
                                         ? "—"
                                         : fmt(p.baseline) + " kcal",
