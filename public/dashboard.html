@@ -4506,12 +4506,6 @@
                             "Goal" + per + (goalCustom() ? "" : " (est. burn)"),
                             fmt(r.goal_calories),
                         ]);
-                    if (r.active_kcal)
-                        rows.push([
-                            null,
-                            "incl. active",
-                            "+" + fmt(r.active_kcal),
-                        ]);
                     if (isOver(r))
                         rows.push([
                             null,
@@ -4535,13 +4529,28 @@
                                     fmt(data.calibration.bmr_kcal),
                                 ]);
                             rows.push([
-                                "s-active",
-                                "Active",
+                                "cal2-area-workout",
+                                "Workout / active",
                                 "+" + fmt(r.active_kcal || 0),
+                            ]);
+                            // Whatever the burn holds beyond baseline and
+                            // workout is digestion, as in the Energy chart.
+                            rows.push([
+                                "cal2-area-digestion",
+                                "Digestion",
+                                "+" +
+                                    fmt(
+                                        Math.max(
+                                            0,
+                                            r.burn_kcal -
+                                                r.bmr_kcal -
+                                                (r.active_kcal || 0),
+                                        ),
+                                    ),
                             ]);
                         }
                         rows.push([
-                            "s-burn",
+                            "cal2-burn-top",
                             "Est. burn total",
                             fmt(r.burn_kcal),
                         ]);
