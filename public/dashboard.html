@@ -4990,7 +4990,7 @@
                     return fmtSignedDec(toUnit(g, unit)) + " " + unit;
                 }
                 function metabolismSeries() {
-                    const days = data.daily;
+                    const days = data.history || data.daily;
                     const weights = (data.weights || [])
                         .slice()
                         .sort((a, b) => a.date.localeCompare(b.date));
@@ -5084,7 +5084,8 @@
                         }
                         out.push({ date: d.date, est: est7, scale: scale });
                     });
-                    return out;
+                    // Always the last 28 days, whatever range is selected.
+                    return out.slice(-28);
                 }
                 function metabolismHtml() {
                     const points = metabolismSeries();
@@ -5119,7 +5120,7 @@
                     if (!both.length)
                         return (
                             head +
-                            '<p class="empty">Needs about 2 weeks of logged meals and at least two weigh-ins to estimate. Pick a longer range or log more.</p>'
+                            '<p class="empty">Needs about 2 weeks of logged meals and at least two weigh-ins to estimate. Keep logging and it will appear here.</p>'
                         );
                     return (
                         head +
@@ -5371,12 +5372,12 @@
                         eyebrow: "Calibration",
                         id: "h-evs",
                         title: 'Estimate vs reality <span class="est">(estimate)</span>',
-                        note: "What the estimate predicted from eating vs estimated burn, next to what the scale did between your first and last weigh-in in this period. Over a few days the scale mostly shows water and glycogen, so only longer spans say much about the estimate.",
+                        note: "What the estimate predicted from eating vs estimated burn, next to what the scale did between your first and last weigh-in over the last 4 weeks. Over a few days the scale mostly shows water and glycogen, so only longer spans say much about the estimate.",
                     });
                     if (!e || e.status === "no_weighins")
                         return (
                             head +
-                            '<p class="empty">Needs two weigh-ins in this period — pick a longer range, or ask Claude to log a weigh-in.</p>'
+                            '<p class="empty">Needs two weigh-ins in the last 4 weeks — ask Claude to log a weigh-in.</p>'
                         );
                     const bars = [];
                     if (e.est_logged_g != null)

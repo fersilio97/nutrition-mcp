@@ -186,9 +186,24 @@ describe("buildCalibration", () => {
 });
 
 describe("dashboardWindow", () => {
-    test("fetches the 28-day calibration window whatever the chart range", () => {
+    test("fetches the 49-day history window whatever the chart range", () => {
         const w = dashboardWindow("2026-11-11", 7);
         expect(w.startDate).toBe("2026-11-05");
-        expect(w.fetchStart).toBe("2026-10-14");
+        expect(w.fetchStart).toBe("2026-09-24");
+    });
+});
+
+describe("range-independent history", () => {
+    test("estimateVsScale and history are the same for 7 and 90 days", () => {
+        const today = TODAY;
+        const fx = buildScenario("offset", today);
+        const at = (days: number) =>
+            buildDashboardPayload(previewInputs(fx, days, today));
+        const a = at(7);
+        const b = at(90);
+        expect(a.estimateVsScale.status).toBe("ok");
+        expect(a.estimateVsScale).toEqual(b.estimateVsScale);
+        expect(a.history).toEqual(b.history);
+        expect(a.history).toHaveLength(49);
     });
 });

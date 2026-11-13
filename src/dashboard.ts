@@ -111,6 +111,11 @@ function clampDays(raw: string | undefined): number {
  * range the Trends tab shows. One helper so the fetch, the payload and the
  * dev preview's fixture filter cannot disagree.
  */
+/** Days of rows always fetched, whatever the chart range. */
+export const HISTORY_DAYS = 49;
+/** The fixed window the calibration and estimate-vs-reality figures use. */
+const ESTIMATE_WINDOW_DAYS = 28;
+
 export function dashboardWindow(
     today: string,
     days: number,
@@ -129,12 +134,14 @@ export function dashboardWindow(
             today,
             -(Math.max(days, WEIGHT_WINDOW_DAYS) - 1),
         ),
-        // Also back to the calibration window's start (28 days), so the
-        // calibrated resting burn never depends on the chart range picked.
+        // Also back to the fixed history window (49 days: the 28-day
+        // calibration / estimate-vs-reality window plus the 21 days the
+        // metabolism chart looks back from its first day), so those figures
+        // never depend on the chart range picked.
         fetchStart: [
             startDate,
             last7Start,
-            shiftLocalDate(today, -28),
+            shiftLocalDate(today, -(HISTORY_DAYS - 1)),
         ].sort()[0]!,
     };
 }
@@ -334,14 +341,27 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         // Built field by field (dashboard-stats.ts), so the bucket's
         // mealTypes Set — which JSON.stringify renders as {} — never ships.
         daily: dayRows,
-        // The period's estimated change next to what the scale did. The
-        // weigh-ins cover max(days, 90), so every range has them all.
+        // The period's estimated change next to what the scale did.
+        // A fixed 28-day window, not the chart range: the history exists
+        // whichever range is shown, so the figure must not vanish with it.
         estimateVsScale: buildEstimateVsScale(
-            dayRows,
+            allRows,
             weighIns,
-            startDate,
+            shiftLocalDate(endDate, -ESTIMATE_WINDOW_DAYS),
             endDate,
         ),
+        // Compact daily rows for the fixed history window, for the
+        // metabolism chart (it needs 21 days of look-back per plotted day).
+        history: allRows
+            .filter(
+                (r) => r.date >= shiftLocalDate(endDate, -(HISTORY_DAYS - 1)),
+            )
+            .map((r) => ({
+                date: r.date,
+                burn_kcal: r.burn_kcal,
+                balance_g: r.balance_g,
+                in_progress: r.in_progress,
+            })),
         // Today's two 7-day figures, from the widened rows: fixed to the
         // last week whatever the selected range.
         last7: buildLast7(allRows, weighIns, endDate),
