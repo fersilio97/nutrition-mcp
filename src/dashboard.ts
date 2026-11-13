@@ -1006,12 +1006,13 @@ export async function logMealFromDashboard(
  */
 export function repeatFields(
     source: Meal,
-    opts: { clientKey?: string },
+    opts: { clientKey?: string; loggedAt?: string; mealType?: string },
 ): MealInput {
     const meal: Record<string, string | number> = {
         description: source.description,
-        meal_type: source.meal_type ?? "snack",
+        meal_type: opts.mealType ?? source.meal_type ?? "snack",
     };
+    if (opts.loggedAt) meal.logged_at = opts.loggedAt;
     for (const key of [
         "calories",
         "protein_g",
@@ -1030,7 +1031,44 @@ export function repeatFields(
     return meal as unknown as MealInput;
 }
 
-/** "Log this again, now": the one-tap path. 404 for an id that is not one of
+/**
+ * Validate what a repeat may override: only client_key (always), plus an
+ * optional logged_at ("Duplicate to…" on the Meals tab) and meal_type. Every
+ * other field is copied from the source meal, so nothing else is accepted.
+ * Pure, shared with the preview. Omitted logged_at means "now".
+ */
+export function checkRepeat(
+    input: Record<string, unknown>,
+    opts: { tz: string; nowMs: number },
+): Checked<{ clientKey?: string; loggedAt?: string; mealType?: string }> {
+    for (const key of Object.keys(input))
+        if (!["client_key", "logged_at", "meal_type"].includes(key))
+            return { ok: false, error: `${key} can't be set here.` };
+    const key = checkClientKey(input.client_key);
+    if (!key.ok) return key;
+    const out: { clientKey?: string; loggedAt?: string; mealType?: string } = {
+        clientKey: key.value,
+    };
+    if (input.meal_type !== undefined && input.meal_type !== "") {
+        if (
+            typeof input.meal_type !== "string" ||
+            !MEAL_TYPES.includes(input.meal_type)
+        )
+            return {
+                ok: false,
+                error: `meal_type must be one of: ${MEAL_TYPES.join(", ")}.`,
+            };
+        out.mealType = input.meal_type;
+    }
+    if (input.logged_at !== undefined && input.logged_at !== "") {
+        const at = checkLoggedAt(input.logged_at, opts.tz, opts.nowMs);
+        if (!at.ok) return at;
+        out.loggedAt = at.value;
+    }
+    return { ok: true, value: out };
+}
+
+/** "Log this again" (now, or at the chosen time): the one-tap path. 404 for an id that is not one of
  *  this user's meals. */
 export async function repeatMealFromDashboard(
     userId: string,
@@ -1039,15 +1077,17 @@ export async function repeatMealFromDashboard(
 ): Promise<Reply> {
     const notFound: Reply = { status: 404, json: { error: "not_found" } };
     if (!UUID_RE.test(id)) return notFound;
-    for (const key of Object.keys(input))
-        if (key !== "client_key") return invalid(`${key} can't be set here.`);
-    const key = checkClientKey(input.client_key);
-    if (!key.ok) return invalid(key.error);
+    const profile = await getProfile(userId);
+    const opts = checkRepeat(input, {
+        tz: timezoneFromProfile(profile) ?? "UTC",
+        nowMs: Date.now(),
+    });
+    if (!opts.ok) return invalid(opts.error);
     const source = await getMealById(userId, id);
     if (!source) return notFound;
     const { meal, deduplicated } = await insertMeal(
         userId,
-        repeatFields(source, { clientKey: key.value }),
+        repeatFields(source, opts.value),
     );
     return {
         status: 200,

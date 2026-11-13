@@ -33,6 +33,7 @@ import {
     checkMealPatch,
     checkMealEntry,
     repeatFields,
+    checkRepeat,
     checkWeightEntry,
     checkCalorieGoal,
     DASHBOARD_CSP,
@@ -402,21 +403,10 @@ const server = Bun.serve({
             );
             const source = fx.meals.find((m) => m.id === id);
             if (!source) return json({ error: "not_found" }, 404);
-            const unknown = Object.keys(b).find((k) => k !== "client_key");
-            if (unknown) return invalid(`${unknown} can't be set here.`);
-            const key = checkMealEntry(
-                {
-                    description: "x",
-                    meal_type: "snack",
-                    ...(b.client_key !== undefined
-                        ? { client_key: b.client_key }
-                        : {}),
-                },
-                { tz, nowMs: Date.now() },
-            );
-            if (!key.ok) return invalid(key.error);
+            const opts = checkRepeat(b, { tz, nowMs: Date.now() });
+            if (!opts.ok) return invalid(opts.error);
             const r = addMeal(
-                repeatFields(source, { clientKey: key.value.idempotency_key }),
+                repeatFields(source, opts.value),
                 fx.profile.user_id,
             );
             return json({

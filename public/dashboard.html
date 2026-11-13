@@ -446,6 +446,35 @@
                 border-color: var(--ink);
                 color: var(--bg);
             }
+            /* Duplicate: same pill, quieter, so Edit stays the primary verb. */
+            .btn-dup {
+                margin-right: var(--s2);
+                color: var(--ink-2);
+            }
+            .meals-table td.e {
+                white-space: nowrap;
+            }
+            .dup-form {
+                display: grid;
+                gap: var(--s4);
+            }
+            .dup-form .form-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .dup-form .form-foot {
+                margin-top: 0;
+            }
+            .dup-quick {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--s2);
+                align-items: center;
+            }
+            .dup-src {
+                margin: 0;
+                color: var(--ink-2);
+                font-size: 0.9rem;
+            }
             @media (pointer: coarse) {
                 .btn-edit,
                 .btn-sm {
@@ -9174,6 +9203,8 @@
                         if (mealEditId === id) return closeMealEdit(id);
                         mealEditId = id;
                         mealDraft = null;
+                        mealDupId = null;
+                        mealDupDraft = null;
                         contentDirty.meals = true;
                         paint();
                         const d = $("me-description");
@@ -9247,6 +9278,162 @@
                             if (err && err.message === "unauthorized") return;
                             if ($("me-save")) $("me-save").disabled = false;
                             const s = $("me-status");
+                            if (s) {
+                                s.className = "b-status err";
+                                s.textContent = "Could not reach the server.";
+                            }
+                        });
+                });
+
+                /* ---------- duplicate a meal (Meals tab) ---------- */
+                // "Log this exact meal again, at a time I choose." The server
+                // copies every field from the source (repeat route); the form
+                // only picks when, and which meal slot it files under.
+                let mealDupId = null;
+                let mealDupDraft = null;
+                // Right now, in the account's timezone. Change it to file the copy
+                // on another day; the server refuses times in the future.
+                function dupDefaultAt() {
+                    return localInputValue();
+                }
+                function dupValues(m) {
+                    return {
+                        logged_at: dupDefaultAt(),
+                        meal_type: m.meal_type || defaultMealType(),
+                    };
+                }
+                function mealDupForm(m) {
+                    const v = mealDupDraft || dupValues(m);
+                    const types = [
+                        "breakfast",
+                        "lunch",
+                        "dinner",
+                        "snack",
+                        "treat",
+                    ];
+                    return (
+                        '<form id="dup-form" class="dup-form" novalidate aria-label="Duplicate meal">' +
+                        '<p class="dup-src">Duplicating <strong>' +
+                        esc(m.description) +
+                        "</strong> — " +
+                        nz(m.calories) +
+                        " kcal, same nutrients.</p>" +
+                        '<div class="form-grid">' +
+                        '<label class="field" for="dup-at">Eaten at<input class="input" id="dup-at" type="datetime-local" value="' +
+                        esc(v.logged_at) +
+                        '" /></label>' +
+                        '<label class="field" for="dup-type">Meal<select class="input" id="dup-type">' +
+                        types
+                            .map(function (t) {
+                                return (
+                                    '<option value="' +
+                                    t +
+                                    '"' +
+                                    (v.meal_type === t ? " selected" : "") +
+                                    ">" +
+                                    mealTypeLabel(t) +
+                                    "</option>"
+                                );
+                            })
+                            .join("") +
+                        "</select></label></div>" +
+                        '<div class="form-foot"><button type="submit" class="btn primary" id="dup-save">Duplicate meal</button><button type="button" class="btn" id="dup-cancel">Cancel</button><span class="b-status" id="dup-status" role="status"></span></div>' +
+                        '<p class="form-hint">Times are in ' +
+                        esc(data.timezone) +
+                        ". Description, calories, macros and notes are copied exactly.</p></form>"
+                    );
+                }
+                function closeMealDup(focusId) {
+                    mealDupId = null;
+                    mealDupDraft = null;
+                    contentDirty.meals = true;
+                    paint();
+                    if (focusId) {
+                        const b = document.querySelector(
+                            '#meals-body [data-dup="' + focusId + '"]',
+                        );
+                        if (b) b.focus();
+                    }
+                }
+                $("meals-body").addEventListener("click", function (ev) {
+                    const d = ev.target.closest("[data-dup]");
+                    if (d) {
+                        const id = d.dataset.dup;
+                        if (mealDupId === id) return closeMealDup(id);
+                        // One panel at a time: duplicating closes an open edit.
+                        mealEditId = null;
+                        mealDraft = null;
+                        mealDupId = id;
+                        mealDupDraft = null;
+                        contentDirty.meals = true;
+                        paint();
+                        const f = $("dup-at");
+                        if (f) f.focus();
+                        return;
+                    }
+                    if (ev.target.closest("#dup-cancel"))
+                        closeMealDup(mealDupId);
+                });
+                $("meals-body").addEventListener("input", function (ev) {
+                    if (ev.target.closest("#dup-form"))
+                        mealDupDraft = {
+                            logged_at: $("dup-at").value,
+                            meal_type: $("dup-type").value,
+                        };
+                });
+                $("meals-body").addEventListener("submit", function (ev) {
+                    if (!ev.target.closest("#dup-form")) return;
+                    ev.preventDefault();
+                    const id = mealDupId;
+                    if (!id || lmBusy) return;
+                    const at = $("dup-at").value;
+                    const st = $("dup-status");
+                    if (!at) {
+                        st.className = "b-status err";
+                        st.textContent = "Pick when it was eaten.";
+                        return;
+                    }
+                    lmBusy = true;
+                    $("dup-save").disabled = true;
+                    st.className = "b-status";
+                    st.textContent = "Saving…";
+                    writeJson(
+                        "POST",
+                        "/api/dashboard/meals/" +
+                            encodeURIComponent(id) +
+                            "/repeat",
+                        {
+                            client_key: uuid(),
+                            logged_at: at,
+                            meal_type: $("dup-type").value,
+                        },
+                    )
+                        .then(function (res) {
+                            lmBusy = false;
+                            if ($("dup-save")) $("dup-save").disabled = false;
+                            if (!res.ok) {
+                                const s = $("dup-status");
+                                if (s) {
+                                    s.className = "b-status err";
+                                    s.textContent =
+                                        res.status === 404
+                                            ? "This meal no longer exists."
+                                            : (res.body &&
+                                                  res.body.error_description) ||
+                                              "Could not save.";
+                                }
+                                return;
+                            }
+                            mealDupId = null;
+                            mealDupDraft = null;
+                            contentDirty.meals = true;
+                            logged(res);
+                        })
+                        .catch(function (err) {
+                            lmBusy = false;
+                            if (err && err.message === "unauthorized") return;
+                            if ($("dup-save")) $("dup-save").disabled = false;
+                            const s = $("dup-status");
                             if (s) {
                                 s.className = "b-status err";
                                 s.textContent = "Could not reach the server.";
@@ -10088,11 +10275,16 @@
                                 g.meals
                                     .map(function (m, i) {
                                         const editing = mealEditId === m.id;
+                                        const duping = mealDupId === m.id;
                                         const last = i === g.meals.length - 1;
                                         return (
                                             '<tr class="meal' +
-                                            (last && !editing ? " last" : "") +
-                                            (editing ? " editing" : "") +
+                                            (last && !editing && !duping
+                                                ? " last"
+                                                : "") +
+                                            (editing || duping
+                                                ? " editing"
+                                                : "") +
                                             '"><td class="t">' +
                                             esc(localTime(m.logged_at)) +
                                             '</td><td class="ty">' +
@@ -10111,7 +10303,19 @@
                                                     "</b></td>"
                                                 );
                                             }).join("") +
-                                            '<td class="e"><button type="button" class="btn-edit" data-edit="' +
+                                            '<td class="e"><button type="button" class="btn-edit btn-dup" data-dup="' +
+                                            esc(m.id) +
+                                            '" aria-expanded="' +
+                                            duping +
+                                            '"' +
+                                            (duping
+                                                ? ' aria-controls="dup-form"'
+                                                : "") +
+                                            ' aria-label="Duplicate ' +
+                                            esc(mealTypeLabel(m.meal_type)) +
+                                            ", " +
+                                            esc(localTime(m.logged_at)) +
+                                            '">Duplicate</button><button type="button" class="btn-edit" data-edit="' +
                                             esc(m.id) +
                                             '" aria-expanded="' +
                                             editing +
@@ -10130,7 +10334,13 @@
                                                   '"><td colspan="10">' +
                                                   mealEditForm(m) +
                                                   "</td></tr>"
-                                                : "")
+                                                : duping
+                                                  ? '<tr class="edit-row' +
+                                                    (last ? " last" : "") +
+                                                    '"><td colspan="10">' +
+                                                    mealDupForm(m) +
+                                                    "</td></tr>"
+                                                  : "")
                                         );
                                     })
                                     .join("") +
@@ -10145,7 +10355,7 @@
                               esc(mealFlash) +
                               "</p>"
                             : "") +
-                        '<div class="meals-wrap rv"><table class="meals-table"><caption class="sr-only">Meals in this range, grouped by day, newest first</caption><thead><tr><th scope="col">Time</th><th scope="col">Meal</th><th scope="col">Description</th><th scope="col" class="n">kcal</th><th scope="col" class="n">P</th><th scope="col" class="n">C</th><th scope="col" class="n">F</th><th scope="col" class="n">Fib</th><th scope="col" class="n">Sug</th><th scope="col"><span class="sr-only">Edit</span></th></tr></thead>' +
+                        '<div class="meals-wrap rv"><table class="meals-table"><caption class="sr-only">Meals in this range, grouped by day, newest first</caption><thead><tr><th scope="col">Time</th><th scope="col">Meal</th><th scope="col">Description</th><th scope="col" class="n">kcal</th><th scope="col" class="n">P</th><th scope="col" class="n">C</th><th scope="col" class="n">F</th><th scope="col" class="n">Fib</th><th scope="col" class="n">Sug</th><th scope="col"><span class="sr-only">Duplicate or edit</span></th></tr></thead>' +
                         body +
                         '</table><p class="meals-foot">Showing the ' +
                         plural(
