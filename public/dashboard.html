@@ -103,6 +103,7 @@
                 --gain: #a35a0b;
                 --loss: #2563a6;
                 --warn: #8a5a00;
+                --cal2-eaten: #4d5d7a;
                 --shadow-card:
                     0 1px 2px rgba(17, 26, 21, 0.04),
                     0 12px 32px -12px rgba(17, 26, 21, 0.12);
@@ -143,6 +144,7 @@
                     --gain: #f2b25c;
                     --loss: #7fb0f0;
                     --warn: #e8b45a;
+                    --cal2-eaten: #a3b1cc;
                     --shadow-card:
                         0 1px 2px rgba(0, 0, 0, 0.3),
                         0 12px 32px -12px rgba(0, 0, 0, 0.6);
@@ -182,6 +184,7 @@
                 --gain: #f2b25c;
                 --loss: #7fb0f0;
                 --warn: #e8b45a;
+                --cal2-eaten: #a3b1cc;
                 --shadow-card:
                     0 1px 2px rgba(0, 0, 0, 0.3),
                     0 12px 32px -12px rgba(0, 0, 0, 0.6);
@@ -193,6 +196,23 @@
 
             /* ---------- scale ---------- */
             :root {
+                --cal2-c-eaten: var(--ink);
+                --cal2-c-base: color-mix(in srgb, var(--burn) 16%, var(--bg));
+                --cal2-c-digestion: color-mix(
+                    in srgb,
+                    var(--accent) 35%,
+                    var(--bg)
+                );
+                --cal2-c-workout: color-mix(
+                    in srgb,
+                    var(--burn) 60%,
+                    var(--bg)
+                );
+                --cal2-c-surplus: color-mix(
+                    in srgb,
+                    var(--over) 45%,
+                    var(--bg)
+                );
                 --font-display:
                     "Bricolage Grotesque", -apple-system, BlinkMacSystemFont,
                     "Segoe UI", sans-serif;
@@ -1170,6 +1190,170 @@
                 color: var(--ink-2);
                 white-space: nowrap;
             }
+            .chart-prefs {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+            .chart-prefs .seg button {
+                min-width: 0;
+                min-height: 30px;
+                padding: 0 9px;
+                font-size: 10px;
+            }
+            .chart-note {
+                margin: -12px 0 16px;
+                color: var(--ink-2);
+                font-size: var(--fs-small);
+            }
+            .met-line {
+                fill: none;
+                stroke-width: 2.5;
+                stroke-linejoin: round;
+                stroke-linecap: round;
+            }
+            .met-est {
+                stroke: var(--burn);
+            }
+            .met-scale {
+                stroke: var(--accent);
+            }
+            .cal2-deficit {
+                fill: var(--accent);
+                opacity: 0.18;
+                stroke: none;
+            }
+            .cal2-goal {
+                fill: none;
+                stroke: var(--ink-2);
+                stroke-dasharray: 4 4;
+                stroke-width: 1.5;
+            }
+            .cal2-break {
+                fill: none;
+                stroke: var(--ink-2);
+                stroke-width: 1.5;
+            }
+            .cal2-eaten-line {
+                fill: none;
+                stroke: var(--cal2-c-eaten);
+                stroke-width: 2.5;
+                stroke-linejoin: round;
+                stroke-linecap: round;
+            }
+            .cal2-eaten-dot {
+                fill: var(--cal2-c-eaten);
+                stroke: var(--bg);
+                stroke-width: 1.5;
+            }
+            .cal2-eaten-dot.over {
+                fill: url(#hatch-over);
+            }
+            .cal2-area-base {
+                fill: var(--cal2-c-base);
+                stroke: none;
+            }
+            .cal2-area-digestion {
+                fill: var(--cal2-c-digestion);
+                stroke: none;
+            }
+            .cal2-area-workout {
+                fill: var(--cal2-c-workout);
+                stroke: none;
+            }
+            .cal2-burn-top {
+                fill: none;
+                stroke: var(--burn);
+                stroke-width: 1.5;
+            }
+            .cal2-surplus {
+                fill: var(--cal2-c-surplus);
+            }
+            .cal2-why {
+                margin: -8px 0 16px;
+                color: var(--ink-2);
+                font-size: var(--fs-small);
+            }
+            .cal2-legend-base {
+                fill: var(--cal2-c-base);
+            }
+            .cal2-legend-digestion {
+                fill: var(--cal2-c-digestion);
+            }
+            .cal2-legend-workout {
+                fill: var(--cal2-c-workout);
+            }
+            .sw.cal2-eaten-line,
+            .sw.cal2-eaten-dot {
+                background: var(--cal2-c-eaten);
+                border-radius: 50%;
+            }
+            .sw.cal2-area-base {
+                background: var(--cal2-c-base);
+            }
+            .sw.cal2-area-digestion {
+                background: var(--cal2-c-digestion);
+            }
+            .sw.cal2-area-workout {
+                background: var(--cal2-c-workout);
+            }
+            .sw.cal2-surplus {
+                background: var(--cal2-c-surplus);
+            }
+            .sw.cal2-burn-top {
+                background: var(--burn);
+                height: 2px;
+                vertical-align: 0.3em;
+            }
+            .sw.cal2-goal {
+                background: none;
+                border-top: 2px dashed var(--ink-2);
+                height: 0;
+                vertical-align: 0.3em;
+            }
+            .cal2-legend-surplus {
+                fill: var(--cal2-c-surplus);
+            }
+            .met-band {
+                fill: var(--accent);
+                opacity: 0.12;
+                stroke: none;
+            }
+            .muted {
+                color: var(--ink-2);
+                font-weight: 400;
+                margin-left: 6px;
+            }
+            .linkish {
+                border: 0;
+                background: none;
+                padding: 0;
+                font: inherit;
+                color: var(--accent);
+                text-decoration: underline;
+                cursor: pointer;
+            }
+            .met-gap {
+                fill: var(--over);
+                opacity: 0.15;
+            }
+            .met-label {
+                fill: var(--ink);
+                font: 600 11px var(--font-mono);
+            }
+            .met-highlight {
+                padding: var(--s3);
+                border-left: 3px solid var(--accent);
+                background: var(--surface-2);
+                font-weight: 600;
+            }
+            .chart-value {
+                fill: #fff;
+                font: 600 10px var(--font-mono);
+            }
+            .chart-value.dim {
+                fill: var(--ink);
+            }
             .sec-head .legend {
                 margin-top: var(--s1);
             }
@@ -1645,6 +1829,9 @@
             }
             .strip.three {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+            .strip.two {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
             .strip.four {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2533,7 +2720,8 @@
                     grid-template-areas:
                         "panel chart"
                         "goal chart"
-                        "details chart";
+                        "details chart"
+                        "lab lab";
                     column-gap: clamp(2rem, 4vw, 3.5rem);
                     align-items: start;
                 }
@@ -2548,6 +2736,9 @@
                 }
                 .body-grid > .details-sec {
                     grid-area: details;
+                }
+                .body-grid > .lab-sec {
+                    grid-area: lab;
                 }
             }
             .w-now .fig-hero b {
@@ -2592,11 +2783,173 @@
             details.body-box > summary:hover::after {
                 color: var(--ink);
             }
+            details.calc-box {
+                margin-top: var(--s5);
+            }
+            details.calc-box > summary,
+            .calc-box details > summary {
+                cursor: pointer;
+                list-style: none;
+                font-family: var(--font-mono);
+                font-size: var(--fs-micro, 0.75rem);
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                color: var(--ink-2);
+                padding: var(--s2) 0;
+            }
+            details.calc-box > summary {
+                border-top: 1px solid var(--line);
+                padding-top: var(--s3);
+                color: var(--ink);
+            }
+            details.calc-box > summary::-webkit-details-marker,
+            .calc-box details > summary::-webkit-details-marker {
+                display: none;
+            }
+            details.calc-box > summary::before,
+            .calc-box details > summary::before {
+                content: "+ ";
+            }
+            details.calc-box[open] > summary::before,
+            .calc-box details[open] > summary::before {
+                content: "− ";
+            }
+            .calc-step {
+                margin-top: var(--s4);
+            }
+            .calc-step h3 {
+                margin: 0 0 var(--s2);
+                font-size: 1rem;
+                font-weight: 600;
+            }
+            .calc-step p,
+            .calc-step ul {
+                margin: var(--s2) 0 0;
+                font-size: 0.9rem;
+                line-height: 1.5;
+            }
+            .calc-step ul {
+                padding-left: 0;
+                list-style: none;
+            }
+            .calc-step p:last-child {
+                color: var(--ink-2);
+            }
+            .calc-f {
+                font-family: var(--font-mono);
+                font-size: 0.8rem;
+                background: var(--surface-2);
+                padding: 6px 8px;
+                border-radius: 6px;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+            .calc-table-wrap {
+                overflow-x: auto;
+                max-width: 100%;
+            }
+            .calc-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.8rem;
+                font-variant-numeric: tabular-nums;
+            }
+            .calc-table th,
+            .calc-table td {
+                padding: 4px 8px;
+                border-bottom: 1px solid var(--line);
+                text-align: right;
+                white-space: nowrap;
+            }
+            .calc-table th:first-child,
+            .calc-table td:first-child,
+            .calc-table th:last-child,
+            .calc-table td:last-child {
+                text-align: left;
+            }
+            .calc-table th {
+                font-family: var(--font-mono);
+                font-weight: 400;
+                color: var(--ink-2);
+            }
+            .calc-table tr.off td {
+                color: var(--ink-2);
+            }
+            .calc-foot {
+                margin-top: var(--s4);
+                font-size: 0.8rem;
+                color: var(--ink-2);
+            }
             details.body-box > .note {
                 margin: var(--s3) 0 var(--s4);
             }
             .body-form .form-foot {
                 margin-top: var(--s4);
+            }
+            .lab-controls {
+                display: grid;
+                gap: var(--s4);
+                margin: var(--s4) 0;
+            }
+            .lab-row {
+                display: grid;
+                grid-template-columns: minmax(12rem, 1fr) minmax(0, 2fr);
+                gap: var(--s4);
+                align-items: start;
+            }
+            .lab-row > label,
+            .lab-label {
+                font-weight: 600;
+            }
+            .lab-control {
+                min-width: 0;
+            }
+            .lab-control .seg {
+                flex-wrap: wrap;
+            }
+            .lab-control .seg button {
+                min-width: 0;
+            }
+            .lab-help {
+                margin: var(--s2) 0 0;
+                color: var(--ink-2);
+                font-size: 0.8rem;
+                line-height: 1.45;
+            }
+            .lab-range {
+                display: flex;
+                align-items: center;
+                gap: var(--s3);
+            }
+            .lab-range input {
+                width: 100%;
+                accent-color: var(--accent);
+            }
+            .lab-range output {
+                min-width: 2.5em;
+                font-family: var(--font-mono);
+            }
+            .lab-reset {
+                border: 0;
+                padding: 0;
+                background: none;
+                color: var(--accent-text);
+                text-decoration: underline;
+                cursor: pointer;
+            }
+            .lab-status {
+                min-height: 1.2em;
+                color: var(--ink-2);
+                font-size: 0.8rem;
+            }
+            .lab-table .lab-today td {
+                font-weight: 700;
+            }
+            @media (max-width: 600px) {
+                .lab-row {
+                    grid-template-columns: 1fr;
+                    gap: var(--s2);
+                }
             }
 
             /* ================= Weigh-ins ================= */
@@ -3318,6 +3671,12 @@
                 const KEY = "nutrition-dash-token";
                 const THEME_KEY = "nutrition-dash-theme";
                 const RANGE_KEY = "nutrition-dash-range";
+                const pref = (key, fallback) =>
+                    load("nutrition-dash-" + key) || fallback;
+                let macroSegments = pref("macro-segments", "on") === "on";
+                let macroTotals = pref("macro-totals", "on") === "on";
+                let caloriesAxis = pref("calories-axis", "full");
+                let caloriesToday = pref("calories-today", "hidden");
                 const TABS = ["today", "trends", "body", "meals", "weighins"];
                 // 7 days → daily bars, 30 → weekly, a year → monthly (the
                 // server's groupDays). 90 was dropped (§0c).
@@ -3329,6 +3688,11 @@
 
                 let token = null;
                 let data = null;
+                // The "Eaten vs burned" chart is the Energy chart; the old bar
+                // chart stays reachable with ?chart=bars.
+                const barsView =
+                    new URLSearchParams(location.search).get("chart") ===
+                    "bars";
                 let loading = false;
                 let loadError = false;
                 let active = "today";
@@ -4008,9 +4372,37 @@
                     }
                 }
                 document.addEventListener("click", function (ev) {
+                    const prefButton =
+                        ev.target.closest &&
+                        ev.target.closest("[data-chart-pref]");
+                    if (prefButton) {
+                        const key = prefButton.dataset.chartPref;
+                        const value = prefButton.dataset.value;
+                        if (key === "macro-segments")
+                            macroSegments = value === "on";
+                        if (key === "macro-totals")
+                            macroTotals = value === "on";
+                        if (key === "calories-axis") caloriesAxis = value;
+                        if (key === "calories-today") caloriesToday = value;
+                        document
+                            .querySelectorAll('[data-chart-pref="' + key + '"]')
+                            .forEach(function (button) {
+                                button.setAttribute(
+                                    "aria-pressed",
+                                    String(button.dataset.value === value),
+                                );
+                            });
+                        store("nutrition-dash-" + key, value);
+                        if (key.startsWith("macro-")) macroChart();
+                        else if (!barsView) calories2Chart();
+                        else caloriesChart();
+                        return;
+                    }
                     const b =
                         ev.target.closest && ev.target.closest(".seg button");
-                    if (!b || loading) return;
+                    // Only the date-range pills carry data-days; other .seg
+                    // groups (the what-if lab) handle their own clicks.
+                    if (!b || loading || b.dataset.days == null) return;
                     const n = +b.dataset.days;
                     if (n === range) return;
                     range = n;
@@ -4182,6 +4574,14 @@
                 // old tooltip, plus Over by, the planned deficit and the kcal
                 // balance; a bar says it is a per-logged-day average and how
                 // many days it covers.
+                // The resting part of the burn, named per the Body tab's
+                // choice: the calibrated baseline when it is in force, else
+                // the plain formula BMR.
+                function baselineLabel() {
+                    return data.calibration && data.calibration.applied
+                        ? "Baseline (calibrated)"
+                        : "BMR";
+                }
                 function calTip(r) {
                     const per = r.avg ? " (avg/day)" : "";
                     const rows = [
@@ -4194,75 +4594,64 @@
                                   1,
                               ],
                     ];
-                    if (r.goal_calories)
-                        rows.push([
-                            null,
-                            "Goal" + per + (goalCustom() ? "" : " (est. burn)"),
-                            fmt(r.goal_calories),
-                        ]);
-                    if (r.active_kcal)
-                        rows.push([
-                            null,
-                            "incl. active",
-                            "+" + fmt(r.active_kcal),
-                        ]);
-                    if (isOver(r))
-                        rows.push([
-                            null,
-                            "Over goal by",
-                            fmt(r.calories - r.goal_calories) + " kcal",
-                            1,
-                        ]);
+                    // Same card as the Trends chart: Eaten, then the burn
+                    // built from its parts, then deficit/surplus = eaten −
+                    // est. burn. Goal comparisons stay out of it.
                     if (r.burn_kcal) {
                         if (r.bmr_kcal != null) {
-                            rows.push(["s-rest", "Resting", fmt(r.bmr_kcal)]);
                             rows.push([
-                                "s-active",
-                                "Active",
+                                "cal2-area-base",
+                                baselineLabel(),
+                                fmt(r.bmr_kcal),
+                            ]);
+                            // Whatever the burn holds beyond baseline and
+                            // workout is digestion, as in the Energy chart.
+                            rows.push([
+                                "cal2-area-digestion",
+                                "Digestion",
+                                "+" +
+                                    fmt(
+                                        Math.max(
+                                            0,
+                                            r.burn_kcal -
+                                                r.bmr_kcal -
+                                                (r.active_kcal || 0),
+                                        ),
+                                    ),
+                            ]);
+                            rows.push([
+                                "cal2-area-workout",
+                                "Workout / active",
                                 "+" + fmt(r.active_kcal || 0),
                             ]);
                         }
                         rows.push([
-                            "s-burn",
-                            "Est. burn total",
-                            fmt(r.burn_kcal),
+                            "cal2-burn-top",
+                            "Est. burn" + per,
+                            fmt(r.burn_kcal) + " kcal",
+                            1,
+                        ]);
+                    } else if (r.goal_calories) {
+                        rows.push([
+                            null,
+                            "Goal" + per,
+                            fmt(r.goal_calories) + " kcal",
                         ]);
                     }
                     if (r.balance_kcal != null)
                         rows.push([
-                            r.balance_kcal >= 0 ? "s-gain" : "s-loss",
-                            "Balance vs est. burn" + per,
-                            fmtSigned(r.balance_kcal) + " kcal",
+                            r.balance_kcal >= 0 ? "cal2-surplus" : "s-loss",
+                            (r.balance_kcal < 0 ? "Deficit" : "Surplus") + per,
+                            fmt(Math.abs(r.balance_kcal)) + " kcal",
+                            1,
                         ]);
-                    // Burn = break-even, goal = target: the difference is the
-                    // deficit the goal plans for, so it sits right under the
-                    // balance (balance = over-goal + planned deficit unused).
-                    if (r.burn_kcal && r.goal_calories) {
-                        const gap = r.burn_kcal - r.goal_calories;
-                        if (gap !== 0)
-                            rows.push([
-                                null,
-                                "Planned deficit (burn − goal)",
-                                fmtSigned(gap) + " kcal",
-                            ]);
-                    }
                     if (r.balance_g != null)
                         rows.push([
                             null,
                             "Est. change" + per,
                             fmtSigned(r.balance_g) + " g",
                         ]);
-                    rows.push(
-                        r.avg
-                            ? [null, "Logged", loggedText(r)]
-                            : [null, "Meals", String(r.mealCount)],
-                    );
-                    if (r.burn_kcal && r.goal_calories)
-                        rows.push([
-                            null,
-                            "Over goal compares with your goal; Balance compares with est. burn (break-even). The gap between them is your planned deficit.",
-                            "",
-                        ]);
+                    if (r.avg) rows.push([null, "Logged", loggedText(r)]);
                     return tipContent(r.title, rows);
                 }
                 function mealTypeLabel(t) {
@@ -4392,6 +4781,98 @@
                     );
                 }
                 const unitSm = (u) => "<small>" + u + "</small>";
+                const calibrationErrors = {};
+                function calibrationToggle(row) {
+                    if (!row || row.bmr_kcal == null) return "";
+                    const reasons = {
+                        in_progress: "Today is still in progress",
+                        no_meals: "No meals logged",
+                    };
+                    const reason = reasons[row.count_reason] || "";
+                    const manual =
+                        row.count_reason === "manual_on" ||
+                        row.count_reason === "manual_off";
+                    return (
+                        '<label><input type="checkbox" data-cal-date="' +
+                        esc(row.date) +
+                        '"' +
+                        (row.counts_in_calibration === true ? " checked" : "") +
+                        (reason
+                            ? ' disabled title="' +
+                              esc(reason) +
+                              '" aria-label="Count this day in analysis — ' +
+                              esc(reason) +
+                              '"'
+                            : ' aria-label="Count this day in analysis"') +
+                        '> Count this day in analysis</label> <span class="muted">' +
+                        (manual
+                            ? 'set by you <button type="button" class="linkish" data-cal-reset="' +
+                              esc(row.date) +
+                              '">Reset to auto</button>'
+                            : row.count_reason === "no_watch"
+                              ? "not counted · your watch didn’t sync this day (no active kcal). Tick to count it anyway."
+                              : row.count_reason === "auto_complete"
+                                ? "auto · looks complete"
+                                : row.count_reason === "auto_few_entries"
+                                  ? "auto · fewer than 2 entries"
+                                  : row.count_reason === "auto_low_kcal"
+                                    ? "auto · under half your typical day (< " +
+                                      fmt(data.calibrationDetail.min_day_kcal) +
+                                      " kcal)"
+                                    : "") +
+                        '</span><span class="b-status err" role="status" data-cal-error="' +
+                        esc(row.date) +
+                        '">' +
+                        esc(calibrationErrors[row.date] || "") +
+                        "</span>"
+                    );
+                }
+                function wireCalibrationToggles(root) {
+                    if (root.dataset.calibrationWired) return;
+                    root.dataset.calibrationWired = "1";
+                    function save(date, counted, input) {
+                        if (input) input.disabled = true;
+                        fetch("/api/dashboard/calibration/day", {
+                            method: "POST",
+                            headers: {
+                                Authorization: "Bearer " + token,
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                                date: date,
+                                counted: counted,
+                            }),
+                        })
+                            .then(function (r) {
+                                if (r.status === 401) return signOut();
+                                if (!r.ok) throw new Error("save");
+                                delete calibrationErrors[date];
+                                refresh();
+                            })
+                            .catch(function () {
+                                calibrationErrors[date] = "Could not save.";
+                                if (input) {
+                                    input.checked = !input.checked;
+                                    input.disabled = false;
+                                }
+                                const status = root.querySelector(
+                                    '[data-cal-error="' + date + '"]',
+                                );
+                                if (status)
+                                    status.textContent =
+                                        calibrationErrors[date];
+                            });
+                    }
+                    root.addEventListener("change", function (ev) {
+                        const input = ev.target.closest("[data-cal-date]");
+                        if (input)
+                            save(input.dataset.calDate, input.checked, input);
+                    });
+                    root.addEventListener("click", function (ev) {
+                        const button = ev.target.closest("[data-cal-reset]");
+                        if (button) save(button.dataset.calReset, null, null);
+                    });
+                }
 
                 /* ================= TODAY ================= */
                 const RING = 112;
@@ -4478,7 +4959,7 @@
                                       fmt(t.active_kcal) +
                                       " active"
                                     : ""
-                                : "estimated burn: resting + active",
+                                : "estimated burn: resting + active + digestion",
                         );
                         h +=
                             eaten <= goal
@@ -4496,16 +4977,42 @@
                     }
                     h +=
                         t.burn_kcal != null
-                            ? factsRow(
+                            ? (data.calibration && data.calibration.applied
+                                  ? factsRow(
+                                        "Baseline burn (calibrated)",
+                                        fmt(data.calibration.resting_kcal) +
+                                            kcal,
+                                        "BMR " +
+                                            fmt(data.calibration.bmr_kcal) +
+                                            " " +
+                                            (data.calibration.resting_kcal >=
+                                            data.calibration.bmr_kcal
+                                                ? "+"
+                                                : "−") +
+                                            fmt(
+                                                Math.abs(
+                                                    data.calibration
+                                                        .resting_kcal -
+                                                        data.calibration
+                                                            .bmr_kcal,
+                                                ),
+                                            ) +
+                                            " from your data · includes everyday movement your watch misses" +
+                                            (data.calibration.clamped
+                                                ? " · held at the ±25% limit — check your logging"
+                                                : ""),
+                                    )
+                                  : "") +
+                              factsRow(
                                   "Est. burn",
                                   fmt(t.burn_kcal) + kcal,
                                   // The model's split, so the figure
-                                  // explains itself: resting + active.
+                                  // explains itself: resting + active + digestion.
                                   t.bmr_kcal != null
                                       ? fmt(t.bmr_kcal) +
                                             " resting + " +
                                             fmt(t.active_kcal || 0) +
-                                            " active · est."
+                                            " active + digestion · est."
                                       : "full day · estimate",
                               )
                             : factsRow("Est. burn", "—", ADD_BODY, {
@@ -4693,7 +5200,7 @@
                             ? "Your goal is " +
                               fmt(cur) +
                               " kcal plus each day’s active calories."
-                            : "No goal set, so your goal is your estimated burn (resting + active): eating at break-even.") +
+                            : "No goal set, so your goal is your estimated burn (resting + active + digestion): eating at break-even.") +
                         " Set a lower number to plan a deficit.</p>" +
                         '<form id="goal-form" class="body-form" novalidate><div class="form-grid">' +
                         '<label class="field wide" for="g-kcal">Daily goal, before active calories (kcal)<input class="input" id="g-kcal" type="number" inputmode="numeric" step="1" min="500" max="20000" placeholder="Estimated burn" /></label></div>' +
@@ -4854,7 +5361,10 @@
                         (t.goal_calories
                             ? ""
                             : "No calorie goal yet — add your body details for an estimated-burn default, or set one in Body. ") +
-                        "Goals adjust for your watch’s active calories. Est. burn = resting (Mifflin-St Jeor) + active — estimates, not measurements.</p></section></div>" +
+                        (data.calibration && data.calibration.applied
+                            ? "Goals adjust for your watch’s active calories. Est. burn = resting (calibrated from your weight trend) + active + 10% of what you eat for digestion — estimates, not measurements."
+                            : "Goals adjust for your watch’s active calories. Est. burn = resting (Mifflin-St Jeor) + active + 10% of what you eat for digestion — estimates, not measurements.") +
+                        "</p></section></div>" +
                         '<div class="col">' +
                         '<section class="rv" aria-labelledby="h-strip">' +
                         secHead({
@@ -4882,12 +5392,14 @@
                                   " kcal</span>"
                                 : "",
                         }) +
+                        calibrationToggle(t) +
                         (meals.length
                             ? '<ul class="meal-list">' +
                               meals.map(mealItem).join("") +
                               "</ul>"
                             : '<p class="empty">Nothing logged yet today. Tell Claude what you ate and it will show up here.</p>') +
                         "</section></div></div>";
+                    wireCalibrationToggles($("today-body"));
                     // Sweep the ring and grow the nutrient tracks from zero.
                     requestAnimationFrame(function () {
                         requestAnimationFrame(function () {
@@ -4990,6 +5502,29 @@
                         "</div>"
                     );
                 }
+                function chartPref(key, label, value, options) {
+                    return (
+                        '<div class="seg" role="group" aria-label="' +
+                        label +
+                        '">' +
+                        options
+                            .map(function (o) {
+                                return (
+                                    '<button type="button" data-chart-pref="' +
+                                    key +
+                                    '" data-value="' +
+                                    o[0] +
+                                    '" aria-pressed="' +
+                                    (value === o[0]) +
+                                    '">' +
+                                    o[1] +
+                                    "</button>"
+                                );
+                            })
+                            .join("") +
+                        "</div>"
+                    );
+                }
                 // Weight deltas: grams under 1 kg, else one decimal in the
                 // user's unit. Pounds stay pounds at every size.
                 function wDelta(g, unit) {
@@ -4997,11 +5532,721 @@
                         return fmtSigned(g) + " g";
                     return fmtSignedDec(toUnit(g, unit)) + " " + unit;
                 }
+                function metabolismHtml() {
+                    const points = data.metabolism || [];
+                    const latest = points.length
+                        ? points[points.length - 1]
+                        : null;
+                    const latestData = points
+                        .slice()
+                        .reverse()
+                        .find((p) => p.data_kcal != null);
+                    const head = secHead({
+                        wide: true,
+                        eyebrow: "Calibration",
+                        id: "h-met",
+                        title: 'Resting metabolism <span class="est">(estimate)</span>',
+                        note: "Your baseline burn without exercise: the Mifflin-St Jeor formula next to what your meals and weight trend imply, each day calibrated from the 42 days before it. Watch activity and digestion are added on top every day.",
+                        legend: legend([
+                            [
+                                '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="met-est"/></svg>',
+                                "Formula (BMR)",
+                            ],
+                            [
+                                '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="met-scale"/></svg>',
+                                "From your data",
+                            ],
+                        ]),
+                    });
+                    if (!hasBurn())
+                        return (
+                            head +
+                            '<p class="empty">Add your height, birth date and sex under Body › Body details to estimate this.<br>' +
+                            ADD_BODY +
+                            "</p>"
+                        );
+                    if (!points.some((p) => p.data_kcal != null))
+                        return (
+                            head +
+                            '<p class="empty">Needs 3+ weeks of counted days and weigh-ins on 4+ different days. Keep logging and it will appear here.</p>'
+                        );
+                    return (
+                        head +
+                        '<div class="plot" id="met-plot"></div><div class="strip two rv" id="met-stats"></div><p class="met-highlight" id="met-today"></p>' +
+                        calcHtml()
+                    );
+                }
+                function calories2Html() {
+                    const rows = data.daily || [];
+                    const hasBurn = rows.some((r) => r.burn_kcal != null);
+                    const logged = rows.some(
+                        (r) => r.counts_in_calibration && !r.in_progress,
+                    );
+                    const smooth = data.days > 14;
+                    const svgLine = (cls) =>
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="' +
+                        cls +
+                        '"/></svg>';
+                    const swatch = (cls) =>
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="1" width="12" height="12" class="' +
+                        cls +
+                        '"/></svg>';
+                    const eatenLegend =
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="cal2-eaten-line"/><circle cx="7" cy="7" r="3" class="cal2-eaten-dot"/></svg>';
+                    const head = secHead({
+                        wide: true,
+                        eyebrow: "Energy",
+                        id: "h-cal2",
+                        title: 'Eaten vs burned <span class="est">(estimate)</span>',
+                        aside:
+                            '<div class="chart-prefs">' +
+                            chartPref(
+                                "calories-today",
+                                "Today",
+                                caloriesToday,
+                                [
+                                    ["hidden", "Today: Hidden"],
+                                    ["shown", "Shown"],
+                                ],
+                            ) +
+                            "</div>",
+                        note:
+                            "What you ate each day against what you burned, split into baseline, digestion and workout (watch active kcal). Pink shows days you ate over your burn" +
+                            (data.goals && data.goals.calories > 0
+                                ? "; dots turn red over your goal; the dashed line is your goal."
+                                : ".") +
+                            " Days that look partly logged are left out (see the Meals tab)." +
+                            (smooth ? " Lines are 7-day averages." : ""),
+                        legend: legend([
+                            [eatenLegend, "Eaten"],
+                            [swatch("cal2-legend-base"), baselineLabel()],
+                            [swatch("cal2-legend-digestion"), "Digestion"],
+                            [swatch("cal2-legend-workout"), "Workout / active"],
+                            [swatch("cal2-legend-surplus"), "Surplus"],
+                            // With no custom goal the goal IS the est. burn:
+                            // one line, not two that differ by digestion.
+                            !(data.goals && data.goals.calories > 0)
+                                ? [
+                                      svgLine("cal2-burn-top"),
+                                      "Est. burn = your goal",
+                                  ]
+                                : [svgLine("cal2-goal"), "Goal"],
+                        ]),
+                    });
+                    if (!hasBurn || !logged)
+                        return (
+                            head +
+                            '<p class="empty">Nothing logged in these ' +
+                            rows.length +
+                            " days.</p>"
+                        );
+                    return (
+                        head +
+                        '<div class="plot" id="cal2-plot"></div>' +
+                        (!(data.goals && data.goals.calories > 0)
+                            ? '<p class="cal2-why">Your goal is your est. burn (set in Body), so the burn line is your goal.</p>'
+                            : "") +
+                        '<div class="strip four rv" id="cal2-stats"></div><p class="met-highlight" id="cal2-today"></p>'
+                    );
+                }
+                function calcHtml() {
+                    if (!data.calibration || !data.calibrationDetail) return "";
+                    const c = data.calibration,
+                        d = data.calibrationDetail,
+                        w = c.window || {};
+                    const v = (x) => (x == null ? "—" : fmt(x));
+                    const REASON = {
+                        auto_complete: "looks complete",
+                        auto_few_entries: "fewer than 2 entries",
+                        auto_low_kcal: "under half a typical day",
+                        manual_on: "counted by you",
+                        manual_off: "excluded by you",
+                        in_progress: "today",
+                        no_meals: "no meals",
+                        no_watch: "watch not synced",
+                    };
+                    const unit = data.weightUnit;
+                    const kgOf = (g) =>
+                        g == null ? "—" : wfmt(g, unit) + " " + unit;
+                    const days = d.days || [],
+                        counted = days.filter((x) => x.counted).length;
+                    const wi = w.weighins || [],
+                        first = w.first_date ? shortDay(w.first_date) : "—",
+                        last = w.last_date ? shortDay(w.last_date) : "—";
+                    const row = (x) =>
+                        (x.counted ? "<tr><td>" : '<tr class="off"><td>') +
+                        esc(shortDay(x.date)) +
+                        "</td><td>" +
+                        v(x.entries) +
+                        "</td><td>" +
+                        v(x.calories) +
+                        "</td><td>" +
+                        v(x.active_kcal) +
+                        "</td><td>" +
+                        v(x.bmr_kcal) +
+                        "</td><td>" +
+                        (x.counted ? "✓ " : "✗ ") +
+                        esc(REASON[x.reason] || x.reason || "") +
+                        "</td></tr>";
+                    const tbl = (heads, rows) =>
+                        '<div class="calc-table-wrap"><table class="calc-table"><thead><tr>' +
+                        heads.map((x) => "<th>" + x + "</th>").join("") +
+                        "</tr></thead><tbody>" +
+                        rows +
+                        "</tbody></table></div>";
+                    const step = (n, h, f, val, s) =>
+                        '<section class="calc-step"><h3>' +
+                        n +
+                        ". " +
+                        h +
+                        '</h3><div class="calc-f">' +
+                        f +
+                        "</div><p>" +
+                        val +
+                        "</p><p>" +
+                        s +
+                        "</p></section>";
+                    const slope = w.slope_g_per_day,
+                        se = w.se_g_per_day,
+                        intake = w.mean_intake_kcal,
+                        tdee = w.tdee_kcal,
+                        active = w.mean_active_kcal,
+                        tef = w.tef_kcal,
+                        baseline = w.baseline_kcal,
+                        offset = w.offset_kcal;
+                    const checks = [
+                        [
+                            "Span ≥ 21 days",
+                            w.span_days,
+                            d.constants.min_span_days,
+                        ],
+                        [
+                            "Weigh-in days ≥ 4",
+                            w.weighin_days,
+                            d.constants.min_weighin_days,
+                        ],
+                        [
+                            "≥ 70% of span counted",
+                            w.span_days ? w.counted_days / w.span_days : null,
+                            d.constants.min_coverage,
+                        ],
+                        [
+                            "Uncertainty ≤ ±150 kcal/day",
+                            w.uncertainty_kcal,
+                            d.constants.max_uncertainty_kcal,
+                        ],
+                    ];
+                    return (
+                        '<details class="calc-box" id="calc-box"' +
+                        (calcOpen ? " open" : "") +
+                        "><summary>How this is calculated</summary>" +
+                        step(
+                            1,
+                            "Which days count",
+                            "2+ entries and at least half your typical day",
+                            "A day counts automatically when it has at least 2 entries and at least half your typical logged day (median of the last " +
+                                d.constants.window_days +
+                                " days: " +
+                                v(d.typical_day_kcal) +
+                                " kcal → at least " +
+                                v(d.min_day_kcal) +
+                                " kcal). Today, days with no meals" +
+                                (d.has_watch
+                                    ? " and days your watch did not sync"
+                                    : "") +
+                                " never count. You can force any day in or out on the Meals tab.",
+                            counted +
+                                " of " +
+                                d.constants.window_days +
+                                " days count" +
+                                (() => {
+                                    const by = {};
+                                    days.forEach((x) => {
+                                        if (!x.counted)
+                                            by[x.reason] =
+                                                (by[x.reason] || 0) + 1;
+                                    });
+                                    const parts = Object.keys(by).map(
+                                        (k) => by[k] + " " + (REASON[k] || k),
+                                    );
+                                    return parts.length
+                                        ? " · not counted: " + parts.join(" · ")
+                                        : "";
+                                })(),
+                        ) +
+                        "<details><summary>Show all " +
+                        d.constants.window_days +
+                        " days</summary>" +
+                        tbl(
+                            [
+                                "Date",
+                                "Entries",
+                                "kcal",
+                                "Active",
+                                "BMR",
+                                "Counted",
+                            ],
+                            days.map(row).join(""),
+                        ) +
+                        "<p>Only days between the first and last weigh-in (" +
+                        first +
+                        " – " +
+                        last +
+                        ") enter the averages.</p></details>" +
+                        step(
+                            2,
+                            "Weight trend",
+                            "trend = least-squares line through every weigh-in day",
+                            wi.length +
+                                " weigh-in days from " +
+                                first +
+                                " to " +
+                                last +
+                                " (" +
+                                v(w.span_days) +
+                                " days): slope = " +
+                                (slope == null
+                                    ? "—"
+                                    : Number(slope).toFixed(1)) +
+                                " g/day (± " +
+                                (se == null ? "—" : Number(se).toFixed(1)) +
+                                ") → change along the trend = slope × days = " +
+                                (w.trend_change_g == null
+                                    ? "—"
+                                    : wDelta(w.trend_change_g, unit)),
+                            "A line through all weigh-ins, so a single watery morning barely moves it.",
+                        ) +
+                        "<details><summary>Show weigh-ins</summary>" +
+                        tbl(
+                            ["Date", "Scale", "Trend line", "Difference"],
+                            wi
+                                .map(
+                                    (x) =>
+                                        "<tr><td>" +
+                                        esc(shortDay(x.date)) +
+                                        "</td><td>" +
+                                        kgOf(x.weight_g) +
+                                        "</td><td>" +
+                                        kgOf(x.fit_g) +
+                                        "</td><td>" +
+                                        (x.weight_g != null && x.fit_g != null
+                                            ? wDelta(x.weight_g - x.fit_g, unit)
+                                            : "—") +
+                                        "</td></tr>",
+                                )
+                                .join(""),
+                        ) +
+                        "</details>" +
+                        step(
+                            3,
+                            "What you actually burned (TDEE)",
+                            "TDEE = average intake − slope × 6 kcal/g",
+                            " = " +
+                                v(intake) +
+                                " − (" +
+                                (slope == null
+                                    ? "—"
+                                    : Number(slope).toFixed(1)) +
+                                " × " +
+                                d.constants.kcal_per_gram +
+                                ") = <b>" +
+                                v(tdee) +
+                                " kcal/day</b>",
+                            "Average intake over the counted days, corrected by what the trend says you stored or lost (6 kcal per gram of weight change).",
+                        ) +
+                        step(
+                            4,
+                            "Your baseline (without exercise)",
+                            "baseline = TDEE − average watch active kcal − digestion (10% of intake)",
+                            " = " +
+                                v(tdee) +
+                                " − " +
+                                v(active) +
+                                " − " +
+                                v(tef) +
+                                " = <b>" +
+                                v(baseline) +
+                                " kcal/day</b>",
+                            "Watch activity and digestion are removed to estimate resting burn.",
+                        ) +
+                        step(
+                            5,
+                            "Formula vs your data",
+                            "offset = average formula BMR − baseline",
+                            " = " +
+                                v(w.mean_bmr_kcal) +
+                                " − " +
+                                v(baseline) +
+                                " = <b>" +
+                                v(offset) +
+                                " kcal/day</b> (positive: the formula runs high)",
+                            "This offset adjusts the formula to your observed trend.",
+                        ) +
+                        step(
+                            6,
+                            "Today's figure",
+                            "BMR = 10 × weight kg + 6.25 × height cm − 5 × age + (5 male | −161 female);  baseline today = BMR − offset, kept within ±25% of BMR",
+                            (() => {
+                                const b = d.bmr_inputs || {};
+                                const bmr = c.bmr_kcal;
+                                const mifflin =
+                                    b.weight_g != null &&
+                                    b.height_cm != null &&
+                                    b.age != null &&
+                                    b.sex
+                                        ? "BMR = 10 × " +
+                                          (b.weight_g / 1000).toFixed(1) +
+                                          " + 6.25 × " +
+                                          Number(b.height_cm).toFixed(0) +
+                                          " − 5 × " +
+                                          b.age +
+                                          (b.sex === "male"
+                                              ? " + 5"
+                                              : " − 161") +
+                                          " = " +
+                                          v(bmr) +
+                                          " kcal/day (weight from your weigh-in on " +
+                                          esc(shortDay(b.weight_date)) +
+                                          ")"
+                                        : "BMR = " + v(bmr) + " kcal/day";
+                                if (
+                                    c.status !== "ok" ||
+                                    bmr == null ||
+                                    offset == null
+                                )
+                                    return (
+                                        mifflin +
+                                        "<br>Not calibrated yet, so today's baseline is the formula BMR: <b>" +
+                                        v(c.resting_kcal) +
+                                        " kcal/day</b>"
+                                    );
+                                const lo = Math.round(
+                                        bmr * (1 - d.constants.clamp),
+                                    ),
+                                    hi = Math.round(
+                                        bmr * (1 + d.constants.clamp),
+                                    );
+                                return (
+                                    mifflin +
+                                    "<br>baseline today = " +
+                                    v(bmr) +
+                                    " − " +
+                                    v(offset) +
+                                    " = <b>" +
+                                    v(c.resting_kcal) +
+                                    " kcal/day</b> (allowed range " +
+                                    v(lo) +
+                                    "–" +
+                                    v(hi) +
+                                    (c.clamped
+                                        ? "; held at the limit — check your logging"
+                                        : "; within range") +
+                                    ")"
+                                );
+                            })(),
+                            "Today's BMR uses today's weight, so it can differ slightly from the lookback average in step 5. This is the “From your data” figure above and the Body tab's calibrated baseline.",
+                        ) +
+                        step(
+                            7,
+                            "How sure is it",
+                            "± = slope uncertainty × 6 kcal/g",
+                            " = " +
+                                v(se) +
+                                " × 6 = <b>±" +
+                                v(w.uncertainty_kcal) +
+                                " kcal/day</b><ul>" +
+                                checks
+                                    .map(
+                                        (x) =>
+                                            "<li>" +
+                                            (x[1] != null &&
+                                            (x[0].startsWith("≥ 70")
+                                                ? x[1] >= x[2]
+                                                : x[0].startsWith("Uncertainty")
+                                                  ? x[1] <= x[2]
+                                                  : x[1] >= x[2])
+                                                ? "✓"
+                                                : "✗") +
+                                            " " +
+                                            x[0] +
+                                            " (" +
+                                            (x[0].startsWith("≥ 70") &&
+                                            x[1] != null
+                                                ? w.counted_days +
+                                                  " of " +
+                                                  w.span_days +
+                                                  " days = " +
+                                                  Math.round(x[1] * 100) +
+                                                  "%"
+                                                : v(x[1])) +
+                                            ")</li>",
+                                    )
+                                    .join("") +
+                                "</ul>" +
+                                (c.status !== "ok"
+                                    ? "<p>Not enough data yet — the figure falls back to the formula BMR.</p>"
+                                    : "") +
+                                "",
+                            "These checks determine whether the estimate is reliable.",
+                        ) +
+                        '<p class="calc-foot">Every day on the chart repeats these steps over the ' +
+                        d.constants.window_days +
+                        " days before it. 6 kcal per gram and 10% digestion are population averages. Figures are rounded, so the substituted numbers can differ from the result by a few kcal.</p></details>"
+                    );
+                }
+                document.addEventListener(
+                    "toggle",
+                    function (ev) {
+                        if (ev.target && ev.target.id === "calc-box") {
+                            calcOpen = ev.target.open;
+                            store(
+                                "nutrition-dash-calc-open",
+                                calcOpen ? "1" : "0",
+                            );
+                        }
+                    },
+                    true,
+                );
+                function metabolismChart() {
+                    const host = $("met-plot");
+                    if (!host || !host.clientWidth) return;
+                    const points = data.metabolism || [];
+                    const latest = points.length
+                        ? points[points.length - 1]
+                        : null;
+                    const latestData = points
+                        .slice()
+                        .reverse()
+                        .find((p) => p.data_kcal != null);
+                    const values = points
+                        .flatMap((p) => [
+                            p.formula_kcal,
+                            p.data_kcal == null
+                                ? null
+                                : p.data_kcal - (p.uncertainty_kcal || 0),
+                            p.data_kcal == null
+                                ? null
+                                : p.data_kcal + (p.uncertainty_kcal || 0),
+                        ])
+                        .filter((v) => v != null);
+                    if (!values.length || !latestData) return;
+                    const lo = Math.max(
+                        0,
+                        Math.floor(Math.min.apply(null, values) / 100) * 100,
+                    );
+                    const hi =
+                        Math.ceil(Math.max.apply(null, values) / 100) * 100;
+                    const c = chartSvg(
+                        host,
+                        innerWidth <= 480 ? 240 : 280,
+                        "Formula BMR and resting metabolism implied by your data, kcal per day.",
+                    );
+                    const base = c.h - PAD.b,
+                        L = gutter(yLabels(hi, 4)),
+                        W = c.w - L - PAD.r,
+                        H = base - PAD.t;
+                    const yAt = (v) =>
+                        base - ((v - lo) / Math.max(1, hi - lo)) * H;
+                    const svg = c.svg;
+                    for (let i = 0; i <= 4; i++) {
+                        const value = lo + ((hi - lo) * i) / 4,
+                            y = yAt(value);
+                        if (i)
+                            svg.appendChild(
+                                svgEl("line", {
+                                    x1: L,
+                                    x2: L + W,
+                                    y1: y,
+                                    y2: y,
+                                    class: "gridline",
+                                }),
+                            );
+                        svgText(svg, L - 8, y + 4, fmt(value), "lbl", "end");
+                    }
+                    const xAt = (i) =>
+                        L +
+                        (points.length < 2
+                            ? W / 2
+                            : (W * i) / (points.length - 1));
+                    function pathFor(key) {
+                        let d = "";
+                        points.forEach((p, i) => {
+                            if (p[key] == null) return;
+                            d +=
+                                (i === 0 || points[i - 1][key] == null
+                                    ? "M"
+                                    : "L") +
+                                xAt(i) +
+                                "," +
+                                yAt(p[key]);
+                        });
+                        return d;
+                    }
+                    let segment = [];
+                    function addBand() {
+                        if (!segment.length) return;
+                        let d =
+                            "M" + xAt(segment[0][0]) + "," + yAt(segment[0][1]);
+                        segment.forEach(
+                            (v) => (d += "L" + xAt(v[0]) + "," + yAt(v[1])),
+                        );
+                        for (let j = segment.length - 1; j >= 0; j--)
+                            d +=
+                                "L" +
+                                xAt(segment[j][0]) +
+                                "," +
+                                yAt(segment[j][2]);
+                        d += "Z";
+                        svg.appendChild(
+                            svgEl("path", { d: d, class: "met-band" }),
+                        );
+                        segment = [];
+                    }
+                    points.forEach((p, i) => {
+                        if (p.data_kcal == null) addBand();
+                        else
+                            segment.push([
+                                i,
+                                p.data_kcal + (p.uncertainty_kcal || 0),
+                                p.data_kcal - (p.uncertainty_kcal || 0),
+                            ]);
+                    });
+                    addBand();
+                    svg.appendChild(
+                        svgEl("path", {
+                            d: pathFor("formula_kcal"),
+                            class: "met-line met-est",
+                        }),
+                    );
+                    svg.appendChild(
+                        svgEl("path", {
+                            d: pathFor("data_kcal"),
+                            class: "met-line met-scale",
+                        }),
+                    );
+                    baseline(svg, L, L + W, base);
+                    const labels = xLabelIdx(points.length, W, 4),
+                        labelIdx =
+                            labels.length <= 7
+                                ? labels
+                                : [...Array(7)].map((_, k) =>
+                                      Math.round((k * (points.length - 1)) / 6),
+                                  );
+                    labelIdx.forEach((i) =>
+                        svgText(
+                            svg,
+                            xAt(i),
+                            c.h - 8,
+                            shortDay(points[i].date),
+                            "xl",
+                            "middle",
+                        ),
+                    );
+                    if (
+                        latest &&
+                        latest.data_kcal != null &&
+                        latest.formula_kcal != null
+                    )
+                        svgText(
+                            svg,
+                            L + W,
+                            Math.min(
+                                yAt(latest.data_kcal),
+                                yAt(latest.formula_kcal),
+                            ) - 7,
+                            "gap ~" +
+                                fmt(
+                                    Math.abs(
+                                        latest.formula_kcal - latest.data_kcal,
+                                    ),
+                                ),
+                            "met-label",
+                            "end",
+                        );
+                    inspect(
+                        svg,
+                        points.map((p, i) => {
+                            const rows = [
+                                [
+                                    null,
+                                    "Formula BMR",
+                                    p.formula_kcal == null
+                                        ? "—"
+                                        : fmt(p.formula_kcal) + " kcal",
+                                ],
+                                [
+                                    null,
+                                    "From your data",
+                                    p.data_kcal == null
+                                        ? "—"
+                                        : fmt(p.data_kcal) +
+                                          " kcal" +
+                                          (p.uncertainty_kcal
+                                              ? " ±" + fmt(p.uncertainty_kcal)
+                                              : ""),
+                                ],
+                            ];
+                            if (p.formula_kcal != null && p.data_kcal != null)
+                                rows.push([
+                                    null,
+                                    p.formula_kcal >= p.data_kcal
+                                        ? "Formula runs high by"
+                                        : "Formula runs low by",
+                                    fmt(
+                                        Math.abs(p.formula_kcal - p.data_kcal),
+                                    ) + " kcal",
+                                    1,
+                                ]);
+                            if (p.clamped)
+                                rows.push([
+                                    null,
+                                    "Calibration",
+                                    "held at ±25% limit",
+                                ]);
+                            const t = tipContent(shortDay(p.date), rows);
+                            return { x: xAt(i), html: t.html, text: t.text };
+                        }),
+                        PAD.t,
+                        base,
+                    );
+                    const formula = points
+                        .slice()
+                        .reverse()
+                        .find((p) => p.formula_kcal != null);
+                    $("met-stats").innerHTML =
+                        stat(
+                            "Formula BMR",
+                            formula ? fmt(formula.formula_kcal) : "—",
+                            "kcal/day",
+                        ) +
+                        stat(
+                            "From your data",
+                            latestData ? fmt(latestData.data_kcal) : "—",
+                            "kcal/day",
+                            latestData && latestData.uncertainty_kcal
+                                ? "±" + fmt(latestData.uncertainty_kcal)
+                                : "",
+                        );
+                    $("met-today").textContent =
+                        latest && latest.data_kcal != null
+                            ? "Your baseline burn today: ~" +
+                              fmt(Math.round(latest.data_kcal / 10) * 10) +
+                              " kcal/day — the same figure as the Body tab's calibrated baseline. Activity and digestion come on top."
+                            : "Not enough recent data for today's figure — the last estimate was ~" +
+                              fmt(Math.round(latestData.data_kcal / 10) * 10) +
+                              " kcal/day on " +
+                              shortDay(latestData.date) +
+                              ".";
+                }
                 function trendsStats(rows) {
                     const logged = rows.filter((r) => r.mealCount > 0);
                     const complete = rows.filter((r) => !r.in_progress);
                     const withGoal = complete.filter((r) => r.goal_calories);
-                    const done = complete.filter((r) => r.balance_g != null);
+                    const done = complete.filter(
+                        (r) =>
+                            r.counts_in_calibration !== false &&
+                            r.balance_g != null,
+                    );
                     return {
                         logged: logged,
                         avgKcal: logged.length
@@ -5108,12 +6353,12 @@
                         eyebrow: "Calibration",
                         id: "h-evs",
                         title: 'Estimate vs reality <span class="est">(estimate)</span>',
-                        note: "What the estimate predicted from eating vs estimated burn, next to what the scale did between your first and last weigh-in in this period. Over a few days the scale mostly shows water and glycogen, so only longer spans say much about the estimate.",
+                        note: "What the estimate predicted from eating vs estimated burn, next to what your weight trend did (a line through all your weigh-ins, so one watery morning does not swing it) over the last 6 weeks. Only days that count are used — see “Count this day in analysis” on the Meals tab.",
                     });
                     if (!e || e.status === "no_weighins")
                         return (
                             head +
-                            '<p class="empty">Log your weight at least twice in this period to compare — ask Claude to log a weigh-in.</p>'
+                            '<p class="empty">Needs weigh-ins on different days in the last 6 weeks — ask Claude to log a weigh-in.</p>'
                         );
                     const bars = [];
                     if (e.est_logged_g != null)
@@ -5130,7 +6375,12 @@
                             e.est_scaled_g,
                             "faint",
                         ]);
-                    bars.push(["Scale", "actual weigh-ins", e.actual_g, ""]);
+                    bars.push([
+                        "Scale",
+                        "trend through " + e.weighin_days + " weigh-ins",
+                        e.actual_g,
+                        "",
+                    ]);
                     const max = Math.max.apply(
                         null,
                         bars.map((b) => Math.abs(b[2])).concat([100]),
@@ -5166,17 +6416,27 @@
                         plural(e.span_days, "day") +
                         " · " +
                         e.covered_days +
-                        " logged</p>";
+                        " counted</p>";
                     let verdict;
-                    if (e.status === "no_estimate")
+                    if (e.quality === "no_estimate")
                         verdict = hasBurn()
-                            ? "No logged days between these weigh-ins, so there is no estimate to compare yet."
+                            ? "Calibration needs counted days between weigh-ins (2+ entries and at least half your typical day, or marked on the Meals tab)."
                             : "No estimate for these days yet. " +
                               ADD_BODY +
                               " to estimate your burn.";
                     else if (!e.calibrated)
                         verdict =
-                            "Not enough logged days yet to judge the estimate (need 2+ weeks, 70% logged).";
+                            e.quality === "too_noisy"
+                                ? "Your weigh-ins scatter too much to calibrate yet (±" +
+                                  fmt(e.uncertainty_kcal) +
+                                  " kcal/day). Weigh in more often, at the same time of day."
+                                : e.quality === "missing_bmr"
+                                  ? "Calibration needs height, birth date and sex to calculate BMR."
+                                  : e.quality === "no_estimate"
+                                    ? "Calibration needs counted days between weigh-ins (2+ entries and at least half your typical day, or marked on the Meals tab)."
+                                    : e.quality === "too_few_days"
+                                      ? "Calibration needs 3+ weeks between first and last weigh-in, with 70% of those days counted."
+                                      : "Calibration needs weigh-ins on at least 4 different days in the last 42 days.";
                     else {
                         const est =
                             e.est_scaled_g != null
@@ -5204,15 +6464,19 @@
                         verdict =
                             first +
                             (k < 50
-                                ? " — the burn estimate looks about right (within ~50 kcal/day)."
+                                ? " — the burn estimate looks about right (within ~50 kcal/day, ±" +
+                                  fmt(e.uncertainty_kcal) +
+                                  " kcal/day)."
                                 : " — the burn estimate looks ~" +
                                   fmt(Math.round(k / 10) * 10) +
-                                  " kcal/day " +
+                                  " kcal/day (±" +
+                                  fmt(e.uncertainty_kcal) +
+                                  " kcal/day) " +
                                   (e.implied_kcal_per_day > 0
                                       ? "high"
                                       : "low") +
                                   ".") +
-                            ' <span class="aside">(It assumes your resting burn + your watch’s active kcal; a “low” reading means you burn more than that.)</span>';
+                            ' <span class="aside">(It assumes your resting burn + your watch’s active kcal + digestion (10% of what you eat); a “low” reading means you burn more than that.)</span>';
                     }
                     return (
                         head +
@@ -5277,6 +6541,7 @@
                     return shortDay(start) + "–" + shortDay(end);
                 }
                 function dayRow(r) {
+                    const countsDay = r.counts_in_calibration !== false;
                     return {
                         date: r.date,
                         title:
@@ -5300,9 +6565,15 @@
                         mealCount: r.mealCount,
                         // The body-change band: today is never counted
                         // while it runs.
-                        band_g: r.in_progress ? null : r.balance_g,
-                        band_kcal: r.in_progress ? null : r.balance_kcal,
-                        band_days: r.in_progress || r.balance_g == null ? 0 : 1,
+                        // Nor a day the calibration leaves out (partly logged).
+                        band_g:
+                            r.in_progress || !countsDay ? null : r.balance_g,
+                        band_kcal:
+                            r.in_progress || !countsDay ? null : r.balance_kcal,
+                        band_days:
+                            r.in_progress || !countsDay || r.balance_g == null
+                                ? 0
+                                : 1,
                     };
                 }
                 function bucketRow(b) {
@@ -5391,7 +6662,10 @@
                                     ? [
                                           [
                                               LG.rest(),
-                                              "Resting burn (changes with weight)",
+                                              data.calibration &&
+                                              data.calibration.applied
+                                                  ? "Baseline burn calibrated from your weight trend"
+                                                  : "Resting burn (changes with weight)",
                                           ],
                                       ]
                                           .concat(
@@ -5424,7 +6698,7 @@
                               " is dimmed and counts today once it ends.";
                     const balNote = !hasBurn()
                         ? ""
-                        : "Eaten − estimated burn, in kcal and in grams (÷ 7.7 kcal per gram). An estimate for spotting the trend — daily scale weight swings far more with water and salt. Today is left out until it ends." +
+                        : "Eaten − estimated burn, in kcal and in grams (÷ 6 kcal per gram of weight change). An estimate for spotting the trend — daily scale weight swings far more with water and salt. Today is left out until it ends." +
                           (g === "day"
                               ? ""
                               : " Each bar is the " +
@@ -5459,27 +6733,57 @@
                                   ? "The goal is your " +
                                     fmt(goalCustom()) +
                                     " kcal baseline plus that day’s active calories from your watch"
-                                  : "No goal set, so the goal is your estimated burn (resting + active)") +
+                                  : "No goal set, so the goal is your estimated burn (resting + active + digestion)") +
                               "; the part of a bar above it is hatched."
                             : "No calorie goal set.") +
                         (hasBurn()
-                            ? " Est. burn is your resting burn (dashed) plus workout / active kcal (the slate segment up to the ring)."
+                            ? data.calibration && data.calibration.applied
+                                ? " Est. burn = resting (calibrated from your weight trend) + active + 10% of what you eat for digestion — estimates, not measurements."
+                                : " Est. burn = resting (Mifflin-St Jeor) + active + 10% of what you eat for digestion — estimates, not measurements."
                             : "") +
                         grouped;
                     $("trends-body").innerHTML =
                         '<div class="stack">' +
                         tilesHtml(rows, s) +
-                        '<section class="rv" aria-labelledby="h-cal">' +
+                        (barsView
+                            ? ""
+                            : '<section class="rv" aria-labelledby="h-cal2">' +
+                              calories2Html() +
+                              "</section>") +
+                        (barsView
+                            ? '<section class="rv" aria-labelledby="h-cal">'
+                            : '<section class="rv" hidden aria-labelledby="h-cal">') +
                         secHead({
                             wide: true,
                             eyebrow: "Energy",
                             id: "h-cal",
                             title: calTitle,
                             note: calNote,
+                            aside:
+                                '<div class="chart-prefs">' +
+                                chartPref(
+                                    "calories-axis",
+                                    "Calories axis",
+                                    caloriesAxis,
+                                    [
+                                        ["full", "Y axis: Full"],
+                                        ["collapsed", "Collapsed"],
+                                    ],
+                                ) +
+                                chartPref(
+                                    "calories-today",
+                                    "Today bar",
+                                    caloriesToday,
+                                    [
+                                        ["hidden", "Today: Hidden"],
+                                        ["shown", "Shown"],
+                                    ],
+                                ) +
+                                "</div>",
                             legend: any ? calLegend : "",
                         }) +
                         (any
-                            ? '<div class="plot" id="cal-plot"></div>'
+                            ? '<div class="plot" id="cal-plot"></div><p class="chart-note" id="cal-axis-note"></p>'
                             : emptyMsg) +
                         "</section>" +
                         '<section class="rv" aria-labelledby="h-bal">' +
@@ -5514,6 +6818,9 @@
                         '<section class="rv" aria-labelledby="h-evs">' +
                         evsHtml() +
                         "</section>" +
+                        '<section class="rv" aria-labelledby="h-met">' +
+                        metabolismHtml() +
+                        "</section>" +
                         '<section class="rv" aria-labelledby="h-mac">' +
                         secHead({
                             wide: true,
@@ -5526,6 +6833,27 @@
                                       (g === "week" ? "weekly" : "monthly") +
                                       " average per logged day",
                             note: "Stacked grams of protein, carbs and fat.",
+                            aside:
+                                '<div class="chart-prefs">' +
+                                chartPref(
+                                    "macro-segments",
+                                    "Segment grams",
+                                    macroSegments ? "on" : "off",
+                                    [
+                                        ["on", "Segment grams"],
+                                        ["off", "Hidden"],
+                                    ],
+                                ) +
+                                chartPref(
+                                    "macro-totals",
+                                    "Day total",
+                                    macroTotals ? "on" : "off",
+                                    [
+                                        ["on", "Day total"],
+                                        ["off", "Hidden"],
+                                    ],
+                                ) +
+                                "</div>",
                             legend: any
                                 ? legend([
                                       [LG.bar("m-protein"), "Protein"],
@@ -5641,10 +6969,483 @@
                 }
                 const stepWord = () => (gran() === "day" ? "day" : perWord());
 
+                function calories2Chart() {
+                    const host = $("cal2-plot");
+                    if (!host || !host.clientWidth) return;
+                    const raw = (data.daily || []).filter(
+                        (r) => caloriesToday === "shown" || !r.in_progress,
+                    );
+                    const completed = raw.filter((r) => !r.in_progress);
+                    const smooth = data.days > 14;
+                    const components = (r) => {
+                        if (r.burn_kcal == null) return null;
+                        const baseline = r.bmr_kcal || 0;
+                        const workout = r.active_kcal || 0;
+                        return {
+                            baseline,
+                            digestion: r.burn_kcal - baseline - workout,
+                            workout,
+                            burn: r.burn_kcal,
+                        };
+                    };
+                    const points = raw.map((r, i) => {
+                        if (!smooth) {
+                            const burn = components(r);
+                            return {
+                                ...r,
+                                ...burn,
+                                eaten: r.in_progress
+                                    ? caloriesToday === "shown" &&
+                                      r.mealCount > 0
+                                        ? r.calories
+                                        : null
+                                    : r.counts_in_calibration
+                                      ? r.calories
+                                      : null,
+                                goal: r.goal_calories,
+                            };
+                        }
+                        const window = raw.slice(Math.max(0, i - 6), i + 1);
+                        const counted = window.filter(
+                            (x) =>
+                                !x.in_progress &&
+                                x.counts_in_calibration &&
+                                x.calories != null,
+                        );
+                        // Eaten, burn and goal must average the SAME days:
+                        // burn over every day (partial today, half-logged
+                        // days) against eaten over complete days only drew a
+                        // surplus that the daily view does not show. With
+                        // too few complete days there is no eaten line, so
+                        // the reference lines fall back to the whole window.
+                        const basis = counted.length >= 4 ? counted : window;
+                        const burns = basis.map(components).filter(Boolean);
+                        const goals = basis.filter(
+                            (x) => x.goal_calories != null,
+                        );
+                        const mean = (arr, key) =>
+                            arr.length
+                                ? arr.reduce((sum, x) => sum + x[key], 0) /
+                                  arr.length
+                                : null;
+                        const vals = {};
+                        ["baseline", "digestion", "workout", "burn"].forEach(
+                            (key) => (vals[key] = mean(burns, key)),
+                        );
+                        return {
+                            ...r,
+                            ...vals,
+                            eaten:
+                                counted.length >= 4
+                                    ? mean(counted, "calories")
+                                    : null,
+                            goal: mean(goals, "goal_calories"),
+                        };
+                    });
+                    const vals = points
+                        .flatMap((p) => [
+                            p.baseline,
+                            p.baseline + (p.digestion || 0),
+                            p.burn,
+                            p.eaten,
+                            p.goal,
+                        ])
+                        .filter((v) => v != null);
+                    if (!vals.length) return;
+                    // The axis starts a little below the lowest baseline (the
+                    // baseline band is cut, marked with a break), so the part
+                    // that changes day to day — eaten, digestion, workout —
+                    // gets the height instead of a solid block from zero.
+                    const maxValue = Math.max(1, ...vals);
+                    const baseMin = Math.min(
+                        ...points
+                            .map((p) => p.baseline)
+                            .filter((v) => v != null),
+                        ...vals,
+                    );
+                    const floor0 = Math.max(0, baseMin - 300);
+                    const step =
+                        [100, 200, 250, 500].find(
+                            (x) =>
+                                Math.ceil(maxValue / x) -
+                                    Math.floor(floor0 / x) <=
+                                6,
+                        ) || 1000;
+                    const lo = Math.floor(floor0 / step) * step;
+                    const hi = Math.ceil(maxValue / step) * step;
+                    const ticks = Math.round((hi - lo) / step);
+                    const c = chartSvg(
+                        host,
+                        innerWidth <= 480 ? 240 : 280,
+                        "Eaten, baseline, digestion, workout, estimated burn and calorie goal, kcal per day.",
+                    );
+                    const base = c.h - PAD.b,
+                        L = gutter(yLabels(hi, 4)),
+                        W = c.w - L - PAD.r,
+                        H = base - PAD.t,
+                        yAt = (v) =>
+                            base - ((Math.max(v, lo) - lo) / (hi - lo)) * H,
+                        svg = c.svg;
+                    for (let i = 0; i <= ticks; i++) {
+                        const v = lo + i * step,
+                            y = yAt(v);
+                        if (i)
+                            svg.appendChild(
+                                svgEl("line", {
+                                    x1: L,
+                                    x2: L + W,
+                                    y1: y,
+                                    y2: y,
+                                    class: "gridline",
+                                }),
+                            );
+                        svgText(svg, L - 8, y + 4, fmt(v), "lbl", "end");
+                    }
+                    const xAt = (i) =>
+                        L +
+                        (points.length < 2
+                            ? W / 2
+                            : (W * i) / (points.length - 1));
+                    const area = (lower, upper, cls) => {
+                        let seg = [];
+                        const flush = () => {
+                            if (!seg.length) return;
+                            let d = "M" + xAt(seg[0][0]) + "," + yAt(seg[0][1]);
+                            seg.forEach(
+                                (q) => (d += "L" + xAt(q[0]) + "," + yAt(q[2])),
+                            );
+                            for (let j = seg.length - 1; j >= 0; j--)
+                                d +=
+                                    "L" + xAt(seg[j][0]) + "," + yAt(seg[j][1]);
+                            svg.appendChild(
+                                svgEl("path", { d: d + "Z", class: cls }),
+                            );
+                            seg = [];
+                        };
+                        points.forEach((p, i) => {
+                            if (p.burn == null) return flush();
+                            seg.push([i, lower(p), upper(p)]);
+                        });
+                        flush();
+                    };
+                    area(
+                        () => lo,
+                        (p) => p.baseline,
+                        "cal2-area-base",
+                    );
+                    if (lo > 0) {
+                        // Axis break: the scale does not start at zero.
+                        const zx = L - 4,
+                            zy = base - 6;
+                        svg.appendChild(
+                            svgEl("path", {
+                                d:
+                                    "M" +
+                                    (zx - 6) +
+                                    "," +
+                                    (zy + 3) +
+                                    "l4,-4l4,4l4,-4",
+                                class: "cal2-break",
+                            }),
+                        );
+                    }
+                    area(
+                        (p) => p.baseline,
+                        (p) => p.baseline + p.digestion,
+                        "cal2-area-digestion",
+                    );
+                    area(
+                        (p) => p.baseline + p.digestion,
+                        (p) => p.burn,
+                        "cal2-area-workout",
+                    );
+                    const line = (key) => {
+                        let d = "",
+                            prev = false;
+                        points.forEach((p, i) => {
+                            if (p[key] == null) {
+                                prev = false;
+                                return;
+                            }
+                            d +=
+                                (prev ? "L" : "M") + xAt(i) + "," + yAt(p[key]);
+                            prev = true;
+                        });
+                        return d;
+                    };
+                    svg.appendChild(
+                        svgEl("path", {
+                            d: line("burn"),
+                            class: "cal2-burn-top",
+                        }),
+                    );
+                    // Pink surplus quads are split at the exact line crossing.
+                    const polygon = (coords) =>
+                        svg.appendChild(
+                            svgEl("path", {
+                                d:
+                                    "M" +
+                                    coords
+                                        .map((q) => q[0] + "," + q[1])
+                                        .join("L") +
+                                    "Z",
+                                class: "cal2-surplus",
+                            }),
+                        );
+                    for (let i = 0; i < points.length - 1; i++) {
+                        const a = points[i],
+                            b = points[i + 1];
+                        if (
+                            a.eaten == null ||
+                            a.burn == null ||
+                            b.eaten == null ||
+                            b.burn == null
+                        )
+                            continue;
+                        const d0 = a.eaten - a.burn,
+                            d1 = b.eaten - b.burn;
+                        if (d0 <= 0 && d1 <= 0) continue;
+                        const A = [xAt(i), yAt(a.eaten)],
+                            B = [xAt(i + 1), yAt(b.eaten)],
+                            C = [xAt(i + 1), yAt(b.burn)],
+                            D = [xAt(i), yAt(a.burn)];
+                        if (d0 * d1 < 0) {
+                            const t = d0 / (d0 - d1),
+                                x = xAt(i) + (xAt(i + 1) - xAt(i)) * t,
+                                eaten = a.eaten + (b.eaten - a.eaten) * t,
+                                burn = a.burn + (b.burn - a.burn) * t,
+                                X = [x, yAt(eaten)],
+                                Y = [x, yAt(burn)];
+                            if (d0 > 0) polygon([A, X, Y, D]);
+                            else polygon([X, B, C, Y]);
+                        } else polygon([A, B, C, D]);
+                    }
+                    svg.appendChild(
+                        svgEl("path", {
+                            d: line("eaten"),
+                            class: "cal2-eaten-line",
+                        }),
+                    );
+                    svg.appendChild(
+                        svgEl("path", {
+                            d: !(data.goals && data.goals.calories > 0)
+                                ? ""
+                                : line("goal"),
+                            class: "cal2-goal",
+                        }),
+                    );
+                    if (!smooth)
+                        points.forEach((p, i) => {
+                            if (p.eaten != null)
+                                svg.appendChild(
+                                    svgEl("circle", {
+                                        cx: xAt(i),
+                                        cy: yAt(p.eaten),
+                                        r: 3,
+                                        opacity: p.in_progress ? 0.5 : 1,
+                                        class:
+                                            "cal2-eaten-dot" +
+                                            (p.goal != null && p.eaten > p.goal
+                                                ? " over"
+                                                : ""),
+                                    }),
+                                );
+                        });
+                    baseline(svg, L, L + W, base);
+                    const labels = xLabelIdx(points.length, W, 5),
+                        idx =
+                            labels.length > 7
+                                ? [...Array(7)].map((_, k) =>
+                                      Math.round((k * (points.length - 1)) / 6),
+                                  )
+                                : labels;
+                    idx.forEach((i) =>
+                        svgText(
+                            svg,
+                            xAt(i),
+                            c.h - 8,
+                            shortDay(points[i].date),
+                            "xl",
+                            "middle",
+                        ),
+                    );
+                    const last = points
+                        .slice()
+                        .reverse()
+                        .find((p) => p.eaten != null && p.burn != null);
+                    if (last) {
+                        const i = points.indexOf(last);
+                        svgText(
+                            svg,
+                            xAt(i),
+                            Math.min(yAt(last.eaten), yAt(last.burn)) - 7,
+                            fmtSigned(Math.round(last.eaten - last.burn)),
+                            "met-label",
+                            "end",
+                        );
+                    }
+                    inspect(
+                        svg,
+                        points.map((p) => {
+                            const delta =
+                                p.eaten == null || p.burn == null
+                                    ? null
+                                    : Math.round(p.eaten - p.burn);
+                            const rows = [
+                                [
+                                    "cal2-eaten-dot",
+                                    "Eaten",
+                                    p.eaten == null
+                                        ? p.counts_in_calibration
+                                            ? "not logged"
+                                            : "not counted"
+                                        : fmt(p.eaten) + " kcal",
+                                ],
+                                [
+                                    "cal2-area-base",
+                                    baselineLabel(),
+                                    p.baseline == null
+                                        ? "—"
+                                        : fmt(p.baseline) + " kcal",
+                                ],
+                                [
+                                    "cal2-area-digestion",
+                                    "Digestion",
+                                    p.digestion == null
+                                        ? "—"
+                                        : fmt(p.digestion) + " kcal",
+                                ],
+                                [
+                                    "cal2-area-workout",
+                                    "Workout / active",
+                                    p.workout == null
+                                        ? "—"
+                                        : fmt(p.workout) + " kcal",
+                                ],
+                                [
+                                    "cal2-burn-top",
+                                    "Est. burn",
+                                    p.burn == null
+                                        ? "—"
+                                        : fmt(p.burn) + " kcal",
+                                    1,
+                                ],
+                            ].concat(
+                                !(data.goals && data.goals.calories > 0)
+                                    ? []
+                                    : [
+                                          [
+                                              "cal2-goal",
+                                              "Goal",
+                                              p.goal == null
+                                                  ? "—"
+                                                  : fmt(p.goal) + " kcal",
+                                          ],
+                                      ],
+                            );
+                            if (delta != null)
+                                rows.push([
+                                    null,
+                                    delta < 0 ? "Deficit" : "Surplus",
+                                    fmt(Math.abs(delta)) + " kcal",
+                                    1,
+                                ]);
+                            const t = tipContent(
+                                shortDay(p.date) +
+                                    (p.in_progress ? " · so far" : "") +
+                                    (smooth ? " · 7-day avg" : ""),
+                                rows,
+                            );
+                            return {
+                                x: xAt(points.indexOf(p)),
+                                html: t.html,
+                                text: t.text,
+                            };
+                        }),
+                        PAD.t,
+                        base,
+                    );
+                    const logged = completed.filter(
+                            (r) =>
+                                r.counts_in_calibration &&
+                                r.calories != null &&
+                                r.burn_kcal != null,
+                        ),
+                        avg = (key) =>
+                            logged.length
+                                ? logged.reduce(
+                                      (sum, r) =>
+                                          sum +
+                                          (key === "eaten"
+                                              ? r.calories
+                                              : key === "workout"
+                                                ? r.active_kcal || 0
+                                                : key === "burn"
+                                                  ? r.burn_kcal
+                                                  : r[key]),
+                                      0,
+                                  ) / logged.length
+                                : null,
+                        avgE = avg("eaten"),
+                        avgB = avg("burn"),
+                        avgW = avg("workout"),
+                        avgBal =
+                            avgE == null || avgB == null ? null : avgE - avgB;
+                    $("cal2-stats").innerHTML =
+                        stat(
+                            "Avg eaten",
+                            avgE == null ? "—" : fmt(avgE),
+                            "kcal/day",
+                        ) +
+                        stat(
+                            "Avg est. burn",
+                            avgB == null ? "—" : fmt(avgB),
+                            "kcal/day",
+                            "of which workout " +
+                                (avgW == null ? "—" : fmt(avgW)) +
+                                " kcal/day",
+                        ) +
+                        stat(
+                            "Avg workout",
+                            avgW == null ? "—" : fmt(avgW),
+                            "kcal/day",
+                        ) +
+                        stat(
+                            "Avg balance",
+                            avgBal == null ? "—" : fmtSigned(avgBal),
+                            "kcal/day",
+                        );
+                    const n = logged.length,
+                        weekly =
+                            avgBal == null ? 0 : (Math.abs(avgBal) * 7) / 6;
+                    $("cal2-today").textContent =
+                        avgBal == null
+                            ? "Est. burn is available on logged days only."
+                            : Math.abs(avgBal) < 50
+                              ? "You ate about what you burned (within 50 kcal/day)."
+                              : "Over these " +
+                                n +
+                                " fully logged days you ate ~" +
+                                fmt(Math.abs(avgBal)) +
+                                " kcal/day " +
+                                (avgBal < 0 ? "under" : "over") +
+                                " your burn — about " +
+                                wDelta(weekly, data.weightUnit).replace(
+                                    /^[+−-]/,
+                                    "",
+                                ) +
+                                " per week of " +
+                                (avgBal < 0 ? "loss" : "gain") +
+                                " at 6 kcal per gram.";
+                }
+
                 function caloriesChart() {
                     const host = $("cal-plot");
                     if (!host || !host.clientWidth) return;
-                    const rows = chartRows();
+                    const rows = chartRows().filter(
+                        (r) => caloriesToday !== "hidden" || !r.in_progress,
+                    );
+                    const note = $("cal-axis-note");
                     const s = trendsStats(data.daily);
                     const c = chartSvg(
                         host,
@@ -5667,22 +7468,80 @@
                     const plotH = base - PAD.t;
                     const peak = Math.max.apply(
                         null,
-                        rows.map((r) =>
-                            Math.max(
-                                r.calories || 0,
-                                r.goal_calories || 0,
-                                r.burn_kcal || 0,
+                        rows
+                            .map((r) =>
+                                Math.max(
+                                    r.calories || 0,
+                                    r.goal_calories || 0,
+                                    r.burn_kcal || 0,
+                                ),
+                            )
+                            .concat(
+                                data.calibration && data.calibration.applied
+                                    ? [data.calibration.bmr_kcal]
+                                    : [],
                             ),
-                        ),
                     );
-                    const maxY = tickMax(peak * 1.05, 4);
-                    const L = gutter(yLabels(maxY, 4));
+                    const eaten = rows
+                        .filter((r) => r.calories > 0)
+                        .map((r) => r.calories);
+                    const minEaten = eaten.length
+                        ? Math.min.apply(null, eaten)
+                        : 0;
+                    const minY =
+                        caloriesAxis === "collapsed"
+                            ? Math.max(
+                                  0,
+                                  Math.floor((minEaten - 300) / 100) * 100,
+                              )
+                            : 0;
+                    const maxY =
+                        caloriesAxis === "collapsed"
+                            ? Math.max(minY + 100, peak * 1.03)
+                            : tickMax(peak * 1.05, 4);
+                    if (note)
+                        note.textContent =
+                            caloriesAxis === "collapsed"
+                                ? "Axis starts at " +
+                                  minY +
+                                  " kcal, so bar heights are not proportional to zero."
+                                : "";
+                    const L = gutter(
+                        caloriesAxis === "collapsed" ? [""] : yLabels(maxY, 4),
+                    );
                     const plotW = c.w - L - PAD.r;
-                    const yAt = (v) => base - (v / maxY) * plotH;
-                    yAxis(svg, maxY, L, L + plotW, yAt, 4);
+                    const yAt = (v) =>
+                        base - ((v - minY) / (maxY - minY)) * plotH;
+                    if (caloriesAxis !== "collapsed")
+                        yAxis(svg, maxY, L, L + plotW, yAt, 4);
                     const lay = bandLayout(rows.length, plotW);
                     calBars(svg, rows, L, plotW, yAt, base, lay);
                     baseline(svg, L, L + plotW, base);
+                    if (caloriesAxis === "collapsed") {
+                        svg.appendChild(
+                            svgEl("path", {
+                                d:
+                                    "M" +
+                                    L +
+                                    "," +
+                                    (base - 3) +
+                                    "l4,-5 4,5 4,-5 4,5",
+                                class: "gridline",
+                            }),
+                        );
+                        rows.forEach(function (r, i) {
+                            const h = base - yAt(r.calories || 0);
+                            if (r.calories > 0 && h >= 18)
+                                svgText(
+                                    svg,
+                                    L + lay.bw * (i + 0.5),
+                                    yAt(r.calories) + 13,
+                                    fmt(r.calories),
+                                    "chart-value",
+                                    "middle",
+                                );
+                        });
+                    }
                     // Goal as a step line: each bar's own target across its
                     // column, joined vertically where it changes.
                     let d = "";
@@ -5722,6 +7581,18 @@
                         svg.appendChild(
                             svgEl("path", { d: rest, class: "m-rest" }),
                         );
+                    if (data.calibration && data.calibration.applied) {
+                        const reference = svgEl("line", {
+                            x1: L,
+                            x2: L + plotW,
+                            y1: yAt(data.calibration.bmr_kcal),
+                            y2: yAt(data.calibration.bmr_kcal),
+                        });
+                        reference.setAttribute("class", "m-rest");
+                        reference.style.opacity = "0.35";
+                        reference.style.strokeDasharray = "2 5";
+                        svg.appendChild(reference);
+                    }
                     if (splitBurn(rows) && lay.bw >= 3) {
                         const w = Math.max(1.5, Math.min(4, lay.barW * 0.3));
                         rows.forEach(function (r, i) {
@@ -6061,8 +7932,27 @@
                                     style: growDelay(i),
                                 }),
                             );
+                            if (macroSegments && segH >= 16 && lay.barW >= 14) {
+                                svgText(
+                                    svg,
+                                    x + w / 2,
+                                    yTop + segH / 2 + 3,
+                                    fmt(val) + "g",
+                                    "chart-value" + (r.dim ? " dim" : ""),
+                                    "middle",
+                                );
+                            }
                             acc += val;
                         }
+                        if (macroTotals && lay.barW >= 16)
+                            svgText(
+                                svg,
+                                x + w / 2,
+                                yAt(total(r)) - 5,
+                                fmt(total(r)) + "g",
+                                "lbl",
+                                "middle",
+                            );
                     });
                     baseline(svg, L, L + plotW, base);
                     xAxis(svg, rows, lay, L, c.h - 8);
@@ -6097,9 +7987,11 @@
                     );
                 }
                 CHARTS.trends = function () {
-                    caloriesChart();
+                    if (!barsView) calories2Chart();
+                    else caloriesChart();
                     balanceChart();
                     macroChart();
+                    metabolismChart();
                 };
 
                 /* ================= BODY ================= */
@@ -6118,6 +8010,14 @@
                 let goalStatus = { text: "", cls: "" };
                 let goalStatusTimer = 0;
                 let bodyOpen = false;
+                let labOpen = false;
+                let labWindow = 42;
+                let labK = 6.0;
+                let labTef = "macros";
+                let labResult = null;
+                let labSequence = 0;
+                let labTimer = 0;
+                let calcOpen = load("nutrition-dash-calc-open") === "1";
                 let bodyDraft = null;
                 let bodyStatus = { text: "", cls: "" };
                 let bodyStatusTimer = 0;
@@ -6203,10 +8103,39 @@
                     h +=
                         s.bmr_kcal != null
                             ? factsRow(
-                                  "Resting burn (est.)",
-                                  fmt(s.bmr_kcal) + kcal,
-                                  "BMR · Mifflin-St Jeor" +
-                                      (s.age != null ? " · age " + s.age : ""),
+                                  data.calibration && data.calibration.applied
+                                      ? "Baseline burn (calibrated)"
+                                      : "Resting burn (est.)",
+                                  fmt(
+                                      data.calibration &&
+                                          data.calibration.applied
+                                          ? data.calibration.resting_kcal
+                                          : s.bmr_kcal,
+                                  ) + kcal,
+                                  data.calibration && data.calibration.applied
+                                      ? "BMR " +
+                                            fmt(data.calibration.bmr_kcal) +
+                                            " " +
+                                            (data.calibration.resting_kcal >=
+                                            data.calibration.bmr_kcal
+                                                ? "+"
+                                                : "−") +
+                                            fmt(
+                                                Math.abs(
+                                                    data.calibration
+                                                        .resting_kcal -
+                                                        data.calibration
+                                                            .bmr_kcal,
+                                                ),
+                                            ) +
+                                            " from your data · includes everyday movement your watch misses" +
+                                            (data.calibration.clamped
+                                                ? " · held at the ±25% limit — check your logging"
+                                                : "")
+                                      : "BMR · Mifflin-St Jeor" +
+                                            (s.age != null
+                                                ? " · age " + s.age
+                                                : ""),
                               )
                             : miss("Resting burn (est.)", ADD_BODY);
                     h +=
@@ -6214,7 +8143,7 @@
                             ? factsRow(
                                   "Est. burn today",
                                   fmt(s.burn_today_kcal) + kcal,
-                                  "Resting burn + today’s active kcal",
+                                  "Resting + today’s active kcal + digestion (10% of what you eat)",
                               )
                             : miss("Est. burn today", ADD_BODY);
                     return '<dl class="facts-rows">' + h + "</dl>";
@@ -6412,17 +8341,404 @@
                     return (
                         '<section class="details-sec rv"><details class="body-box" id="body-box"' +
                         (bodyOpen ? " open" : "") +
-                        '><summary>Body details</summary><p class="note">Used only for BMI, your healthy weight range and the estimated daily burn (your resting burn from Mifflin-St Jeor, plus your watch’s active calories).</p>' +
+                        '><summary>Body details</summary><p class="note">Used only for BMI, your healthy weight range and the estimated daily burn (' +
+                        (data.calibration && data.calibration.applied
+                            ? "your baseline burn calibrated from your weight trend"
+                            : "your resting burn from Mifflin-St Jeor") +
+                        ", plus your watch’s active calories).</p>" +
                         '<form id="body-form" class="body-form" novalidate><div class="form-grid">' +
                         '<div class="field"><label for="b-height">Height</label><span class="pair"><input class="input" id="b-height" type="number" inputmode="decimal" step="0.1" min="20" max="272" /><select class="input" id="b-unit" aria-label="Height unit"><option value="cm">cm</option><option value="in">in</option></select></span></div>' +
                         '<label class="field" for="b-birth">Birth date<input class="input" id="b-birth" type="date" /></label>' +
                         '<label class="field wide" for="b-sex">Sex<select class="input" id="b-sex"><option value="">—</option><option value="male">Male</option><option value="female">Female</option></select></label></div>' +
+                        '<label class="field wide" for="b-resting">Baseline burn<select class="input" id="b-resting"><option value="formula">Formula (BMR)</option><option value="calibrated">Calibrated from my data</option></select></label>' +
+                        (data.calibration && data.calibration.applied
+                            ? '<p class="note">Calibrated from ' +
+                              data.calibration.counted_days +
+                              " counted days in the last 42 (" +
+                              data.calibration.window.weighin_days +
+                              " weigh-in days, ±" +
+                              fmt(data.calibration.window.uncertainty_kcal) +
+                              " kcal/day): baseline " +
+                              fmt(data.calibration.resting_kcal) +
+                              " kcal vs BMR " +
+                              fmt(data.calibration.bmr_kcal) +
+                              " (" +
+                              fmtSigned(
+                                  data.calibration.resting_kcal -
+                                      data.calibration.bmr_kcal,
+                              ) +
+                              ")</p>"
+                            : data.calibration &&
+                                data.calibration.basis === "calibrated"
+                              ? '<p class="note">' +
+                                (data.calibration.status === "no_weighins" ||
+                                data.calibration.status === "too_few_weighins"
+                                    ? "Calibration needs weigh-ins on at least 4 different days in the last 42 days."
+                                    : data.calibration.status === "missing_bmr"
+                                      ? "Calibration needs height, birth date and sex to calculate BMR."
+                                      : data.calibration.status ===
+                                          "no_estimate"
+                                        ? "Calibration needs counted days between weigh-ins (2+ entries and at least half your typical day, or marked on the Meals tab)."
+                                        : data.calibration.status ===
+                                            "too_few_days"
+                                          ? "Calibration needs 3+ weeks between first and last weigh-in, with 70% of those days counted."
+                                          : "Your weigh-ins scatter too much to calibrate yet (±" +
+                                            fmt(
+                                                data.calibration.window
+                                                    .uncertainty_kcal,
+                                            ) +
+                                            " kcal/day). Weigh in more often, at the same time of day.") +
+                                "</p>"
+                              : data.calibration &&
+                                  data.calibration.status === "ok"
+                                ? '<p class="note">Your data suggests baseline burn of ' +
+                                  fmt(data.calibration.resting_kcal) +
+                                  " kcal vs BMR " +
+                                  fmt(data.calibration.bmr_kcal) +
+                                  " (" +
+                                  fmtSigned(
+                                      data.calibration.resting_kcal -
+                                          data.calibration.bmr_kcal,
+                                  ) +
+                                  ") if you choose calibrated burn.</p>"
+                                : "") +
                         '<div class="form-foot"><button type="submit" class="btn primary" id="b-save">Save</button><span class="b-status ' +
                         bodyStatus.cls +
                         '" id="b-status" role="status">' +
                         esc(bodyStatus.text) +
                         "</span></div></form></details></section>"
                     );
+                }
+                function whatIfHtml() {
+                    const windows = [21, 28, 35, 42, 49, 56];
+                    const tefs = [
+                        ["macros", "From your macros"],
+                        ["0.05", "5%"],
+                        ["0.075", "7.5%"],
+                        ["0.1", "10%"],
+                        ["0.125", "12.5%"],
+                        ["0.15", "15%"],
+                    ];
+                    return (
+                        '<section class="lab-sec rv"><details class="body-box" id="lab-box"' +
+                        (labOpen ? " open" : "") +
+                        '><summary>What-if lab</summary><p class="note">Try other model settings and see what they would do. This is a sandbox: your goals, balances, charts and what Claude tells you always use the defaults.</p><div class="lab-controls">' +
+                        '<div class="lab-row"><span class="lab-label">Lookback</span><div class="lab-control"><div class="seg" role="group" aria-label="Lookback days">' +
+                        windows
+                            .map(
+                                (n) =>
+                                    '<button type="button" data-lab-window="' +
+                                    n +
+                                    '" aria-pressed="' +
+                                    (labWindow === n) +
+                                    '">' +
+                                    n +
+                                    (n === 42
+                                        ? " <small>default</small>"
+                                        : "") +
+                                    "</button>",
+                            )
+                            .join("") +
+                        '</div><p class="lab-help">Shorter follows a recent change faster but is noisier (21 days is about 3× noisier than 42). Weigh-ins in the first week of a diet are mostly water.</p></div></div>' +
+                        '<div class="lab-row"><label for="lab-k">kcal per gram of weight change</label><div class="lab-control"><div class="lab-range"><input id="lab-k" type="range" min="5" max="7.7" step="0.1" value="' +
+                        labK +
+                        '"><output id="lab-k-out" for="lab-k">' +
+                        labK.toFixed(1) +
+                        '</output></div><p class="lab-help">6.0 suits 2-6 week changes (fat + water + glycogen); 7.7 is pure fat. It barely matters when your weight is flat. Lower values also loosen the noise check.</p></div></div>' +
+                        '<div class="lab-row"><span class="lab-label">Digestion</span><div class="lab-control"><div class="seg" role="group" aria-label="Digestion">' +
+                        tefs
+                            .map(
+                                (x) =>
+                                    '<button type="button" data-lab-tef="' +
+                                    x[0] +
+                                    '" aria-pressed="' +
+                                    (labTef === x[0]) +
+                                    '">' +
+                                    x[1] +
+                                    (x[0] === "macros"
+                                        ? " <small>default</small>"
+                                        : "") +
+                                    "</button>",
+                            )
+                            .join("") +
+                        '</div><p class="lab-help">Once calibrated, this mostly cancels out: what it adds to each day\'s burn it removes from the baseline.</p></div></div><button type="button" class="lab-reset" id="lab-reset">Reset to defaults</button></div><div id="lab-results" aria-live="polite"></div><p class="lab-help">Not adjustable on purpose: the reliability checks (21-day span, 8 weigh-in days, 70% of days counted, ±150 kcal/day) and the ±25% limit. They stop the estimate from being tuned to a number you would like.</p></details></section>'
+                    );
+                }
+                const labReasons = {
+                    no_weighins: "needs 8+ weigh-in days",
+                    too_few_weighins: "needs 8+ weigh-in days",
+                    too_few_days: "needs a 21-day span with 70% counted",
+                    too_noisy: "weigh-ins too scattered",
+                    no_estimate: "no counted days",
+                    missing_bmr: "body details missing",
+                };
+                function renderLabResults() {
+                    const host = $("lab-results");
+                    if (!host) return;
+                    if (!labResult) {
+                        host.innerHTML =
+                            '<p class="lab-status" role="status">Calculating…</p>';
+                        return;
+                    }
+                    const d = labResult.default,
+                        c = labResult.custom;
+                    const rows = [
+                        [
+                            "Lookback (days)",
+                            d.calibration.window_days,
+                            c.calibration.window_days,
+                            "",
+                        ],
+                        [
+                            "Weigh-in days",
+                            d.calibration.window &&
+                                d.calibration.window.weighin_days,
+                            c.calibration.window &&
+                                c.calibration.window.weighin_days,
+                            "",
+                        ],
+                        [
+                            "Counted days (counted/span)",
+                            d.calibration.counted_days == null ||
+                            !d.calibration.window
+                                ? null
+                                : d.calibration.counted_days +
+                                  "/" +
+                                  d.calibration.window.span_days,
+                            c.calibration.counted_days == null ||
+                            !c.calibration.window
+                                ? null
+                                : c.calibration.counted_days +
+                                  "/" +
+                                  c.calibration.window.span_days,
+                            "",
+                        ],
+                        [
+                            "What you burned (TDEE) kcal/day",
+                            d.calibration.window &&
+                                d.calibration.window.tdee_kcal,
+                            c.calibration.window &&
+                                c.calibration.window.tdee_kcal,
+                            "",
+                        ],
+                        [
+                            "Average digestion kcal/day",
+                            d.calibration.window &&
+                                d.calibration.window.tef_kcal,
+                            c.calibration.window &&
+                                c.calibration.window.tef_kcal,
+                            "",
+                        ],
+                        [
+                            "Baseline (lookback average) kcal/day",
+                            d.calibration.window &&
+                                d.calibration.window.baseline_kcal,
+                            c.calibration.window &&
+                                c.calibration.window.baseline_kcal,
+                            "",
+                        ],
+                        [
+                            "Offset vs formula kcal/day",
+                            d.calibration.window &&
+                                d.calibration.window.offset_kcal,
+                            c.calibration.window &&
+                                c.calibration.window.offset_kcal,
+                            "",
+                        ],
+                        [
+                            "Uncertainty ±kcal/day",
+                            d.calibration.window &&
+                                d.calibration.window.uncertainty_kcal,
+                            c.calibration.window &&
+                                c.calibration.window.uncertainty_kcal,
+                            "",
+                        ],
+                        [
+                            "Today's baseline kcal/day",
+                            d.calibration.resting_kcal,
+                            c.calibration.resting_kcal,
+                            "today",
+                        ],
+                    ];
+                    const cell = (x) =>
+                        x == null
+                            ? "—"
+                            : typeof x === "string"
+                              ? x
+                              : !Number.isFinite(Number(x))
+                                ? "—"
+                                : fmt(x);
+                    const tableRows = rows
+                        .map(
+                            (r) =>
+                                '<tr class="' +
+                                (r[3] === "today" ? "lab-today" : "") +
+                                '"><td>' +
+                                r[0] +
+                                "</td><td>" +
+                                cell(r[1]) +
+                                "</td><td>" +
+                                cell(r[2]) +
+                                "</td><td>" +
+                                (typeof r[1] !== "number" ||
+                                typeof r[2] !== "number" ||
+                                r[1] === r[2]
+                                    ? ""
+                                    : fmtSigned(Number(r[2]) - Number(r[1]))) +
+                                "</td></tr>",
+                        )
+                        .join("");
+                    // Reliable = passes the checks; whether the user has
+                    // switched calibration on in Body details is separate.
+                    const reliable = c.calibration.status === "ok";
+                    const dBase = d.calibration.resting_kcal,
+                        cBase = c.calibration.resting_kcal;
+                    let sentence = "Same as the default.";
+                    if (!reliable)
+                        sentence =
+                            "With these settings the estimate is not reliable (" +
+                            (labReasons[c.calibration.status] ||
+                                c.calibration.status) +
+                            "), so the dashboard would fall back to the formula BMR.";
+                    else if (cBase != null && dBase != null && cBase !== dBase)
+                        sentence =
+                            "These settings would put today's baseline at " +
+                            fmt(cBase) +
+                            " kcal/day (±" +
+                            cell(
+                                c.calibration.window &&
+                                    c.calibration.window.uncertainty_kcal,
+                            ) +
+                            "), " +
+                            fmt(Math.abs(cBase - dBase)) +
+                            " kcal/day " +
+                            (cBase > dBase ? "higher" : "lower") +
+                            " than the default.";
+                    host.innerHTML =
+                        '<div class="lab-table-wrap calc-table-wrap"><table class="calc-table lab-table"><thead><tr><th></th><th>Default</th><th>What-if</th><th>Change</th></tr></thead><tbody>' +
+                        tableRows +
+                        "<tr><td>Reliability</td><td>" +
+                        (d.calibration.status === "ok" && d.calibration.applied
+                            ? "✓ reliable"
+                            : "✗ " +
+                              (labReasons[d.calibration.status] ||
+                                  d.calibration.status)) +
+                        "</td><td>" +
+                        (reliable
+                            ? "✓ reliable"
+                            : "✗ " +
+                              (labReasons[c.calibration.status] ||
+                                  c.calibration.status)) +
+                        '</td><td></td></tr></tbody></table></div><p class="lab-help">' +
+                        esc(sentence) +
+                        "</p>";
+                }
+                function fetchLab() {
+                    const mine = ++labSequence;
+                    labResult = null;
+                    renderLabResults();
+                    clearTimeout(labTimer);
+                    labTimer = setTimeout(function () {
+                        fetch(
+                            "/api/dashboard/whatif?window=" +
+                                labWindow +
+                                "&k=" +
+                                labK.toFixed(1) +
+                                "&tef=" +
+                                encodeURIComponent(labTef),
+                            { headers: { Authorization: "Bearer " + token } },
+                        )
+                            .then(function (r) {
+                                if (r.status === 401) {
+                                    signOut();
+                                    throw new Error("unauthorized");
+                                }
+                                if (!r.ok) throw new Error("request failed");
+                                return r.json();
+                            })
+                            .then(function (result) {
+                                if (mine !== labSequence) return;
+                                labResult = result;
+                                renderLabResults();
+                            })
+                            .catch(function (e) {
+                                if (
+                                    mine !== labSequence ||
+                                    e.message === "unauthorized"
+                                )
+                                    return;
+                                const host = $("lab-results");
+                                if (host)
+                                    host.innerHTML =
+                                        '<p class="lab-status" role="status">Could not calculate.</p>';
+                            });
+                    }, 250);
+                }
+                function wireLab() {
+                    const box = $("lab-box");
+                    box.addEventListener("toggle", function () {
+                        labOpen = box.open;
+                        if (box.open) fetchLab();
+                    });
+                    box.addEventListener("click", function (ev) {
+                        const w = ev.target.closest("[data-lab-window]"),
+                            t = ev.target.closest("[data-lab-tef]");
+                        if (w) {
+                            labWindow = Number(w.dataset.labWindow);
+                            box.querySelectorAll("[data-lab-window]").forEach(
+                                (b) =>
+                                    b.setAttribute(
+                                        "aria-pressed",
+                                        String(
+                                            Number(b.dataset.labWindow) ===
+                                                labWindow,
+                                        ),
+                                    ),
+                            );
+                            fetchLab();
+                        }
+                        if (t) {
+                            labTef = t.dataset.labTef;
+                            box.querySelectorAll("[data-lab-tef]").forEach(
+                                (b) =>
+                                    b.setAttribute(
+                                        "aria-pressed",
+                                        String(b.dataset.labTef === labTef),
+                                    ),
+                            );
+                            fetchLab();
+                        }
+                        if (ev.target.id === "lab-reset") {
+                            labWindow = 42;
+                            labK = 6;
+                            labTef = "macros";
+                            $("lab-k").value = "6";
+                            $("lab-k-out").textContent = "6.0";
+                            box.querySelectorAll("[data-lab-window]").forEach(
+                                (b) =>
+                                    b.setAttribute(
+                                        "aria-pressed",
+                                        String(
+                                            Number(b.dataset.labWindow) === 42,
+                                        ),
+                                    ),
+                            );
+                            box.querySelectorAll("[data-lab-tef]").forEach(
+                                (b) =>
+                                    b.setAttribute(
+                                        "aria-pressed",
+                                        String(b.dataset.labTef === "macros"),
+                                    ),
+                            );
+                            fetchLab();
+                        }
+                    });
+                    $("lab-k").addEventListener("input", function () {
+                        labK = Number(this.value);
+                        $("lab-k-out").textContent = labK.toFixed(1);
+                        fetchLab();
+                    });
+                    if (labOpen) fetchLab();
                 }
                 function fillBodyForm() {
                     const body = data.body;
@@ -6442,6 +8758,9 @@
                             : String(body.height_cm);
                     $("b-birth").value = d ? d.birth : body.birth_date || "";
                     $("b-sex").value = d ? d.sex : body.sex || "";
+                    $("b-resting").value =
+                        (data.calibration && data.calibration.basis) ||
+                        "formula";
                     // Open it when something is missing, so the ask is
                     // visible — unless the user has toggled it themselves.
                     if (
@@ -6498,6 +8817,7 @@
                                 height_unit: $("b-unit").value,
                                 birth_date: $("b-birth").value || null,
                                 sex: $("b-sex").value || null,
+                                resting_basis: $("b-resting").value,
                             }),
                         })
                             .then(function (r) {
@@ -6604,9 +8924,11 @@
                         "</section>" +
                         goalFormHtml() +
                         bodyFormHtml() +
+                        whatIfHtml() +
                         "</div></div>";
                     fillBodyForm();
                     wireBodyForm();
+                    wireLab();
                     wireGoalForm();
                     wireLogWeight();
                 };
@@ -7815,6 +10137,9 @@
                     ];
                     const body = groups
                         .map(function (g, gi) {
+                            const dayRow = data.daily.find(
+                                (r) => r.date === g.date,
+                            );
                             const day = parseDay(g.date).toLocaleDateString(
                                 undefined,
                                 {
@@ -7842,6 +10167,7 @@
                                 '<tbody><tr class="day"><th colspan="10" scope="colgroup">' +
                                 esc(day) +
                                 partial +
+                                calibrationToggle(dayRow) +
                                 '<span class="tot">' +
                                 tot +
                                 "</span></th></tr>" +
@@ -7916,6 +10242,7 @@
                         " in this range" +
                         (capped ? " — the dashboard lists at most 50." : ".") +
                         "</p></div>";
+                    wireCalibrationToggles($("meals-body"));
                 };
 
                 /* ---------- data ---------- */
