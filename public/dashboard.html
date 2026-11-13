@@ -196,6 +196,23 @@
 
             /* ---------- scale ---------- */
             :root {
+                --cal2-c-eaten: var(--ink);
+                --cal2-c-base: color-mix(in srgb, var(--burn) 16%, var(--bg));
+                --cal2-c-digestion: color-mix(
+                    in srgb,
+                    var(--accent) 35%,
+                    var(--bg)
+                );
+                --cal2-c-workout: color-mix(
+                    in srgb,
+                    var(--burn) 60%,
+                    var(--bg)
+                );
+                --cal2-c-surplus: color-mix(
+                    in srgb,
+                    var(--over) 45%,
+                    var(--bg)
+                );
                 --font-display:
                     "Bricolage Grotesque", -apple-system, BlinkMacSystemFont,
                     "Segoe UI", sans-serif;
@@ -1219,13 +1236,13 @@
             }
             .cal2-eaten-line {
                 fill: none;
-                stroke: var(--ink);
+                stroke: var(--cal2-c-eaten);
                 stroke-width: 2.5;
                 stroke-linejoin: round;
                 stroke-linecap: round;
             }
             .cal2-eaten-dot {
-                fill: var(--ink);
+                fill: var(--cal2-c-eaten);
                 stroke: var(--bg);
                 stroke-width: 1.5;
             }
@@ -1233,18 +1250,15 @@
                 fill: url(#hatch-over);
             }
             .cal2-area-base {
-                fill: var(--burn);
-                opacity: 0.14;
+                fill: var(--cal2-c-base);
                 stroke: none;
             }
             .cal2-area-digestion {
-                fill: var(--accent);
-                opacity: 0.35;
+                fill: var(--cal2-c-digestion);
                 stroke: none;
             }
             .cal2-area-workout {
-                fill: var(--burn);
-                opacity: 0.55;
+                fill: var(--cal2-c-workout);
                 stroke: none;
             }
             .cal2-burn-top {
@@ -1253,8 +1267,7 @@
                 stroke-width: 1.5;
             }
             .cal2-surplus {
-                fill: var(--over);
-                opacity: 0.35;
+                fill: var(--cal2-c-surplus);
             }
             .cal2-why {
                 margin: -8px 0 16px;
@@ -1262,20 +1275,44 @@
                 font-size: var(--fs-small);
             }
             .cal2-legend-base {
-                fill: var(--burn);
-                opacity: 0.14;
+                fill: var(--cal2-c-base);
             }
             .cal2-legend-digestion {
-                fill: var(--accent);
-                opacity: 0.35;
+                fill: var(--cal2-c-digestion);
             }
             .cal2-legend-workout {
-                fill: var(--burn);
-                opacity: 0.55;
+                fill: var(--cal2-c-workout);
+            }
+            .sw.cal2-eaten-line,
+            .sw.cal2-eaten-dot {
+                background: var(--cal2-c-eaten);
+                border-radius: 50%;
+            }
+            .sw.cal2-area-base {
+                background: var(--cal2-c-base);
+            }
+            .sw.cal2-area-digestion {
+                background: var(--cal2-c-digestion);
+            }
+            .sw.cal2-area-workout {
+                background: var(--cal2-c-workout);
+            }
+            .sw.cal2-surplus {
+                background: var(--cal2-c-surplus);
+            }
+            .sw.cal2-burn-top {
+                background: var(--burn);
+                height: 2px;
+                vertical-align: 0.3em;
+            }
+            .sw.cal2-goal {
+                background: none;
+                border-top: 2px dashed var(--ink-2);
+                height: 0;
+                vertical-align: 0.3em;
             }
             .cal2-legend-surplus {
-                fill: var(--over);
-                opacity: 0.55;
+                fill: var(--cal2-c-surplus);
             }
             .met-band {
                 fill: var(--accent);
