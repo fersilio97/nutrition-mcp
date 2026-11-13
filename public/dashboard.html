@@ -4990,7 +4990,15 @@
                     return fmtSignedDec(toUnit(g, unit)) + " " + unit;
                 }
                 function metabolismSeries() {
-                    const days = data.history || data.daily;
+                    // History (49 days, fixed) joined with the range's own rows, so a
+                    // 90-day range has every day and a 7-day range still has the
+                    // look-back each plotted day needs.
+                    const merged = new Map();
+                    (data.history || []).forEach((r) => merged.set(r.date, r));
+                    data.daily.forEach((r) => merged.set(r.date, r));
+                    const days = [...merged.values()].sort((a, b) =>
+                        a.date.localeCompare(b.date),
+                    );
                     const weights = (data.weights || [])
                         .slice()
                         .sort((a, b) => a.date.localeCompare(b.date));
@@ -5084,8 +5092,8 @@
                         }
                         out.push({ date: d.date, est: est7, scale: scale });
                     });
-                    // Always the last 28 days, whatever range is selected.
-                    return out.slice(-28);
+                    // Plotted over the selected range; values use the full history.
+                    return out.filter((p) => p.date >= data.startDate);
                 }
                 function metabolismHtml() {
                     const points = metabolismSeries();
