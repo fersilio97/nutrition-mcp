@@ -551,6 +551,10 @@ export interface PreviewEdits {
     dayOverrides?: Record<string, boolean>;
     /** Weigh-ins logged from the page's form. */
     weights?: WeightEntry[];
+    /** Weigh-in edits from the Weigh-ins tab, by entry id. */
+    weightPatches?: Record<string, Partial<WeightEntry>>;
+    /** Weigh-in ids deleted from the page. */
+    deletedWeightIds?: string[];
     /** Meal edits from the Meals tab, by meal id. */
     mealPatches?: Record<string, Partial<Meal>>;
     /** Meals logged from the page (form or one-tap repeat). */
@@ -589,7 +593,13 @@ export function scenarioWithEdits(
     if (edits.body) fx.profile = { ...fx.profile, ...edits.body };
     if (edits.restingBasis)
         fx.profile = { ...fx.profile, resting_basis: edits.restingBasis };
-    if (edits.weights?.length) fx.weight = [...fx.weight, ...edits.weights];
+    {
+        const wPatch = edits.weightPatches ?? {};
+        const wGone = new Set(edits.deletedWeightIds ?? []);
+        fx.weight = [...fx.weight, ...(edits.weights ?? [])]
+            .filter((w) => !wGone.has(w.id))
+            .map((w) => (wPatch[w.id] ? { ...w, ...wPatch[w.id] } : w));
+    }
     if (edits.goalCalories !== undefined)
         fx.goals = {
             ...(fx.goals ?? emptyGoals()),

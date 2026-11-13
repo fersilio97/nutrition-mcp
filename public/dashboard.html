@@ -845,7 +845,7 @@
             }
             [role="tablist"] {
                 display: grid;
-                grid-template-columns: repeat(4, 1fr);
+                grid-template-columns: repeat(5, 1fr);
             }
             [role="tab"] {
                 position: relative;
@@ -2981,6 +2981,53 @@
                 }
             }
 
+            /* ================= Weigh-ins ================= */
+            .wl-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            .wl-table th,
+            .wl-table td {
+                text-align: left;
+                vertical-align: baseline;
+                padding: var(--s2) var(--s3);
+                border-top: 1px solid var(--line);
+            }
+            .wl-table td:first-child {
+                white-space: nowrap;
+            }
+            .wl-table thead th {
+                border-top: 3px solid var(--rule);
+                font-family: var(--font-mono);
+                font-size: var(--fs-eyebrow);
+                font-weight: 500;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--ink-3);
+                white-space: nowrap;
+            }
+            .wl-table .n {
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+                white-space: nowrap;
+            }
+            .wl-table .wl-note {
+                color: var(--ink-2);
+                overflow-wrap: anywhere;
+            }
+            .wl-table tr.editing td {
+                background: color-mix(in srgb, var(--accent) 6%, transparent);
+            }
+            .wl-table .wl-edit-cell {
+                padding-top: var(--s4);
+                padding-bottom: var(--s4);
+            }
+            @media (max-width: 560px) {
+                .wl-table .wl-hide-sm {
+                    display: none;
+                }
+            }
+
             /* ================= Meals ================= */
             .meals-table {
                 width: 100%;
@@ -3556,6 +3603,29 @@
                             </svg>
                             <span>Meals</span>
                         </button>
+                        <button
+                            role="tab"
+                            type="button"
+                            id="tab-weighins"
+                            aria-controls="panel-weighins"
+                            aria-selected="false"
+                            tabindex="-1"
+                            data-tab="weighins"
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M4 7h16M4 12h16M4 17h10" />
+                                <path d="M18 15l2 2 3-3" />
+                            </svg>
+                            <span>Weigh-ins</span>
+                        </button>
                     </div>
                 </nav>
             </div>
@@ -3606,6 +3676,17 @@
                     <div class="panel-head" data-range-head></div>
                     <div class="panel-body" id="meals-body"></div>
                 </section>
+                <section
+                    role="tabpanel"
+                    id="panel-weighins"
+                    aria-labelledby="tab-weighins"
+                    tabindex="0"
+                    hidden
+                >
+                    <h2 class="sr-only">Weigh-ins</h2>
+                    <div class="banner-slot"></div>
+                    <div class="panel-body" id="weighins-body"></div>
+                </section>
             </main>
         </div>
 
@@ -3625,7 +3706,7 @@
                 let macroTotals = pref("macro-totals", "on") === "on";
                 let caloriesAxis = pref("calories-axis", "full");
                 let caloriesToday = pref("calories-today", "hidden");
-                const TABS = ["today", "trends", "body", "meals"];
+                const TABS = ["today", "trends", "body", "meals", "weighins"];
                 // 7 days → daily bars, 30 → weekly, a year → monthly (the
                 // server's groupDays). 90 was dropped (§0c).
                 const RANGES = [
@@ -4394,6 +4475,11 @@
                         SK_SEC(260) +
                         "</div>",
                     meals:
+                        '<div class="skel">' +
+                        SK_SEC(120) +
+                        SK_SEC(120) +
+                        "</div>",
+                    weighins:
                         '<div class="skel">' +
                         SK_SEC(120) +
                         SK_SEC(120) +
@@ -10426,6 +10512,7 @@
                 }
                 function onData() {
                     loadFrequent();
+                    if (active === "weighins" || wl) loadWeights();
                     markDirty();
                     renderBanners();
                     renderRangeHeads();
@@ -10441,6 +10528,8 @@
                 function signOut() {
                     token = null;
                     data = null;
+                    wl = null;
+                    weEditId = null;
                     loading = false;
                     loadError = false;
                     seq++;
@@ -10512,6 +10601,293 @@
                         .catch(function () {
                             btn.disabled = false;
                             err.textContent = "Could not reach the server.";
+                        });
+                });
+
+                /* ---------- weigh-ins: list, edit, delete ---------- */
+                // The list comes from its own endpoint (every entry, with
+                // ids) because data.weights is windowed and carries no ids.
+                let wl = null; // null = not loaded yet
+                let wlLoading = false;
+                let wlError = false;
+                let weEditId = null;
+                let weFlash = "";
+                let weFlashTimer = 0;
+                let weDelArmed = false;
+                let weDelTimer = 0;
+                function loadWeights() {
+                    if (wlLoading || !token) return;
+                    wlLoading = true;
+                    wlError = false;
+                    return fetch("/api/dashboard/weights", {
+                        headers: { Authorization: "Bearer " + token },
+                    })
+                        .then(function (r) {
+                            if (r.status === 401) {
+                                signOut();
+                                throw new Error("unauthorized");
+                            }
+                            if (!r.ok) throw new Error("http " + r.status);
+                            return r.json();
+                        })
+                        .then(function (b) {
+                            wlLoading = false;
+                            wl = b.weights || [];
+                            contentDirty.weighins = true;
+                            if (active === "weighins") paint();
+                        })
+                        .catch(function (e) {
+                            wlLoading = false;
+                            if (e && e.message === "unauthorized") return;
+                            wlError = true;
+                            if (wl === null) wl = [];
+                            contentDirty.weighins = true;
+                            if (active === "weighins") paint();
+                        });
+                }
+                function weRepaint() {
+                    contentDirty.weighins = true;
+                    paint();
+                }
+                function weFormHtml(w) {
+                    const unit = data.weightUnit;
+                    return (
+                        '<form id="we-form" novalidate aria-label="Edit weigh-in"><div class="form-grid">' +
+                        '<div class="field"><label for="we-weight">Weight (' +
+                        unit +
+                        ')</label><input class="input" id="we-weight" type="number" inputmode="decimal" step="0.1" min="0" value="' +
+                        wfmt(w.weight_g, unit) +
+                        '" /></div>' +
+                        '<label class="field" for="we-at">When<input class="input" id="we-at" type="datetime-local" value="' +
+                        esc(localInputValue(w.logged_at)) +
+                        '" /></label>' +
+                        '<label class="field wide" for="we-note">Note (optional)<input class="input" id="we-note" type="text" maxlength="1000" value="' +
+                        esc(w.notes || "") +
+                        '" /></label></div>' +
+                        '<div class="form-foot"><button type="submit" class="btn primary" id="we-save">Save changes</button><button type="button" class="btn" id="we-cancel">Cancel</button><span class="b-status" id="we-status" role="status"></span><button type="button" class="btn danger" id="we-delete">Delete weigh-in</button></div>' +
+                        '<p class="form-hint">Times are in ' +
+                        esc(data.timezone) +
+                        ". Only the fields you change are saved.</p></form>"
+                    );
+                }
+                RENDER.weighins = function () {
+                    const host = $("weighins-body");
+                    if (wl === null) {
+                        host.innerHTML = SKELETON.weighins;
+                        loadWeights();
+                        return;
+                    }
+                    const unit = data.weightUnit;
+                    const head = secHead({
+                        eyebrow: "Log",
+                        id: "h-wl",
+                        title: "Weigh-ins",
+                        note: wl.length
+                            ? plural(wl.length, "entry", "entries") +
+                              ", newest first, in " +
+                              unit +
+                              ". Edit one to fix a wrong value, time or note, or delete a mistaken entry."
+                            : "",
+                    });
+                    const flash = weFlash
+                        ? '<p class="lw-flash" role="status">' +
+                          esc(weFlash) +
+                          "</p>"
+                        : "";
+                    const err = wlError
+                        ? '<p class="b-status err" role="alert">Could not load every weigh-in.</p>'
+                        : "";
+                    if (!wl.length) {
+                        host.innerHTML =
+                            '<section class="rv" aria-labelledby="h-wl">' +
+                            head +
+                            flash +
+                            err +
+                            '<p class="empty">No weigh-ins yet. Log one from the Body tab, or ask Claude to log your weight.</p></section>';
+                        return;
+                    }
+                    const rows = wl
+                        .map(function (w) {
+                            const editing = w.id === weEditId;
+                            const row =
+                                '<tr class="' +
+                                (editing ? "editing" : "") +
+                                '"><td>' +
+                                esc(shortDay(w.date)) +
+                                " · <small>" +
+                                esc(localTime(w.logged_at)) +
+                                '</small></td><td class="n"><b>' +
+                                wfmt(w.weight_g, unit) +
+                                "</b> " +
+                                unitSm(unit) +
+                                '</td><td class="wl-note wl-hide-sm">' +
+                                esc(w.notes || "") +
+                                '</td><td class="n"><button type="button" class="btn btn-sm" data-we-edit="' +
+                                esc(w.id) +
+                                '" aria-label="Edit weigh-in of ' +
+                                esc(longDay(w.date)) +
+                                '"' +
+                                (editing ? " hidden" : "") +
+                                ">Edit</button></td></tr>";
+                            return editing
+                                ? row +
+                                      '<tr class="editing"><td class="wl-edit-cell" colspan="4">' +
+                                      weFormHtml(w) +
+                                      "</td></tr>"
+                                : row;
+                        })
+                        .join("");
+                    host.innerHTML =
+                        '<section class="rv" aria-labelledby="h-wl">' +
+                        head +
+                        flash +
+                        err +
+                        '<div class="scroll-x"><table class="wl-table"><thead><tr><th>When</th><th class="n">Weight</th><th class="wl-hide-sm">Note</th><th></th></tr></thead><tbody>' +
+                        rows +
+                        "</tbody></table></div></section>";
+                    if (weEditId && $("we-weight")) $("we-weight").focus();
+                };
+                function weFlashSet(text) {
+                    weFlash = text;
+                    clearTimeout(weFlashTimer);
+                    weFlashTimer = setTimeout(function () {
+                        weFlash = "";
+                        const f = document.querySelector(
+                            "#weighins-body .lw-flash",
+                        );
+                        if (f) f.remove();
+                    }, 6000);
+                }
+                function weStatus(text, err) {
+                    const s = $("we-status");
+                    if (!s) return;
+                    s.className = "b-status" + (err ? " err" : "");
+                    s.textContent = text;
+                }
+                // Only what differs from the entry as listed.
+                function weChanges(w, v) {
+                    const out = {};
+                    if (v.weight.trim() !== wfmt(w.weight_g, data.weightUnit)) {
+                        out.weight = v.weight;
+                        out.unit = data.weightUnit;
+                    }
+                    if (v.at && v.at !== localInputValue(w.logged_at))
+                        out.logged_at = v.at;
+                    if (v.note.trim() !== (w.notes || "").trim())
+                        out.notes = v.note;
+                    return out;
+                }
+                function weAfterChange(msg) {
+                    weEditId = null;
+                    weFlashSet(msg);
+                    loadWeights();
+                    // Charts, Today's figure and the Body tab move with it.
+                    refresh();
+                }
+                function weDelete() {
+                    const b = $("we-delete");
+                    if (!b || !weEditId) return;
+                    if (!weDelArmed) {
+                        weDelArmed = true;
+                        b.textContent = "Click again to delete";
+                        b.classList.add("armed");
+                        clearTimeout(weDelTimer);
+                        weDelTimer = setTimeout(function () {
+                            weDelArmed = false;
+                            const x = $("we-delete");
+                            if (x) {
+                                x.textContent = "Delete weigh-in";
+                                x.classList.remove("armed");
+                            }
+                        }, 4000);
+                        return;
+                    }
+                    clearTimeout(weDelTimer);
+                    weDelArmed = false;
+                    b.disabled = true;
+                    writeJson(
+                        "DELETE",
+                        "/api/dashboard/weights/" +
+                            encodeURIComponent(weEditId),
+                    )
+                        .then(function (res) {
+                            if (!res.ok && res.status !== 404) {
+                                b.disabled = false;
+                                return weStatus("Could not delete.", true);
+                            }
+                            weAfterChange("Weigh-in deleted.");
+                        })
+                        .catch(function (err) {
+                            if (err && err.message === "unauthorized") return;
+                            b.disabled = false;
+                            weStatus("Could not reach the server.", true);
+                        });
+                }
+                document.addEventListener("click", function (ev) {
+                    const t = ev.target;
+                    if (!t.closest) return;
+                    const ed = t.closest("[data-we-edit]");
+                    if (ed) {
+                        weEditId = ed.dataset.weEdit;
+                        weDelArmed = false;
+                        weRepaint();
+                        return;
+                    }
+                    if (t.closest("#we-cancel")) {
+                        weEditId = null;
+                        weRepaint();
+                        return;
+                    }
+                    if (t.closest("#we-delete")) weDelete();
+                });
+                $("weighins-body").addEventListener("submit", function (ev) {
+                    if (!ev.target.closest("#we-form")) return;
+                    ev.preventDefault();
+                    const id = weEditId;
+                    const w = (wl || []).filter((x) => x.id === id)[0];
+                    if (!w) return;
+                    const changes = weChanges(w, {
+                        weight: $("we-weight").value,
+                        at: $("we-at").value,
+                        note: $("we-note").value,
+                    });
+                    if (!Object.keys(changes).length)
+                        return weStatus("Nothing changed.", false);
+                    $("we-save").disabled = true;
+                    weStatus("Saving…", false);
+                    writeJson(
+                        "PATCH",
+                        "/api/dashboard/weights/" + encodeURIComponent(id),
+                        changes,
+                    )
+                        .then(function (res) {
+                            if ($("we-save")) $("we-save").disabled = false;
+                            if (!res.ok)
+                                return weStatus(
+                                    res.status === 404
+                                        ? "This weigh-in no longer exists."
+                                        : (res.body &&
+                                              res.body.error_description) ||
+                                              "Could not save.",
+                                    true,
+                                );
+                            weAfterChange(
+                                "Saved " +
+                                    wfmt(
+                                        res.body.entry.weight_g,
+                                        data.weightUnit,
+                                    ) +
+                                    " " +
+                                    data.weightUnit +
+                                    " · " +
+                                    shortDay(res.body.entry.date) +
+                                    ".",
+                            );
+                        })
+                        .catch(function (err) {
+                            if (err && err.message === "unauthorized") return;
+                            if ($("we-save")) $("we-save").disabled = false;
+                            weStatus("Could not reach the server.", true);
                         });
                 });
 

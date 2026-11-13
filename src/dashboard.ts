@@ -25,6 +25,9 @@ import {
     upsertNutritionGoals,
     getProfile,
     getLatestWeight,
+    getAllWeight,
+    updateWeight,
+    deleteWeight,
     getActivityInRange,
     getCalibrationDayOverrides,
     setCalibrationDayOverride,
@@ -757,6 +760,119 @@ export async function logWeightFromDashboard(
     };
 }
 
+type WeightRow = {
+    id: string;
+    logged_at: string;
+    date: string;
+    weight_g: number;
+    notes: string | null;
+};
+const weightRow = (e: WeightEntry, tz: string): WeightRow => ({
+    id: e.id,
+    logged_at: e.logged_at,
+    date: dateInTz(e.logged_at, tz),
+    weight_g: e.weight_g,
+    notes: e.notes,
+});
+
+/**
+ * Validate a weigh-in edit from the Weigh-ins tab — update_weight's rules
+ * (toGrams, isPlausibleWeightGrams, resolveWriteLoggedAt). The page sends only
+ * the fields that changed. An empty `notes` clears the note (null); weight and
+ * logged_at can't be cleared. Pure, so the dev preview applies the same rules.
+ */
+export function checkWeightPatch(
+    input: Record<string, unknown>,
+    opts: { tz: string; preferredUnit: WeightUnit | null; nowMs: number },
+): Checked<{ weight_g?: number; logged_at?: string; notes?: string | null }> {
+    const out: {
+        weight_g?: number;
+        logged_at?: string;
+        notes?: string | null;
+    } = {};
+    for (const key of Object.keys(input)) {
+        if (!["weight", "unit", "logged_at", "notes"].includes(key))
+            return { ok: false, error: `${key} can't be edited here.` };
+    }
+    if (input.weight !== undefined) {
+        const checked = checkWeightEntry(
+            { weight: input.weight, unit: input.unit },
+            opts,
+        );
+        if (!checked.ok) return checked;
+        out.weight_g = checked.value.weight_g;
+    }
+    if (input.logged_at !== undefined) {
+        const at = checkLoggedAt(input.logged_at, opts.tz, opts.nowMs);
+        if (!at.ok) return at;
+        out.logged_at = at.value;
+    }
+    if (input.notes !== undefined) {
+        if (input.notes !== null && typeof input.notes !== "string")
+            return { ok: false, error: "notes must be text." };
+        const notes = (input.notes ?? "").trim();
+        if (notes.length > MAX_NOTE_CHARS)
+            return {
+                ok: false,
+                error: `notes is longer than ${MAX_NOTE_CHARS} characters.`,
+            };
+        out.notes = notes || null;
+    }
+    if (!Object.keys(out).length)
+        return { ok: false, error: "Nothing to change." };
+    return { ok: true, value: out };
+}
+
+/** Every weigh-in the user has, newest first, with ids — the Weigh-ins tab. */
+export async function listWeightsFromDashboard(userId: string): Promise<Reply> {
+    const tz = timezoneFromProfile(await getProfile(userId)) ?? "UTC";
+    const all = await getAllWeight(userId);
+    return {
+        status: 200,
+        json: {
+            weights: all
+                .map((e) => weightRow(e, tz))
+                .sort((a, b) => b.logged_at.localeCompare(a.logged_at)),
+        },
+    };
+}
+
+export async function updateWeightFromDashboard(
+    userId: string,
+    id: string,
+    input: Record<string, unknown>,
+): Promise<Reply> {
+    const notFound: Reply = { status: 404, json: { error: "not_found" } };
+    if (!UUID_RE.test(id)) return notFound;
+    const profile = await getProfile(userId);
+    const tz = timezoneFromProfile(profile) ?? "UTC";
+    const checked = checkWeightPatch(input, {
+        tz,
+        preferredUnit: preferredWeightUnitFromProfile(profile),
+        nowMs: Date.now(),
+    });
+    if (!checked.ok) return invalid(checked.error);
+    let saved: WeightEntry;
+    try {
+        saved = await updateWeight(userId, id, checked.value);
+    } catch (err) {
+        if (err instanceof Error && /entry not found/.test(err.message))
+            return notFound;
+        throw err;
+    }
+    return { status: 200, json: { ok: true, entry: weightRow(saved, tz) } };
+}
+
+export async function deleteWeightFromDashboard(
+    userId: string,
+    id: string,
+): Promise<Reply> {
+    if (!UUID_RE.test(id)) return { status: 404, json: { error: "not_found" } };
+    return (await deleteWeight(userId, id))
+        ? { status: 200, json: { ok: true } }
+        : { status: 404, json: { error: "not_found" } };
+}
+
 // update_meal's own list (src/import.ts), "treat" included.
 const MEAL_TYPES: readonly string[] = MEAL_TYPE_VALUES;
 // update_meal's own bounds (src/import.ts, re-exported by src/mcp.ts).
@@ -1280,6 +1396,29 @@ export function createDashboardRouter(): Hono {
         const res = await logWeightFromDashboard(
             c.get("userId") as string,
             body,
+        );
+        return c.json(res.json, res.status);
+    });
+
+    // The Weigh-ins tab: every entry with its id, then edit / delete one.
+    dash.get("/api/dashboard/weights", authenticateBearer, async (c) => {
+        const res = await listWeightsFromDashboard(c.get("userId") as string);
+        return c.json(res.json, res.status);
+    });
+    dash.patch("/api/dashboard/weights/:id", authenticateBearer, async (c) => {
+        const body = await readObject(c);
+        if (!body) return c.json({ error: "invalid_request" }, 400);
+        const res = await updateWeightFromDashboard(
+            c.get("userId") as string,
+            c.req.param("id") ?? "",
+            body,
+        );
+        return c.json(res.json, res.status);
+    });
+    dash.delete("/api/dashboard/weights/:id", authenticateBearer, async (c) => {
+        const res = await deleteWeightFromDashboard(
+            c.get("userId") as string,
+            c.req.param("id") ?? "",
         );
         return c.json(res.json, res.status);
     });
