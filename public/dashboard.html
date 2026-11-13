@@ -2608,8 +2608,11 @@
             .wl-table td {
                 text-align: left;
                 vertical-align: baseline;
-                padding: var(--s3) var(--s3);
+                padding: var(--s2) var(--s3);
                 border-top: 1px solid var(--line);
+            }
+            .wl-table td:first-child {
+                white-space: nowrap;
             }
             .wl-table thead th {
                 border-top: 3px solid var(--rule);
@@ -8174,7 +8177,7 @@
                                 (editing ? "editing" : "") +
                                 '"><td>' +
                                 esc(shortDay(w.date)) +
-                                "<br /><small>" +
+                                " · <small>" +
                                 esc(localTime(w.logged_at)) +
                                 '</small></td><td class="n"><b>' +
                                 wfmt(w.weight_g, unit) +
