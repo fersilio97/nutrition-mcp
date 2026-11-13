@@ -34,6 +34,7 @@ import {
     checkMealEntry,
     repeatFields,
     checkWeightEntry,
+    checkWeightPatch,
     checkCalorieGoal,
     DASHBOARD_CSP,
     dashboardFontResponse,
@@ -241,6 +242,70 @@ const server = Bun.serve({
                     date: dateInTz(at, tz),
                     weight_g: entry.weight_g,
                     notes: entry.notes,
+                },
+            });
+        }
+
+        // The Weigh-ins tab: same validator as production (checkWeightPatch).
+        if (req.method === "GET" && path === "/api/dashboard/weights") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const tz = scenarioTz(state.scenario);
+            const fx = scenarioWithEdits(
+                state.scenario,
+                todayInTz(tz),
+                edits(),
+            );
+            return json({
+                weights: fx.weight
+                    .map((w) => ({
+                        id: w.id,
+                        logged_at: w.logged_at,
+                        date: dateInTz(w.logged_at, tz),
+                        weight_g: w.weight_g,
+                        notes: w.notes,
+                    }))
+                    .sort((a, b) => b.logged_at.localeCompare(a.logged_at)),
+            });
+        }
+        const weightMatch = /^\/api\/dashboard\/weights\/([^/]+)$/.exec(path);
+        if (
+            weightMatch &&
+            (req.method === "PATCH" || req.method === "DELETE")
+        ) {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const id = decodeURIComponent(weightMatch[1]!);
+            const tz = scenarioTz(state.scenario);
+            const fx = scenarioWithEdits(
+                state.scenario,
+                todayInTz(tz),
+                edits(),
+            );
+            const w = fx.weight.find((x) => x.id === id);
+            if (!w) return json({ error: "not_found" }, 404);
+            if (req.method === "DELETE") {
+                (edits().deletedWeightIds ??= []).push(id);
+                return json({ ok: true });
+            }
+            const b = await readJson(req);
+            if (!b) return json({ error: "invalid_request" }, 400);
+            const checked = checkWeightPatch(b, {
+                tz,
+                preferredUnit: fx.profile.preferred_weight_unit,
+                nowMs: Date.now(),
+            });
+            if (!checked.ok) return invalid(checked.error);
+            const e = edits();
+            e.weightPatches ??= {};
+            e.weightPatches[id] = { ...e.weightPatches[id], ...checked.value };
+            const saved = { ...w, ...e.weightPatches[id] };
+            return json({
+                ok: true,
+                entry: {
+                    id: saved.id,
+                    logged_at: saved.logged_at,
+                    date: dateInTz(saved.logged_at, tz),
+                    weight_g: saved.weight_g,
+                    notes: saved.notes,
                 },
             });
         }
