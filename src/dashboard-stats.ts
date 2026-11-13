@@ -132,10 +132,12 @@ export function countDay(
 ): { counted: boolean; reason: CountReason } {
     if (row.in_progress) return { counted: false, reason: "in_progress" };
     if (!row.mealCount) return { counted: false, reason: "no_meals" };
-    if (hasWatch && row.active_kcal == null)
-        return { counted: false, reason: "no_watch" };
+    // A manual choice beats a missing watch sync: the user may know the day
+    // is fine (the burn then has no workout part).
     if (override === true) return { counted: true, reason: "manual_on" };
     if (override === false) return { counted: false, reason: "manual_off" };
+    if (hasWatch && row.active_kcal == null)
+        return { counted: false, reason: "no_watch" };
     if (row.mealCount < MIN_DAY_ENTRIES)
         return { counted: false, reason: "auto_few_entries" };
     if (typicalKcal != null && row.calories < typicalKcal * MIN_DAY_SHARE)

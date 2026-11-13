@@ -4701,7 +4701,6 @@
                     const reasons = {
                         in_progress: "Today is still in progress",
                         no_meals: "No meals logged",
-                        no_watch: "Your watch didn't sync this day",
                     };
                     const reason = reasons[row.count_reason] || "";
                     const manual =
@@ -4724,15 +4723,17 @@
                             ? 'set by you <button type="button" class="linkish" data-cal-reset="' +
                               esc(row.date) +
                               '">Reset to auto</button>'
-                            : row.count_reason === "auto_complete"
-                              ? "auto · looks complete"
-                              : row.count_reason === "auto_few_entries"
-                                ? "auto · fewer than 2 entries"
-                                : row.count_reason === "auto_low_kcal"
-                                  ? "auto · under half your typical day (< " +
-                                    fmt(data.calibrationDetail.min_day_kcal) +
-                                    " kcal)"
-                                  : "") +
+                            : row.count_reason === "no_watch"
+                              ? "not counted · your watch didn’t sync this day (no active kcal). Tick to count it anyway."
+                              : row.count_reason === "auto_complete"
+                                ? "auto · looks complete"
+                                : row.count_reason === "auto_few_entries"
+                                  ? "auto · fewer than 2 entries"
+                                  : row.count_reason === "auto_low_kcal"
+                                    ? "auto · under half your typical day (< " +
+                                      fmt(data.calibrationDetail.min_day_kcal) +
+                                      " kcal)"
+                                    : "") +
                         '</span><span class="b-status err" role="status" data-cal-error="' +
                         esc(row.date) +
                         '">' +

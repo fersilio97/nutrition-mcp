@@ -225,16 +225,22 @@ describe("countDay", () => {
         ).toBe("manual_on");
         expect(countDay(row, false, true, 2000).reason).toBe("manual_off");
     });
-    test("today, empty days and unsynced watch days never count", () => {
+    test("an unsynced watch day is excluded by default but can be forced either way", () => {
+        const noSync = { ...row, active_kcal: null };
+        expect(countDay(noSync, null, true, 2000).reason).toBe("no_watch");
+        expect(countDay(noSync, true, true, 2000)).toEqual({
+            counted: true,
+            reason: "manual_on",
+        });
+        expect(countDay(noSync, false, true, 2000).reason).toBe("manual_off");
+    });
+    test("today and empty days never count, whatever the override", () => {
         expect(
             countDay({ ...row, in_progress: true }, true, true, 2000).reason,
         ).toBe("in_progress");
         expect(
             countDay({ ...row, mealCount: 0 }, true, true, 2000).reason,
         ).toBe("no_meals");
-        expect(
-            countDay({ ...row, active_kcal: null }, true, true, 2000).reason,
-        ).toBe("no_watch");
         // No watch at all: a null active is just "no activity data".
         expect(
             countDay({ ...row, active_kcal: null }, null, false, 2000).counted,
