@@ -6929,8 +6929,15 @@
                                 x.counts_in_calibration &&
                                 x.calories != null,
                         );
-                        const burns = window.map(components).filter(Boolean);
-                        const goals = window.filter(
+                        // Eaten, burn and goal must average the SAME days:
+                        // burn over every day (partial today, half-logged
+                        // days) against eaten over complete days only drew a
+                        // surplus that the daily view does not show. With
+                        // too few complete days there is no eaten line, so
+                        // the reference lines fall back to the whole window.
+                        const basis = counted.length >= 4 ? counted : window;
+                        const burns = basis.map(components).filter(Boolean);
+                        const goals = basis.filter(
                             (x) => x.goal_calories != null,
                         );
                         const mean = (arr, key) =>

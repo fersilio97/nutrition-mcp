@@ -402,7 +402,12 @@ export const LAST7_DAYS = 7;
 export function buildLast7(
     dayRows: Pick<
         DashboardDay,
-        "date" | "balance_g" | "balance_kcal" | "burn_kcal" | "in_progress"
+        | "date"
+        | "balance_g"
+        | "balance_kcal"
+        | "burn_kcal"
+        | "in_progress"
+        | "counts_in_calibration"
     >[],
     weighIns: WeighIn[],
     today: string,
@@ -421,8 +426,15 @@ export function buildLast7(
         first_date: moved ? first.date : null,
         last_date: moved ? last.date : null,
     };
+    // Complete days only — the same verdict (`counts_in_calibration`) the
+    // Trends "Eaten vs burned" chart uses, so a half-logged day cannot show
+    // as a huge deficit here while Trends leaves it out.
     const week = dayRows.filter(
-        (r) => r.date >= from && r.date < today && !r.in_progress,
+        (r) =>
+            r.date >= from &&
+            r.date < today &&
+            !r.in_progress &&
+            r.counts_in_calibration === true,
     );
     const logged = week.filter((r) => r.balance_g != null);
     const netKcal = logged.reduce((a, r) => a + (r.balance_kcal ?? 0), 0);

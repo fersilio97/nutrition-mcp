@@ -237,7 +237,17 @@ describe("buildLast7", () => {
             balance_kcal: balance_g == null ? null : balance_g * 10,
             burn_kcal: noBurn ? null : 2000,
             in_progress: i === balances.length - 1,
+            counts_in_calibration: true,
         }));
+
+    test("a day the calibration leaves out (partly logged) is not counted", () => {
+        const rows = days([-10, -20, -30, -40, -50, -60, -70, -80, -500]);
+        rows[3]!.counts_in_calibration = false; // Nov 4: looks partial
+        const r = buildLast7(rows, [], "2026-11-09");
+        // Nov 2 … Nov 8 is 7 complete days; Nov 4 is left out → 6.
+        expect(r.est_days).toBe(6);
+        expect(r.est_net_g).toBe(-310);
+    });
 
     test("scale change in grams and the net estimate over the 7 complete days", () => {
         // Window Nov 2 … Nov 9; complete days Nov 2 … Nov 8.
