@@ -2157,6 +2157,141 @@
             .meal-flash {
                 margin: 0 0 var(--gap-block);
             }
+
+            /* ---------- log a meal: quick-add strip + form ---------- */
+            .lm {
+                margin: 0 0 var(--gap-block);
+            }
+            .lm.compact {
+                margin-bottom: var(--s5);
+            }
+            .lm.compact .facts-title h3 {
+                font-size: 1.25rem;
+            }
+            .lm .lw-flash {
+                margin-top: var(--s3);
+                animation-duration: 9s;
+            }
+            .lm .lw-flash .link-btn {
+                min-height: 24px;
+            }
+            .lm .lw-flash.lm-err {
+                color: var(--over);
+                animation: none;
+            }
+            .lm .lw-flash.lm-err::before {
+                content: "Not saved";
+                border-color: var(--over);
+                color: var(--over);
+            }
+            .quick {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--s2);
+                margin-top: var(--s3);
+            }
+            .qa {
+                display: inline-flex;
+                align-items: baseline;
+                gap: var(--s2);
+                min-height: 44px;
+                padding: 0 var(--s4);
+                border: 1px solid var(--control);
+                border-radius: var(--r-pill);
+                background: var(--surface);
+                color: var(--ink);
+                font-weight: 600;
+                font-size: 0.9375rem;
+                letter-spacing: -0.01em;
+                line-height: 44px;
+                transition:
+                    border-color 0.2s ease,
+                    background 0.2s ease,
+                    transform 0.2s var(--ease-out);
+            }
+            .qa small {
+                font-family: var(--font-mono);
+                font-size: 0.6875rem;
+                font-weight: 500;
+                letter-spacing: 0.04em;
+                color: var(--ink-3);
+            }
+            .qa:hover {
+                border-color: var(--ink);
+                background: var(--accent-soft);
+            }
+            .qa:active {
+                transform: translateY(1px);
+            }
+            .qa:disabled {
+                opacity: 0.5;
+                pointer-events: none;
+            }
+            .qa-hint {
+                margin-top: var(--s3);
+            }
+            .qa-label {
+                margin: var(--s4) 0 0;
+                font-family: var(--font-mono);
+                font-size: var(--fs-eyebrow);
+                font-weight: 500;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--ink-2);
+            }
+            .qa-label + .quick {
+                margin-top: var(--s2);
+            }
+            .lm-hint:empty {
+                display: none;
+            }
+            .lm-hint {
+                color: var(--accent-text);
+            }
+            .lm .lw-flash.lm-del::before {
+                content: "Deleted";
+                border-color: var(--ink-2);
+                color: var(--ink-2);
+            }
+            .btn.danger {
+                margin-left: auto;
+                border-color: var(--over);
+                color: var(--over);
+            }
+            .btn.danger:hover {
+                border-color: var(--over);
+                background: color-mix(in srgb, var(--over) 12%, transparent);
+            }
+            .btn.danger.armed {
+                background: var(--over);
+                color: var(--bg);
+            }
+            .lm-form {
+                margin-top: var(--s4);
+            }
+            .lm-item {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: var(--s2);
+            }
+            .lm-item .input {
+                flex: 1 1 160px;
+                width: auto;
+                min-width: 0;
+            }
+            .lm-item #lm-count,
+            .lm-item #lm-custom {
+                flex: 0 0 88px;
+            }
+            .lm-item #lm-unit {
+                flex: 0 0 110px;
+            }
+            .lm-x {
+                font-family: var(--font-mono);
+                font-size: var(--fs-small);
+                color: var(--ink-3);
+            }
             @keyframes flash-out {
                 0%,
                 85% {
@@ -5065,6 +5200,7 @@
                     const eaten = t.calories || 0;
                     const last7 = data.daily.slice(-7);
                     $("today-body").innerHTML =
+                        logMealBlock("today") +
                         '<div class="today-grid"><div class="col">' +
                         '<section class="facts rv" aria-labelledby="h-today"><div class="facts-title"><h3 id="h-today">Today</h3><span class="tag">' +
                         plural(t.mealCount, "meal") +
@@ -8883,7 +9019,7 @@
                             );
                         }).join("") +
                         "</div>" +
-                        '<div class="form-foot"><button type="submit" class="btn primary" id="me-save">Save changes</button><button type="button" class="btn" id="me-cancel">Cancel</button><span class="b-status" id="me-status" role="status"></span></div>' +
+                        '<div class="form-foot"><button type="submit" class="btn primary" id="me-save">Save changes</button><button type="button" class="btn" id="me-cancel">Cancel</button><span class="b-status" id="me-status" role="status"></span><button type="button" class="btn danger" id="me-delete">Delete meal</button></div>' +
                         '<p class="form-hint">Times are in ' +
                         esc(data.timezone) +
                         ". Only the fields you change are saved.</p></form>"
@@ -9025,10 +9161,776 @@
                         });
                 });
 
+                /* ---------- log a meal (form + one-tap repeat) ---------- */
+                // State survives re-renders (the refetch after a save, a
+                // range change) so a half-typed meal is not lost.
+                let lmOpen = false;
+                let lmDraft = null;
+                let lmKey = "";
+                let lmBusy = false;
+                let lmFlash = null; // { text, undoId, err }
+                let lmFlashTimer = 0;
+                const LM_NUMS = MEAL_NUMS.concat([
+                    ["caffeine_mg", "Caffeine mg", 1],
+                    ["alcohol_g", "Alcohol g", 0.1],
+                ]);
+                // crypto.randomUUID needs a secure context; a home server
+                // reached over plain http has none, getRandomValues does.
+                function uuid() {
+                    const b = crypto.getRandomValues(new Uint8Array(16));
+                    b[6] = (b[6] & 15) | 64;
+                    b[8] = (b[8] & 63) | 128;
+                    const h = Array.prototype.map
+                        .call(b, (x) => ("0" + x.toString(16)).slice(-2))
+                        .join("");
+                    return [
+                        h.slice(0, 8),
+                        h.slice(8, 12),
+                        h.slice(12, 16),
+                        h.slice(16, 20),
+                        h.slice(20),
+                    ].join("-");
+                }
+                function defaultMealType() {
+                    const h = Number(localInputValue().slice(11, 13));
+                    return h < 11
+                        ? "breakfast"
+                        : h < 15
+                          ? "lunch"
+                          : h < 18
+                            ? "snack"
+                            : h < 22
+                              ? "dinner"
+                              : "snack";
+                }
+                // The meals this user logs most, from their own history (the server
+                // looks back 90 days, not just the listed range). Each button
+                // repeats the NEWEST such meal by id, so the server copies its
+                // caffeine / alcohol / notes too.
+                let frequent = [];
+                let frequentLoaded = false;
+                function loadFrequent() {
+                    fetch("/api/dashboard/frequent", {
+                        headers: { Authorization: "Bearer " + token },
+                    })
+                        .then((r) => (r.ok ? r.json() : null))
+                        .then(function (b) {
+                            if (!b || !token) return;
+                            frequent = b.meals || [];
+                            frequentLoaded = true;
+                            contentDirty.today = true;
+                            contentDirty.meals = true;
+                            // Never re-render under a form being typed into.
+                            if (!$("lm-form")) paint();
+                        })
+                        .catch(function () {});
+                }
+                function quickChips(which) {
+                    // Today is for the planned meals, not for habits.
+                    if (which !== "meals" || !frequentLoaded) return "";
+                    if (!frequent.length)
+                        return '<p class="form-hint qa-hint">Meals you log twice or more show up here as one-tap buttons.</p>';
+                    return (
+                        '<p class="qa-label">Most frequent · tap to log again now</p>' +
+                        '<div class="quick" role="group" aria-label="Most frequent meals: log again now">' +
+                        frequent
+                            .map(function (f) {
+                                const d = f.description;
+                                return (
+                                    '<button type="button" class="qa" data-repeat="' +
+                                    esc(f.id) +
+                                    '" title="' +
+                                    esc(d) +
+                                    '"><span>' +
+                                    esc(
+                                        d.length > 30
+                                            ? d.slice(0, 29) + "…"
+                                            : d,
+                                    ) +
+                                    "</span>" +
+                                    (f.calories != null
+                                        ? "<small>" +
+                                          fmt(f.calories) +
+                                          " kcal</small>"
+                                        : "") +
+                                    "</button>"
+                                );
+                            })
+                            .join("") +
+                        "</div>"
+                    );
+                }
+                // Typical nutrients for a simple item. Pick the item and the amount
+                // (or just type "2 beers") and the values scale with the amount.
+                // Typing only fills fields that are blank or that it filled
+                // itself; the item / amount / count controls are an explicit
+                // request, so they always recompute.
+                let lmAuto = null; // { snap }: the numbers last filled in
+                let lmFood = null; // the match in play, plus { custom }
+                let lmFoodList = null;
+                let lmSuggestSeq = 0;
+                let lmSuggestTimer = 0;
+                const authHeader = () => ({
+                    headers: { Authorization: "Bearer " + token },
+                });
+                function lmHintText() {
+                    return lmFood && lmAuto
+                        ? "Typical values for " +
+                              lmFood.description +
+                              " — adjust if yours differs."
+                        : "";
+                }
+                function loadFoods() {
+                    if (lmFoodList) return;
+                    fetch("/api/dashboard/foods", authHeader())
+                        .then((r) => (r.ok ? r.json() : null))
+                        .then(function (b) {
+                            if (!b || !b.foods) return;
+                            lmFoodList = b.foods;
+                            if ($("lm-item")) paintItem();
+                        })
+                        .catch(function () {});
+                }
+                function lmItemHtml() {
+                    const list = lmFoodList || [];
+                    const pick =
+                        '<select class="input" id="lm-food" aria-label="Item">' +
+                        '<option value="">Pick an item…</option>' +
+                        list
+                            .map(
+                                (f) =>
+                                    '<option value="' +
+                                    esc(f.id) +
+                                    '"' +
+                                    (lmFood && lmFood.id === f.id
+                                        ? " selected"
+                                        : "") +
+                                    ">" +
+                                    esc(f.name) +
+                                    "</option>",
+                            )
+                            .join("") +
+                        "</select>";
+                    if (!lmFood) return pick;
+                    const f = lmFood;
+                    const near = (a, b) => Math.abs(a - b) < 1e-9;
+                    const listed =
+                        !f.custom &&
+                        f.servings.some((x) => near(x.amount, f.baseAmount));
+                    const amount =
+                        '<select class="input" id="lm-amount" aria-label="Amount">' +
+                        f.servings
+                            .map(
+                                (x) =>
+                                    '<option value="' +
+                                    x.amount +
+                                    '"' +
+                                    (listed && near(x.amount, f.baseAmount)
+                                        ? " selected"
+                                        : "") +
+                                    ">" +
+                                    esc(x.label) +
+                                    "</option>",
+                            )
+                            .join("") +
+                        '<option value="custom"' +
+                        (listed ? "" : " selected") +
+                        ">Other amount…</option></select>";
+                    const custom = listed
+                        ? ""
+                        : '<input class="input" id="lm-custom" type="number" inputmode="decimal" min="0" step="any" value="' +
+                          esc(String(f.amount)) +
+                          '" aria-label="Amount in ' +
+                          esc(f.unit) +
+                          '" /><select class="input" id="lm-unit" aria-label="Unit">' +
+                          f.units
+                              .map(
+                                  (u) =>
+                                      '<option value="' +
+                                      esc(u.id) +
+                                      '"' +
+                                      (u.id === f.unit ? " selected" : "") +
+                                      ">" +
+                                      esc(u.label) +
+                                      "</option>",
+                              )
+                              .join("") +
+                          "</select>";
+                    return (
+                        pick +
+                        amount +
+                        custom +
+                        '<span class="lm-x" aria-hidden="true">×</span>' +
+                        '<input class="input" id="lm-count" type="number" inputmode="numeric" min="1" max="12" step="1" value="' +
+                        f.count +
+                        '" aria-label="How many" />'
+                    );
+                }
+                function paintHint() {
+                    const h = $("lm-hint");
+                    if (h) h.textContent = lmHintText();
+                }
+                function paintItem() {
+                    const el = $("lm-item");
+                    if (el) el.innerHTML = lmItemHtml();
+                    paintHint();
+                }
+                function lmNumsUntouched() {
+                    return LM_NUMS.every(function (n) {
+                        const v = $("lm-" + n[0]).value.trim();
+                        return v === "" || (lmAuto && lmAuto.snap[n[0]] === v);
+                    });
+                }
+                function syncDraft() {
+                    const at = lmDraft && lmDraft.atTouched;
+                    lmDraft = readLmForm();
+                    lmDraft.atTouched = at;
+                }
+                // Forget the item; blank what was filled if it is still ours.
+                function clearAuto() {
+                    if (lmAuto && lmNumsUntouched())
+                        LM_NUMS.forEach(function (n) {
+                            $("lm-" + n[0]).value = "";
+                        });
+                    lmAuto = null;
+                    lmFood = null;
+                }
+                function applyMatch(match, opts) {
+                    if (!match) {
+                        if (opts.typed && lmFood) {
+                            clearAuto();
+                            syncDraft();
+                            paintItem();
+                        }
+                        return;
+                    }
+                    // Numbers you typed yourself are yours: only the controls
+                    // may overwrite them.
+                    if (!opts.force && !lmNumsUntouched()) return;
+                    const snap = {};
+                    LM_NUMS.forEach(function (n) {
+                        const x = match.values[n[0]];
+                        const str = x == null ? "" : String(x);
+                        $("lm-" + n[0]).value = str;
+                        snap[n[0]] = str;
+                    });
+                    lmAuto = { snap: snap };
+                    lmFood = Object.assign({ custom: !!opts.custom }, match);
+                    if (opts.describe)
+                        $("lm-description").value = match.description;
+                    syncDraft();
+                    paintItem();
+                }
+                function requestFood(params, opts) {
+                    clearTimeout(lmSuggestTimer);
+                    const mine = ++lmSuggestSeq;
+                    lmSuggestTimer = setTimeout(function () {
+                        fetch(
+                            "/api/dashboard/foods/suggest?" +
+                                new URLSearchParams(params),
+                            authHeader(),
+                        )
+                            .then((r) => (r.ok ? r.json() : null))
+                            .then(function (b) {
+                                if (mine !== lmSuggestSeq || !$("lm-form"))
+                                    return;
+                                applyMatch(b && b.match, opts);
+                            })
+                            .catch(function () {});
+                    }, opts.delay || 0);
+                }
+                function suggestFor(text) {
+                    if (!text.trim()) {
+                        ++lmSuggestSeq;
+                        if (lmFood) {
+                            clearAuto();
+                            syncDraft();
+                            paintItem();
+                        }
+                        return;
+                    }
+                    requestFood(
+                        { q: text.trim() },
+                        { typed: true, delay: 250 },
+                    );
+                }
+                function setLmFlash(text, undoId, err, kind) {
+                    lmFlash = {
+                        text: text,
+                        undoId: undoId || "",
+                        err: !!err,
+                        kind: kind || "",
+                    };
+                    clearTimeout(lmFlashTimer);
+                    if (!err)
+                        lmFlashTimer = setTimeout(function () {
+                            lmFlash = null;
+                            document
+                                .querySelectorAll(".lm-flash")
+                                .forEach((e) => e.remove());
+                        }, 9000);
+                }
+                function lmFlashHtml() {
+                    if (!lmFlash) return "";
+                    return (
+                        '<p class="lw-flash lm-flash' +
+                        (lmFlash.err ? " lm-err" : "") +
+                        (lmFlash.kind === "del" ? " lm-del" : "") +
+                        '" role="status"><span>' +
+                        esc(lmFlash.text) +
+                        (lmFlash.undoId
+                            ? ' <button type="button" class="link-btn" data-undo="' +
+                              esc(lmFlash.undoId) +
+                              '">Undo</button>'
+                            : "") +
+                        "</span></p>"
+                    );
+                }
+                function logMealForm() {
+                    const v = lmDraft || {
+                        description: "",
+                        meal_type: defaultMealType(),
+                        logged_at: localInputValue(),
+                    };
+                    const types = [
+                        "breakfast",
+                        "lunch",
+                        "dinner",
+                        "snack",
+                        "treat",
+                    ];
+                    return (
+                        '<form id="lm-form" class="lm-form" novalidate aria-label="Log a meal"><div class="form-grid">' +
+                        '<label class="field wide" for="lm-description">What did you eat?<input class="input" id="lm-description" type="text" maxlength="2000" autocomplete="off" placeholder="e.g. Coffee, solo" value="' +
+                        esc(v.description) +
+                        '" /></label>' +
+                        '<div class="field wide"><label for="lm-food">Or pick a simple item and amount</label><span class="lm-item" id="lm-item">' +
+                        lmItemHtml() +
+                        "</span></div>" +
+                        '<label class="field" for="lm-type">Meal<select class="input" id="lm-type">' +
+                        types
+                            .map(
+                                (t) =>
+                                    '<option value="' +
+                                    t +
+                                    '"' +
+                                    (v.meal_type === t ? " selected" : "") +
+                                    ">" +
+                                    mealTypeLabel(t) +
+                                    "</option>",
+                            )
+                            .join("") +
+                        "</select></label>" +
+                        '<label class="field" for="lm-at">Eaten at<input class="input" id="lm-at" type="datetime-local" value="' +
+                        esc(v.logged_at) +
+                        '" /></label>' +
+                        LM_NUMS.map(function (n) {
+                            return (
+                                '<label class="field" for="lm-' +
+                                n[0] +
+                                '">' +
+                                n[1] +
+                                '<input class="input" id="lm-' +
+                                n[0] +
+                                '" type="number" inputmode="decimal" min="0" step="' +
+                                n[2] +
+                                '" value="' +
+                                esc(v[n[0]] || "") +
+                                '" /></label>'
+                            );
+                        }).join("") +
+                        "</div>" +
+                        '<p class="form-hint lm-hint" id="lm-hint" aria-live="polite">' +
+                        esc(lmHintText()) +
+                        "</p>" +
+                        '<div class="form-foot"><button type="submit" class="btn primary" id="lm-save">Log meal</button><button type="button" class="btn" id="lm-cancel">Cancel</button><span class="b-status" id="lm-status" role="status"></span></div>' +
+                        '<p class="form-hint">Leave “Eaten at” alone to log it now (' +
+                        esc(data.timezone) +
+                        "). Leave a nutrient blank if you don’t know it — blank is saved as unknown, not 0.</p></form>"
+                    );
+                }
+                // which: "meals" renders the form; "today" a compact strip.
+                function logMealBlock(which) {
+                    const full = which === "meals";
+                    return (
+                        '<section class="lm rv' +
+                        (full ? "" : " compact") +
+                        '" aria-labelledby="h-lm-' +
+                        which +
+                        '"><div class="facts-title"><h3 id="h-lm-' +
+                        which +
+                        '">Log a meal</h3><button type="button" class="btn btn-sm" data-lm-open aria-expanded="' +
+                        (full && lmOpen) +
+                        '"' +
+                        (full && lmOpen ? " hidden" : "") +
+                        ">+ Log meal</button></div>" +
+                        lmFlashHtml() +
+                        quickChips(which) +
+                        (full && lmOpen ? logMealForm() : "") +
+                        "</section>"
+                    );
+                }
+                function lmRerender() {
+                    contentDirty.today = true;
+                    contentDirty.meals = true;
+                    paint();
+                }
+                function openLogMeal() {
+                    lmOpen = true;
+                    lmDraft = null;
+                    lmAuto = null;
+                    lmFood = null;
+                    lmKey = uuid();
+                    loadFoods();
+                    selectTab("meals");
+                    lmRerender();
+                    const box = $("lm-description");
+                    if (box) {
+                        box.scrollIntoView({ block: "center" });
+                        box.focus();
+                    }
+                }
+                function readLmForm() {
+                    const v = {
+                        description: $("lm-description").value,
+                        meal_type: $("lm-type").value,
+                        logged_at: $("lm-at").value,
+                    };
+                    LM_NUMS.forEach(function (n) {
+                        v[n[0]] = $("lm-" + n[0]).value;
+                    });
+                    return v;
+                }
+                function logged(res, what) {
+                    const m = res.body.meal;
+                    setLmFlash(
+                        "Logged " +
+                            mealTypeLabel(m.meal_type).toLowerCase() +
+                            " · " +
+                            m.description +
+                            (res.body.deduplicated
+                                ? " (already logged)."
+                                : "."),
+                        res.body.deduplicated ? "" : m.id,
+                    );
+                    refresh();
+                }
+                function lmFail(res, fallback) {
+                    setLmFlash(
+                        (res && res.body && res.body.error_description) ||
+                            fallback,
+                        "",
+                        true,
+                    );
+                    lmRerender();
+                }
+                function repeatMeal(id) {
+                    if (lmBusy) return;
+                    lmBusy = true;
+                    document
+                        .querySelectorAll(".qa")
+                        .forEach((b) => (b.disabled = true));
+                    writeJson(
+                        "POST",
+                        "/api/dashboard/meals/" +
+                            encodeURIComponent(id) +
+                            "/repeat",
+                        { client_key: uuid() },
+                    )
+                        .then(function (res) {
+                            lmBusy = false;
+                            if (res.ok) return logged(res);
+                            lmFail(
+                                res,
+                                res.status === 404
+                                    ? "That meal no longer exists."
+                                    : "Could not save.",
+                            );
+                        })
+                        .catch(function (err) {
+                            lmBusy = false;
+                            if (err && err.message === "unauthorized") return;
+                            lmFail(null, "Could not reach the server.");
+                        });
+                }
+                // Permanent, so it takes two clicks: the first arms the button, the
+                // second deletes; it disarms itself after four seconds.
+                let meDelArmed = false;
+                let meDelTimer = 0;
+                function deleteMealFromEdit() {
+                    const b = $("me-delete");
+                    if (!b || !mealEditId) return;
+                    if (!meDelArmed) {
+                        meDelArmed = true;
+                        b.textContent = "Click again to delete";
+                        b.classList.add("armed");
+                        clearTimeout(meDelTimer);
+                        meDelTimer = setTimeout(function () {
+                            meDelArmed = false;
+                            const x = $("me-delete");
+                            if (x) {
+                                x.textContent = "Delete meal";
+                                x.classList.remove("armed");
+                            }
+                        }, 4000);
+                        return;
+                    }
+                    clearTimeout(meDelTimer);
+                    meDelArmed = false;
+                    const id = mealEditId;
+                    const m = data.meals.filter((x) => x.id === id)[0];
+                    b.disabled = true;
+                    writeJson(
+                        "DELETE",
+                        "/api/dashboard/meals/" + encodeURIComponent(id),
+                    )
+                        .then(function (res) {
+                            if (!res.ok && res.status !== 404) {
+                                b.disabled = false;
+                                const st = $("me-status");
+                                if (st) {
+                                    st.className = "b-status err";
+                                    st.textContent = "Could not delete.";
+                                }
+                                return;
+                            }
+                            mealEditId = null;
+                            mealDraft = null;
+                            setLmFlash(
+                                (m ? m.description : "The meal") + ".",
+                                "",
+                                false,
+                                "del",
+                            );
+                            refresh();
+                        })
+                        .catch(function (err) {
+                            if (err && err.message === "unauthorized") return;
+                            b.disabled = false;
+                            const st = $("me-status");
+                            if (st) {
+                                st.className = "b-status err";
+                                st.textContent = "Could not reach the server.";
+                            }
+                        });
+                }
+                function undoMeal(id) {
+                    writeJson(
+                        "DELETE",
+                        "/api/dashboard/meals/" + encodeURIComponent(id),
+                    )
+                        .then(function (res) {
+                            if (!res.ok && res.status !== 404)
+                                return lmFail(res, "Could not undo.");
+                            setLmFlash("That entry.", "", false, "del");
+                            refresh();
+                        })
+                        .catch(function (err) {
+                            if (err && err.message === "unauthorized") return;
+                            lmFail(null, "Could not reach the server.");
+                        });
+                }
+                document.addEventListener("click", function (ev) {
+                    const t = ev.target;
+                    if (!t.closest) return;
+                    const rep = t.closest("[data-repeat]");
+                    if (rep) return repeatMeal(rep.dataset.repeat);
+                    const un = t.closest("[data-undo]");
+                    if (un) return undoMeal(un.dataset.undo);
+                    if (t.closest("[data-lm-open]")) return openLogMeal();
+                    if (t.closest("#me-delete")) return deleteMealFromEdit();
+                    if (t.closest("#lm-cancel")) {
+                        lmOpen = false;
+                        lmDraft = null;
+                        lmAuto = null;
+                        lmFood = null;
+                        lmRerender();
+                        const b = document.querySelector(
+                            "#meals-body [data-lm-open]",
+                        );
+                        if (b) b.focus();
+                    }
+                });
+                $("meals-body").addEventListener("input", function (ev) {
+                    if (!ev.target.closest("#lm-form")) return;
+                    const touched =
+                        (lmDraft && lmDraft.atTouched) ||
+                        ev.target.id === "lm-at";
+                    lmDraft = readLmForm();
+                    lmDraft.atTouched = touched;
+                    if (ev.target.id === "lm-description")
+                        suggestFor(ev.target.value);
+                    else if (
+                        lmAuto &&
+                        LM_NUMS.some((n) => "lm-" + n[0] === ev.target.id) &&
+                        !lmNumsUntouched()
+                    ) {
+                        // You changed a number: it is yours now.
+                        lmAuto = null;
+                        paintHint();
+                    }
+                });
+                $("meals-body").addEventListener("change", function (ev) {
+                    const t = ev.target;
+                    if (!t.closest || !t.closest("#lm-form")) return;
+                    const go = (params, opts) =>
+                        requestFood(
+                            params,
+                            Object.assign(
+                                { force: true, describe: true },
+                                opts,
+                            ),
+                        );
+                    if (t.id === "lm-food") {
+                        if (!t.value) {
+                            clearAuto();
+                            syncDraft();
+                            paintItem();
+                            return;
+                        }
+                        go({ id: t.value }, {});
+                    } else if (lmFood && t.id === "lm-amount") {
+                        if (t.value === "custom") {
+                            lmFood.custom = true;
+                            paintItem();
+                            const c = $("lm-custom");
+                            if (c) c.focus();
+                            return;
+                        }
+                        go(
+                            {
+                                id: lmFood.id,
+                                amount: t.value,
+                                count: lmFood.count,
+                            },
+                            {},
+                        );
+                    } else if (lmFood && t.id === "lm-custom") {
+                        if (Number(t.value) > 0)
+                            go(
+                                {
+                                    id: lmFood.id,
+                                    amount: t.value,
+                                    unit: lmFood.unit,
+                                    count: lmFood.count,
+                                },
+                                { custom: true },
+                            );
+                    } else if (lmFood && t.id === "lm-unit") {
+                        // The same quantity, expressed in the new unit.
+                        const u = lmFood.units.filter(
+                            (x) => x.id === t.value,
+                        )[0];
+                        if (u)
+                            go(
+                                {
+                                    id: lmFood.id,
+                                    amount:
+                                        Math.round(
+                                            (lmFood.baseAmount / u.per) * 100,
+                                        ) / 100,
+                                    unit: u.id,
+                                    count: lmFood.count,
+                                },
+                                { custom: true },
+                            );
+                    } else if (lmFood && t.id === "lm-count") {
+                        const n = Math.min(
+                            12,
+                            Math.max(1, Math.round(Number(t.value) || 1)),
+                        );
+                        go(
+                            lmFood.custom
+                                ? {
+                                      id: lmFood.id,
+                                      amount: lmFood.amount,
+                                      unit: lmFood.unit,
+                                      count: n,
+                                  }
+                                : {
+                                      id: lmFood.id,
+                                      amount: lmFood.baseAmount,
+                                      count: n,
+                                  },
+                            { custom: lmFood.custom },
+                        );
+                    }
+                });
+                // Enter in the amount / count boxes commits them; it must not
+                // submit (log) the form half-way through choosing.
+                $("meals-body").addEventListener("keydown", function (ev) {
+                    if (
+                        ev.key === "Enter" &&
+                        ev.target.closest &&
+                        ev.target.closest("#lm-item")
+                    ) {
+                        ev.preventDefault();
+                        ev.target.blur();
+                    }
+                });
+                $("meals-body").addEventListener("submit", function (ev) {
+                    if (!ev.target.closest("#lm-form")) return;
+                    ev.preventDefault();
+                    const v = readLmForm();
+                    const st = $("lm-status");
+                    st.className = "b-status";
+                    if (!v.description.trim()) {
+                        st.className = "b-status err";
+                        st.textContent = "Describe what you ate.";
+                        $("lm-description").focus();
+                        return;
+                    }
+                    const body = {
+                        description: v.description,
+                        meal_type: v.meal_type,
+                        client_key: lmKey || (lmKey = uuid()),
+                    };
+                    LM_NUMS.forEach(function (n) {
+                        if (v[n[0]].trim() !== "") body[n[0]] = Number(v[n[0]]);
+                    });
+                    // Only send a time the user actually changed; otherwise
+                    // the server stamps "now" itself.
+                    if (lmDraft && lmDraft.atTouched && v.logged_at)
+                        body.logged_at = v.logged_at;
+                    $("lm-save").disabled = true;
+                    st.textContent = "Saving…";
+                    writeJson("POST", "/api/dashboard/meals", body)
+                        .then(function (res) {
+                            if ($("lm-save")) $("lm-save").disabled = false;
+                            if (!res.ok) {
+                                const s = $("lm-status");
+                                if (s) {
+                                    s.className = "b-status err";
+                                    s.textContent =
+                                        (res.body &&
+                                            res.body.error_description) ||
+                                        "Could not save.";
+                                }
+                                return;
+                            }
+                            lmOpen = false;
+                            lmDraft = null;
+                            lmAuto = null;
+                            lmFood = null;
+                            lmKey = "";
+                            logged(res);
+                        })
+                        .catch(function (err) {
+                            if (err && err.message === "unauthorized") return;
+                            if ($("lm-save")) $("lm-save").disabled = false;
+                            const s = $("lm-status");
+                            if (s) {
+                                s.className = "b-status err";
+                                s.textContent = "Could not reach the server.";
+                            }
+                        });
+                });
+
                 RENDER.meals = function () {
                     const meals = data.meals;
                     if (!meals.length) {
                         $("meals-body").innerHTML =
+                            logMealBlock("meals") +
                             '<p class="empty">No meals logged in this range.</p>';
                         return;
                     }
@@ -9144,6 +10046,7 @@
                         })
                         .join("");
                     $("meals-body").innerHTML =
+                        logMealBlock("meals") +
                         (mealFlash
                             ? '<p class="lw-flash meal-flash" role="status">' +
                               esc(mealFlash) +
@@ -9219,6 +10122,7 @@
                         });
                 }
                 function onData() {
+                    loadFrequent();
                     markDirty();
                     renderBanners();
                     renderRangeHeads();

@@ -358,6 +358,22 @@ export async function getMealsInRange(
  * growth: rate limiting is per HTTP request, so one batched call writes many
  * rows for a single limiter hit.
  */
+/** One meal by id, scoped to its owner; null when the id is unknown or
+ *  belongs to another user. */
+export async function getMealById(
+    userId: string,
+    id: string,
+): Promise<Meal | null> {
+    const { data, error } = await getSupabase()
+        .from("meals")
+        .select("*")
+        .eq("id", id)
+        .eq("user_id", userId)
+        .maybeSingle();
+    if (error) throw new Error(`Failed to look up meal: ${error.message}`);
+    return (data as Meal | null) ?? null;
+}
+
 export async function countMeals(userId: string): Promise<number> {
     const { count, error } = await getSupabase()
         .from("meals")

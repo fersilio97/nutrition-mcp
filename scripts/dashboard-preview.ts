@@ -31,6 +31,8 @@ process.env.SUPABASE_SECRET_KEY = "";
 import {
     bodyOf,
     checkMealPatch,
+    checkMealEntry,
+    repeatFields,
     checkWeightEntry,
     checkCalorieGoal,
     DASHBOARD_CSP,
@@ -50,8 +52,10 @@ import {
     type ScenarioName,
 } from "../src/dashboard-fixture.js";
 import { checkBodyPatch } from "../src/body.js";
+import { listFoods, suggestFood } from "../src/simple-foods.js";
+import { buildFrequentMeals } from "../src/dashboard-stats.js";
 import { dateInTz, todayInTz } from "../src/tz.js";
-import type { Meal } from "../src/supabase.js";
+import type { Meal, MealInput } from "../src/supabase.js";
 
 // The same CSP production sends for /dashboard (src/dashboard-fixture.test.ts
 // keeps the two in step), so a CSP violation shows up here before prod.
@@ -286,6 +290,155 @@ const server = Bun.serve({
                     notes: entry.notes,
                 },
             });
+        }
+
+        // Same pure lookups as production (matchFood, buildFrequentMeals).
+        if (req.method === "GET" && path === "/api/dashboard/foods") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            return json({ foods: listFoods() });
+        }
+        if (req.method === "GET" && path === "/api/dashboard/foods/suggest") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const q = url.searchParams;
+            return json({
+                match: suggestFood({
+                    q: q.get("q"),
+                    id: q.get("id"),
+                    amount: q.get("amount"),
+                    unit: q.get("unit"),
+                    count: q.get("count"),
+                }),
+            });
+        }
+        if (req.method === "GET" && path === "/api/dashboard/frequent") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const tz = scenarioTz(state.scenario);
+            const fx = scenarioWithEdits(
+                state.scenario,
+                todayInTz(tz),
+                edits(),
+            );
+            return json({ meals: buildFrequentMeals(fx.meals) });
+        }
+
+        // Log a meal / repeat one / undo — the production validators and
+        // field-copy (checkMealEntry, repeatFields), stored in memory.
+        const mealSummary = (m: Meal) => ({
+            id: m.id,
+            logged_at: m.logged_at,
+            meal_type: m.meal_type,
+            description: m.description,
+            calories: m.calories,
+            protein_g: m.protein_g,
+            carbs_g: m.carbs_g,
+            fat_g: m.fat_g,
+            fiber_g: m.fiber_g,
+            sugar_g: m.sugar_g,
+        });
+        // The same idempotency the real insertMeal gives a client_key: the
+        // second request with a key returns the first row.
+        const addMeal = (fields: MealInput, userId: string) => {
+            const e = edits();
+            const key = fields.idempotency_key;
+            const prior = key
+                ? (e.addedMeals ?? []).find((m) => m.idempotency_key === key)
+                : undefined;
+            if (prior) return { meal: prior, deduplicated: true };
+            const meal: Meal = {
+                id: crypto.randomUUID(),
+                user_id: userId,
+                description: fields.description,
+                meal_type: fields.meal_type,
+                calories:
+                    fields.calories == null
+                        ? null
+                        : Math.round(fields.calories),
+                protein_g: fields.protein_g ?? null,
+                carbs_g: fields.carbs_g ?? null,
+                fat_g: fields.fat_g ?? null,
+                fiber_g: fields.fiber_g ?? null,
+                sugar_g: fields.sugar_g ?? null,
+                alcohol_g: fields.alcohol_g ?? null,
+                caffeine_mg: fields.caffeine_mg ?? null,
+                notes: fields.notes ?? null,
+                logged_at: fields.logged_at ?? new Date().toISOString(),
+                idempotency_key: key ?? null,
+            } as Meal;
+            (e.addedMeals ??= []).push(meal);
+            return { meal, deduplicated: false };
+        };
+        if (req.method === "POST" && path === "/api/dashboard/meals") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const b = await readJson(req);
+            if (!b) return json({ error: "invalid_request" }, 400);
+            const tz = scenarioTz(state.scenario);
+            const checked = checkMealEntry(b, { tz, nowMs: Date.now() });
+            if (!checked.ok) return invalid(checked.error);
+            const fx = scenarioWithEdits(
+                state.scenario,
+                todayInTz(tz),
+                edits(),
+            );
+            const r = addMeal(checked.value, fx.profile.user_id);
+            return json({
+                ok: true,
+                deduplicated: r.deduplicated,
+                meal: mealSummary(r.meal),
+            });
+        }
+        const repeatMatch = /^\/api\/dashboard\/meals\/([^/]+)\/repeat$/.exec(
+            path,
+        );
+        if (req.method === "POST" && repeatMatch) {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const b = await readJson(req);
+            if (!b) return json({ error: "invalid_request" }, 400);
+            const id = decodeURIComponent(repeatMatch[1]!);
+            const tz = scenarioTz(state.scenario);
+            const fx = scenarioWithEdits(
+                state.scenario,
+                todayInTz(tz),
+                edits(),
+            );
+            const source = fx.meals.find((m) => m.id === id);
+            if (!source) return json({ error: "not_found" }, 404);
+            const unknown = Object.keys(b).find((k) => k !== "client_key");
+            if (unknown) return invalid(`${unknown} can't be set here.`);
+            const key = checkMealEntry(
+                {
+                    description: "x",
+                    meal_type: "snack",
+                    ...(b.client_key !== undefined
+                        ? { client_key: b.client_key }
+                        : {}),
+                },
+                { tz, nowMs: Date.now() },
+            );
+            if (!key.ok) return invalid(key.error);
+            const r = addMeal(
+                repeatFields(source, { clientKey: key.value.idempotency_key }),
+                fx.profile.user_id,
+            );
+            return json({
+                ok: true,
+                deduplicated: r.deduplicated,
+                meal: mealSummary(r.meal),
+            });
+        }
+        const delMatch = /^\/api\/dashboard\/meals\/([^/]+)$/.exec(path);
+        if (req.method === "DELETE" && delMatch) {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const id = decodeURIComponent(delMatch[1]!);
+            const tz = scenarioTz(state.scenario);
+            const fx = scenarioWithEdits(
+                state.scenario,
+                todayInTz(tz),
+                edits(),
+            );
+            if (!fx.meals.some((m) => m.id === id))
+                return json({ error: "not_found" }, 404);
+            (edits().deletedMealIds ??= []).push(id);
+            return json({ ok: true });
         }
 
         // Same validator as production (checkMealPatch); stored in memory.

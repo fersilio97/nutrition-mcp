@@ -27,7 +27,7 @@ import {
 } from "./body.js";
 import type { EnergyStatus, EnergyWindow } from "./calibration.js";
 import type { DailyBucket } from "./insights.js";
-import type { NutritionGoals } from "./supabase.js";
+import type { Meal, NutritionGoals } from "./supabase.js";
 
 export interface DashboardDay {
     date: string;
@@ -613,4 +613,56 @@ export function groupDays(
         }
     }
     return out;
+}
+
+/** One entry in the "Log a meal" block's most-frequent list. */
+export interface FrequentMeal {
+    /** The newest meal with this description — the one a tap repeats, so the
+     *  server copies its caffeine / alcohol / notes too. */
+    id: string;
+    description: string;
+    meal_type: string | null;
+    calories: number | null;
+    count: number;
+}
+
+/** Look-back for "frequent": long enough to include what someone eats weekly. */
+export const FREQUENT_DAYS = 90;
+
+/**
+ * The meals logged most often, built from the user's own history (nothing is
+ * hardcoded). Grouped by trimmed, case-insensitive description; eaten at
+ * least twice; most frequent first, ties newest first. Pure.
+ */
+export function buildFrequentMeals(meals: Meal[], limit = 8): FrequentMeal[] {
+    const by = new Map<string, FrequentMeal & { at: string }>();
+    for (const m of meals) {
+        const key = (m.description ?? "").trim().toLowerCase();
+        if (!key) continue;
+        const cur = by.get(key);
+        if (!cur) {
+            by.set(key, {
+                id: m.id,
+                description: m.description.trim(),
+                meal_type: m.meal_type,
+                calories: m.calories,
+                count: 1,
+                at: m.logged_at,
+            });
+        } else {
+            cur.count += 1;
+            // Keep the newest instance as the one a tap repeats.
+            if (m.logged_at > cur.at) {
+                cur.id = m.id;
+                cur.meal_type = m.meal_type;
+                cur.calories = m.calories;
+                cur.at = m.logged_at;
+            }
+        }
+    }
+    return [...by.values()]
+        .filter((f) => f.count >= 2)
+        .sort((a, b) => b.count - a.count || b.at.localeCompare(a.at))
+        .slice(0, limit)
+        .map(({ at: _at, ...f }) => f);
 }
