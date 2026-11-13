@@ -1456,7 +1456,11 @@ const db = {
     activityThrows: false,
     // Weigh-ins, oldest first; the last is what getLatestWeight returns.
     weights: [] as WeightEntry[],
-    calibrationSkips: [] as Array<{ user_id: string; day: string }>,
+    calibrationDays: [] as Array<{
+        user_id: string;
+        day: string;
+        counted: boolean;
+    }>,
 };
 
 mock.module("./supabase.js", () => ({
@@ -1483,15 +1487,22 @@ mock.module("./supabase.js", () => ({
         token === "dashboard-test-token"
             ? { status: "valid" as const, userId: "u1" }
             : { status: "invalid" as const },
-    setCalibrationSkippedDay: async (
+    getCalibrationDayOverrides: async (userId: string) =>
+        Object.fromEntries(
+            db.calibrationDays
+                .filter((row) => row.user_id === userId)
+                .map((row) => [row.day, row.counted]),
+        ),
+    setCalibrationDayOverride: async (
         userId: string,
         day: string,
-        skip: boolean,
+        counted: boolean | null,
     ) => {
-        db.calibrationSkips = db.calibrationSkips.filter(
+        db.calibrationDays = db.calibrationDays.filter(
             (row) => !(row.user_id === userId && row.day === day),
         );
-        if (skip) db.calibrationSkips.push({ user_id: userId, day });
+        if (counted !== null)
+            db.calibrationDays.push({ user_id: userId, day, counted });
     },
     getUserTimezone: async () => db.profile?.timezone ?? "UTC",
     getNutritionGoals: async () => db.goals,
@@ -1688,7 +1699,7 @@ beforeEach(() => {
     db.ingestToken = null;
     db.activityThrows = false;
     db.weights = [];
-    db.calibrationSkips = [];
+    db.calibrationDays = [];
 });
 
 interface ToolResult {
@@ -4949,34 +4960,40 @@ describe("dashboard API", () => {
 
         test("requires an authenticated user", async () => {
             expect(
-                (await post({ date: "2026-11-10", skip: true }, "")).status,
+                (await post({ date: "2026-11-10", counted: true }, "")).status,
             ).toBe(401);
         });
 
-        test("rejects malformed dates, impossible dates, non-boolean skip and future dates", async () => {
+        test("rejects malformed dates, impossible dates, a bad or missing choice and future dates", async () => {
             for (const input of [
-                { date: "2026-2-01", skip: true },
-                { date: "2026-02-30", skip: true },
-                { date: "2026-11-10", skip: "true" },
-                { date: "2099-01-01", skip: true },
+                { date: "2026-2-01", counted: true },
+                { date: "2026-02-30", counted: true },
+                { date: "2026-11-10", counted: "true" },
+                { date: "2026-11-10" },
+                { date: "2026-11-10", skip: true },
+                { date: "2099-01-01", counted: true },
                 [],
                 "not-json",
             ]) {
                 const r = await post(input);
                 expect(r.status).toBe(400);
             }
-            expect(db.calibrationSkips).toEqual([]);
+            expect(db.calibrationDays).toEqual([]);
         });
 
-        test("marks and unmarks a valid past day", async () => {
-            const added = await post({ date: "2026-11-10", skip: true });
-            expect(added.status).toBe(200);
-            expect(db.calibrationSkips).toEqual([
-                { user_id: "u1", day: "2026-11-10" },
+        test("forces a day out, in, and back to automatic", async () => {
+            const out = await post({ date: "2026-11-10", counted: false });
+            expect(out.status).toBe(200);
+            expect(db.calibrationDays).toEqual([
+                { user_id: "u1", day: "2026-11-10", counted: false },
             ]);
-            const removed = await post({ date: "2026-11-10", skip: false });
-            expect(removed.status).toBe(200);
-            expect(db.calibrationSkips).toEqual([]);
+            await post({ date: "2026-11-10", counted: true });
+            expect(db.calibrationDays).toEqual([
+                { user_id: "u1", day: "2026-11-10", counted: true },
+            ]);
+            const auto = await post({ date: "2026-11-10", counted: null });
+            expect(auto.status).toBe(200);
+            expect(db.calibrationDays).toEqual([]);
         });
     });
 

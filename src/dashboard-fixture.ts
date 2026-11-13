@@ -15,7 +15,13 @@ import {
     dashboardWindow,
     type DashboardInputs,
 } from "./dashboard.js";
-import { bmrFor, dailyBurn, KCAL_PER_GRAM, type BodyDetails } from "./body.js";
+import {
+    bmrFor,
+    dailyBurn,
+    KCAL_PER_GRAM,
+    TEF_FRACTION,
+    type BodyDetails,
+} from "./body.js";
 import {
     dateInTz,
     shiftLocalDate,
@@ -415,10 +421,18 @@ function generateScenario(name: ScenarioName, today: string): FixtureData {
 }
 
 /**
- * 45 days, ~90% logged, weekly weigh-ins. The scale is driven by the SAME
- * burn estimate the dashboard computes, minus 150 kcal/day: so the real burn
- * is 150 lower than estimated, and the Estimate-vs-reality card should report
- * the estimate as ~150 kcal/day high.
+ * 75 days, enough for a 30-day chart whose every day is calibrated from the
+ * 28 before it. The scale is driven by the SAME burn model the dashboard uses
+ * (BMR + active + TEF), minus 150 kcal/day: so the real baseline is 150 below
+ * the formula, and the calibration should find an offset of about +150.
+ *
+ * Realistic mess, so the page shows what each rule does:
+ *  - ~4% of days unlogged (the body still changes);
+ *  - ~6% "incomplete" days: dinner eaten but not logged, so the automatic
+ *    rule (breakfast + lunch + dinner) leaves them out;
+ *  - ~3% of days the watch did not sync (no activity row): never counted;
+ *  - weigh-ins every 3 days with ±250 g of water noise around the true
+ *    weight — the least-squares trend sees through it, endpoints would not.
  */
 const CALIBRATE_OFFSET_KCAL = 150;
 function calibrateScenario(
@@ -428,53 +442,47 @@ function calibrateScenario(
 ): FixtureData {
     profile = { ...profile, resting_basis: "calibrated" };
     const rnd = prng(0xca11b);
-    const span = 45;
+    const span = 75;
     const body = bodyOf(profile);
     const meals: Meal[] = [];
     const weight: WeightEntry[] = [];
     const activity: ActivityDay[] = [];
 
     let w = 84_000;
-    const logged: number[] = [];
     for (let k = span - 1; k >= 0; k--) {
         const date = shiftLocalDate(today, -k);
         const active = Math.round(150 + rnd() * 350);
-        activity.push({
-            user_id: USER,
-            date,
-            active_kcal: active,
-            source: "garmin",
-            updated_at: STAMP,
-        });
-        // Weigh in every 7 days from the first day (that morning precedes
-        // the day's eating). 10 g steps: 100 g rounding over a 3-week span
-        // would move the implied offset by up to ±35 kcal/day.
-        if ((span - 1 - k) % 7 === 0)
-            weight.push(weightRow(`w-${date}`, date, w, tz, 10));
+        if (rnd() >= 0.03)
+            activity.push({
+                user_id: USER,
+                date,
+                active_kcal: active,
+                source: "garmin",
+                updated_at: STAMP,
+            });
+        // Weigh in every 3 days (that morning precedes the day's eating),
+        // with water noise on top of the true weight.
+        if ((span - 1 - k) % 3 === 0)
+            weight.push(
+                weightRow(`w-${date}`, date, w + (rnd() - 0.5) * 500, tz, 10),
+            );
         if (k === 0) {
             meals.push(
                 makeMeal(`m-${date}-0`, date, 8, 10, "breakfast", 450, rnd, tz),
             );
             break;
         }
-        if (rnd() < 0.1) {
-            // Unlogged: the body still changed, at the average logged rate.
-            const avg = logged.length
-                ? logged.reduce((a, b) => a + b, 0) / logged.length
-                : -45;
-            w += avg;
-            continue;
+        const bmr = bmrFor(body, Math.round(w / 100) * 100, date)!;
+        // Eat ~400-650 kcal under the formula's break-even intake.
+        const eaten = (bmr + active) / (1 - TEF_FRACTION) - 400 - rnd() * 250;
+        const roll = rnd();
+        if (roll >= 0.04) {
+            const all = dayMeals(date, eaten, 3, rnd, tz, `m-${date}`);
+            // Incomplete: the dinner went unlogged.
+            meals.push(...(roll < 0.1 ? all.slice(0, 2) : all));
         }
-        const burn = dailyBurn(
-            bmrFor(body, Math.round(w / 100) * 100, date)!,
-            active,
-        );
-        const eaten = burn - 400 - rnd() * 250;
-        meals.push(...dayMeals(date, eaten, 3, rnd, tz, `m-${date}`));
-        const trueChange =
-            (eaten - (burn - CALIBRATE_OFFSET_KCAL)) / KCAL_PER_GRAM;
-        logged.push(trueChange);
-        w += trueChange;
+        const trueBurn = dailyBurn(bmr, active, eaten) - CALIBRATE_OFFSET_KCAL;
+        w += (eaten - trueBurn) / KCAL_PER_GRAM;
     }
     return {
         profile,
@@ -499,7 +507,10 @@ export function previewInputs(
     today: string,
 ): DashboardInputs {
     const tz = fx.profile.timezone ?? "UTC";
-    const { endDate, weightStart, fetchStart } = dashboardWindow(today, days);
+    const { endDate, weightFetchStart, fetchStart } = dashboardWindow(
+        today,
+        days,
+    );
     const inRange = (iso: string, from: string) => {
         const d = dateInTz(iso, tz);
         return d >= from && d <= endDate;
@@ -511,7 +522,9 @@ export function previewInputs(
         profile: fx.profile,
         meals: fx.meals.filter((m) => inRange(m.logged_at, fetchStart)),
         water: fx.water.filter((w) => inRange(w.logged_at, fetchStart)),
-        weight: sortedWeight.filter((w) => inRange(w.logged_at, weightStart)),
+        weight: sortedWeight.filter((w) =>
+            inRange(w.logged_at, weightFetchStart),
+        ),
         goals: fx.goals,
         latestWeight: sortedWeight.at(-1) ?? null,
         activityRows: fx.activity.filter(
@@ -526,7 +539,8 @@ export function previewInputs(
 export interface PreviewEdits {
     body?: BodyDetails;
     restingBasis?: "formula" | "calibrated";
-    skippedDays?: string[];
+    /** Calibration day choices: true = count, false = exclude. */
+    dayOverrides?: Record<string, boolean>;
     /** Weigh-ins logged from the page's form. */
     weights?: WeightEntry[];
     /** Meal edits from the Meals tab, by meal id. */
@@ -587,6 +601,6 @@ export function previewPayload(
     const fx = scenarioWithEdits(name, today, edits);
     return buildDashboardPayload({
         ...previewInputs(fx, days, today),
-        skippedDays: edits.skippedDays,
+        dayOverrides: edits.dayOverrides,
     });
 }

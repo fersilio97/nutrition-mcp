@@ -211,16 +211,15 @@ const server = Bun.serve({
                 !Number.isFinite(Date.parse(`${b.date}T00:00:00Z`)) ||
                 new Date(`${b.date}T00:00:00Z`).toISOString().slice(0, 10) !==
                     b.date ||
-                typeof b.skip !== "boolean"
+                !(b.counted === null || typeof b.counted === "boolean")
             )
                 return json({ error: "invalid_request" }, 400);
             const tz = scenarioTz(state.scenario);
             if (b.date > todayInTz(tz))
                 return json({ error: "invalid_request" }, 400);
-            const skipped = (edits().skippedDays ??= []);
-            const existing = skipped.indexOf(b.date);
-            if (b.skip && existing < 0) skipped.push(b.date);
-            if (!b.skip && existing >= 0) skipped.splice(existing, 1);
+            const overrides = (edits().dayOverrides ??= {});
+            if (b.counted === null) delete overrides[b.date];
+            else overrides[b.date] = b.counted;
             return json({ ok: true });
         }
 

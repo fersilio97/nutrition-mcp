@@ -26,8 +26,8 @@ import {
     getProfile,
     getLatestWeight,
     getActivityInRange,
-    getCalibrationSkippedDays,
-    setCalibrationSkippedDay,
+    getCalibrationDayOverrides,
+    setCalibrationDayOverride,
     activityByDate,
     upsertProfile,
     insertWeight,
@@ -43,8 +43,14 @@ import {
     type WeightEntry,
 } from "./supabase.js";
 import { buildDailyBuckets } from "./insights.js";
-import { buildCalibration } from "./calibration.js";
-import { balanceGrams, dailyBurn } from "./body.js";
+import {
+    buildCalibration,
+    calibratedBaseline,
+    metabolismSeries,
+    WINDOW_DAYS,
+    type EnergyDay,
+} from "./calibration.js";
+import { balanceGrams, dailyBurn, TEF_FRACTION } from "./body.js";
 import {
     todayInTz,
     shiftLocalDate,
@@ -68,6 +74,7 @@ import {
     buildEstimateVsScale,
     buildLast7,
     buildWeightStats,
+    countDay,
     granularityFor,
     groupDays,
     LAST7_DAYS,
@@ -111,11 +118,6 @@ function clampDays(raw: string | undefined): number {
  * range the Trends tab shows. One helper so the fetch, the payload and the
  * dev preview's fixture filter cannot disagree.
  */
-/** Days of rows always fetched, whatever the chart range. */
-export const HISTORY_DAYS = 49;
-/** The fixed window the calibration and estimate-vs-reality figures use. */
-const ESTIMATE_WINDOW_DAYS = 28;
-
 export function dashboardWindow(
     today: string,
     days: number,
@@ -124,6 +126,7 @@ export function dashboardWindow(
     endDate: string;
     weightStart: string;
     fetchStart: string;
+    weightFetchStart: string;
 } {
     const startDate = shiftLocalDate(today, -(days - 1));
     const last7Start = shiftLocalDate(today, -LAST7_DAYS);
@@ -134,14 +137,19 @@ export function dashboardWindow(
             today,
             -(Math.max(days, WEIGHT_WINDOW_DAYS) - 1),
         ),
-        // Also back to the fixed history window (49 days: the 28-day
-        // calibration / estimate-vs-reality window plus the 21 days the
-        // metabolism chart looks back from its first day), so those figures
-        // never depend on the chart range picked.
+        // Also the 28 calibration days before the range's first day: every
+        // plotted day of the metabolism chart is calibrated from the 28 days
+        // before it, and the latest of those windows is the Body tab's
+        // figure, so neither depends on the chart range picked.
         fetchStart: [
             startDate,
             last7Start,
-            shiftLocalDate(today, -(HISTORY_DAYS - 1)),
+            shiftLocalDate(startDate, -WINDOW_DAYS),
+        ].sort()[0]!,
+        // Weigh-ins for the same calibration windows, and the weight tracker.
+        weightFetchStart: [
+            shiftLocalDate(today, -(Math.max(days, WEIGHT_WINDOW_DAYS) - 1)),
+            shiftLocalDate(startDate, -WINDOW_DAYS),
         ].sort()[0]!,
     };
 }
@@ -155,7 +163,8 @@ export interface DashboardInputs {
     goals: NutritionGoals | null;
     latestWeight: WeightEntry | null;
     activityRows: ActivityDay[];
-    skippedDays?: string[];
+    /** Manual calibration choices by date: true = count, false = exclude. */
+    dayOverrides?: Record<string, boolean>;
     days: number;
     /** The user's local today, YYYY-MM-DD. */
     today: string;
@@ -170,13 +179,16 @@ export async function dashboardPayload(userId: string, days: number) {
     const profile = await getProfile(userId);
     const tz = timezoneFromProfile(profile) ?? "UTC";
     const today = todayInTz(tz);
-    const { endDate, weightStart, fetchStart } = dashboardWindow(today, days);
+    const { endDate, weightFetchStart, fetchStart } = dashboardWindow(
+        today,
+        days,
+    );
 
     const [meals, water, weight, goals, latestWeight, activityRows] =
         await Promise.all([
             getMealsInRange(userId, fetchStart, endDate, tz),
             getWaterInRange(userId, fetchStart, endDate, tz),
-            getWeightInRange(userId, weightStart, endDate, tz),
+            getWeightInRange(userId, weightFetchStart, endDate, tz),
             getNutritionGoals(userId),
             getLatestWeight(userId),
             // Optional enrichment: a missing activity table must not take
@@ -184,11 +196,11 @@ export async function dashboardPayload(userId: string, days: number) {
             getActivityInRange(userId, fetchStart, endDate).catch(() => []),
         ]);
 
-    const skippedDays = await getCalibrationSkippedDays(
+    const dayOverrides = await getCalibrationDayOverrides(
         userId,
-        shiftLocalDate(today, -28),
-        shiftLocalDate(today, -1),
-    ).catch(() => []);
+        fetchStart,
+        endDate,
+    ).catch(() => ({}));
 
     return buildDashboardPayload({
         profile,
@@ -198,7 +210,7 @@ export async function dashboardPayload(userId: string, days: number) {
         goals,
         latestWeight,
         activityRows,
-        skippedDays,
+        dayOverrides,
         days,
         today,
     });
@@ -218,7 +230,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         goals,
         latestWeight,
         activityRows,
-        skippedDays = [],
+        dayOverrides = {},
         days,
         today,
     } = inputs;
@@ -233,12 +245,15 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
     // figure the assistant quotes cannot disagree. Bucketed from fetchStart
     // (the range, widened for `last7`); `daily` is then cut back to the range.
     const buckets = buildDailyBuckets(meals, water, fetchStart, endDate, tz);
-    const weighIns: WeighIn[] = weight
+    // Every fetched weigh-in feeds the calibration windows; the weight
+    // tracker and the weights payload keep their own [weightStart, endDate].
+    const allWeighIns: WeighIn[] = weight
         .map((w) => ({
             date: dateInTz(w.logged_at, tz),
             weight_g: w.weight_g,
         }))
         .sort((a, b) => a.date.localeCompare(b.date));
+    const weighIns = allWeighIns.filter((w) => w.date >= weightStart);
     const latest: WeighIn | null = latestWeight
         ? {
               date: dateInTz(latestWeight.logged_at, tz),
@@ -247,7 +262,8 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         : null;
     // BMR needs a weight for every day, including days before the first
     // weigh-in in the window; the latest reading overall backs those.
-    const weightsForBmr = weighIns.length || !latest ? weighIns : [latest];
+    const weightsForBmr =
+        allWeighIns.length || !latest ? allWeighIns : [latest];
     const body = bodyOf(profile);
     const activeByDate = activityByDate(activityRows);
     const allRows = buildDashboardDays(
@@ -258,28 +274,45 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         weightsForBmr,
         endDate,
     );
+    // Which days count in the calibration: automatic (breakfast, lunch and
+    // dinner logged) unless the user chose otherwise for that day.
+    const hasWatch = allRows.some((r) => r.active_kcal != null);
+    for (const row of allRows) {
+        const override = dayOverrides[row.date] ?? null;
+        const c = countDay(row, override, hasWatch);
+        row.count_override = override;
+        row.counts_in_calibration = c.counted;
+        row.count_reason = c.reason;
+    }
+    // From the FORMULA rows, before any calibration is applied to them.
+    const energyDays: EnergyDay[] = allRows.map((r) => ({
+        date: r.date,
+        calories: r.calories,
+        active_kcal: r.active_kcal,
+        bmr_kcal: r.bmr_kcal,
+        counted: r.counts_in_calibration === true,
+    }));
     const calibration = buildCalibration(
-        allRows.map((r) => ({ ...r, skipped: skippedDays.includes(r.date) })),
-        weighIns,
+        energyDays,
+        allWeighIns,
         endDate,
         profile?.resting_basis === "calibrated" ? "calibrated" : "formula",
-        skippedDays,
+    );
+    const metabolism = metabolismSeries(
+        energyDays,
+        allWeighIns,
+        allRows.filter((r) => r.date >= startDate).map((r) => r.date),
     );
     if (calibration.applied && calibration.implied_kcal_per_day != null) {
         for (const row of allRows) {
             if (row.bmr_kcal == null) continue;
-            const resting = Math.round(
-                Math.max(
-                    row.bmr_kcal * 0.75,
-                    Math.min(
-                        row.bmr_kcal * 1.25,
-                        row.bmr_kcal - calibration.implied_kcal_per_day,
-                    ),
-                ),
-            );
-            const delta = resting - row.bmr_kcal;
-            row.bmr_kcal = resting;
-            row.burn_kcal = dailyBurn(resting, row.active_kcal);
+            const baseline = calibratedBaseline(
+                row.bmr_kcal,
+                calibration.implied_kcal_per_day,
+            ).kcal;
+            const delta = baseline - row.bmr_kcal;
+            row.bmr_kcal = baseline;
+            row.burn_kcal = dailyBurn(baseline, row.active_kcal, row.calories);
             row.balance_g =
                 row.mealCount > 0
                     ? balanceGrams(row.calories, row.burn_kcal)
@@ -288,18 +321,18 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
                 row.mealCount > 0
                     ? Math.round(row.calories - row.burn_kcal)
                     : null;
-            if (goals?.daily_calories == null || goals.daily_calories <= 0)
-                row.goal_calories =
-                    (row.goal_calories ??
-                        row.burn_kcal - (row.active_kcal ?? 0)) +
-                    delta +
-                    (row.active_kcal ?? 0);
+            // No stored goal: the default goal (break-even, see
+            // withBurnDefault) already holds the active kcal, so only the
+            // baseline's change moves it — scaled by 1 ÷ (1 − TEF) like the
+            // default itself. Adding active again counted it twice.
+            if (
+                (goals?.daily_calories == null || goals.daily_calories <= 0) &&
+                row.goal_calories != null
+            )
+                row.goal_calories = Math.round(
+                    row.goal_calories + delta / (1 - TEF_FRACTION),
+                );
         }
-    }
-    for (const row of allRows) {
-        row.skipped = skippedDays.includes(row.date);
-        row.counts_in_calibration =
-            !row.skipped && !row.in_progress && row.balance_g != null;
     }
     const dayRows = allRows.filter((r) => r.date >= startDate);
     const inRange = (iso: string) => {
@@ -322,6 +355,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
             goals,
             activeByDate.get(endDate) ?? null,
             endDate,
+            allRows.find((r) => r.date === endDate)?.calories ?? 0,
         ),
         weightWindowStart: weightStart,
         goals: goals
@@ -341,27 +375,14 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         // Built field by field (dashboard-stats.ts), so the bucket's
         // mealTypes Set — which JSON.stringify renders as {} — never ships.
         daily: dayRows,
-        // The period's estimated change next to what the scale did.
-        // A fixed 28-day window, not the chart range: the history exists
-        // whichever range is shown, so the figure must not vanish with it.
-        estimateVsScale: buildEstimateVsScale(
-            allRows,
-            weighIns,
-            shiftLocalDate(endDate, -ESTIMATE_WINDOW_DAYS),
-            endDate,
-        ),
-        // Compact daily rows for the fixed history window, for the
-        // metabolism chart (it needs 21 days of look-back per plotted day).
-        history: allRows
-            .filter(
-                (r) => r.date >= shiftLocalDate(endDate, -(HISTORY_DAYS - 1)),
-            )
-            .map((r) => ({
-                date: r.date,
-                burn_kcal: r.burn_kcal,
-                balance_g: r.balance_g,
-                in_progress: r.in_progress,
-            })),
+        // The calibration window (28 days ending yesterday) as the
+        // Estimate-vs-reality card shows it: the same days, trend and offset
+        // as `calibration`, so the card and the Body tab cannot disagree.
+        estimateVsScale: buildEstimateVsScale(calibration.window),
+        // One point per day of the range: the formula BMR next to the
+        // baseline the 28 days before it imply. The last point is exactly
+        // the Body tab's calibrated figure.
+        metabolism,
         // Today's two 7-day figures, from the widened rows: fixed to the
         // last week whatever the selected range.
         last7: buildLast7(allRows, weighIns, endDate),
@@ -370,13 +391,15 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         // `daily` above is unchanged and still feeds the tiles and Today.
         granularity: granularityFor(days),
         trendBuckets: groupDays(dayRows, granularityFor(days)),
-        weights: weight.map((w) => ({
-            // Local calendar day, resolved here: the page slicing the UTC
-            // ISO string would file an evening weigh-in under tomorrow.
-            date: dateInTz(w.logged_at, tz),
-            logged_at: w.logged_at,
-            weight_g: w.weight_g,
-        })),
+        weights: weight
+            .filter((w) => dateInTz(w.logged_at, tz) >= weightStart)
+            .map((w) => ({
+                // Local calendar day, resolved here: the page slicing the UTC
+                // ISO string would file an evening weigh-in under tomorrow.
+                date: dateInTz(w.logged_at, tz),
+                logged_at: w.logged_at,
+                weight_g: w.weight_g,
+            })),
         // Only the range's meals: the fetch reaches back further for last7.
         meals: meals
             .filter((m) => inRange(m.logged_at))
@@ -840,7 +863,8 @@ export function createDashboardRouter(): Hono {
                 new Date(`${body.date}T00:00:00Z`)
                     .toISOString()
                     .slice(0, 10) !== body.date ||
-                typeof body.skip !== "boolean"
+                // true = count, false = exclude, null = back to automatic.
+                !(body.counted === null || typeof body.counted === "boolean")
             )
                 return c.json({ error: "invalid_request" }, 400);
             const userId = c.get("userId") as string;
@@ -848,7 +872,11 @@ export function createDashboardRouter(): Hono {
             if (body.date > todayInTz(timezoneFromProfile(profile) ?? "UTC"))
                 return c.json({ error: "invalid_request" }, 400);
             try {
-                await setCalibrationSkippedDay(userId, body.date, body.skip);
+                await setCalibrationDayOverride(
+                    userId,
+                    body.date,
+                    body.counted as boolean | null,
+                );
             } catch {
                 return c.json({ error: "unavailable" }, 503);
             }

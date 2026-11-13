@@ -40,13 +40,15 @@ describe("basic formulas", () => {
         expect(bmrMifflin(80_000, 178, 30, "female")).toBe(1602);
     });
 
-    test("burn = resting BMR + active (no multiplier), balance at 7.7 kcal/g", () => {
-        // A rest day is the resting burn alone — no 1.2 "sedentary" credit.
+    test("burn = resting BMR + active + 10% TEF (no multiplier), balance at 6.0 kcal/g", () => {
+        // A rest day without food is the resting burn alone — no 1.2
+        // "sedentary" credit; eating adds 10% of the kcal as TEF.
         expect(dailyBurn(1768, null)).toBe(1768);
         expect(dailyBurn(1768, 300)).toBe(2068);
+        expect(dailyBurn(1768, 300, 2000)).toBe(2268);
         expect(balanceGrams(2068, 2068)).toBe(0);
-        expect(balanceGrams(1298, 2068)).toBe(-100);
-        expect(balanceGrams(2453, 2068)).toBe(50);
+        expect(balanceGrams(1468, 2068)).toBe(-100);
+        expect(balanceGrams(2368, 2068)).toBe(50);
     });
 
     test("bmrFor needs every detail and a weight", () => {

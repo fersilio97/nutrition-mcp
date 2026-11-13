@@ -963,34 +963,43 @@ export async function getActivityInRange(
     return (data as ActivityDay[]) ?? [];
 }
 
-export async function getCalibrationSkippedDays(
+/** Manual calibration choices by local date: true = count the day, false =
+ *  exclude it. A date with no row follows the automatic rule. */
+export async function getCalibrationDayOverrides(
     userId: string,
     startDate: string,
     endDate: string,
-): Promise<string[]> {
+): Promise<Record<string, boolean>> {
     const { data, error } = await getSupabase()
-        .from("calibration_skipped_days")
-        .select("day")
+        .from("calibration_day_overrides")
+        .select("day, counted")
         .eq("user_id", userId)
         .gte("day", startDate)
         .lte("day", endDate);
-    if (error) throw new Error(`Failed to get skipped days: ${error.message}`);
-    return ((data ?? []) as { day: string }[]).map((r) => r.day);
+    if (error)
+        throw new Error(`Failed to get calibration days: ${error.message}`);
+    const out: Record<string, boolean> = {};
+    for (const r of (data ?? []) as { day: string; counted: boolean }[])
+        out[r.day] = r.counted;
+    return out;
 }
 
-export async function setCalibrationSkippedDay(
+/** Save a day's manual choice; null removes it (back to automatic). */
+export async function setCalibrationDayOverride(
     userId: string,
     day: string,
-    skip: boolean,
+    counted: boolean | null,
 ): Promise<void> {
-    const query = getSupabase().from("calibration_skipped_days");
-    const { error } = skip
-        ? await query.upsert(
-              { user_id: userId, day },
-              { onConflict: "user_id,day" },
-          )
-        : await query.delete().eq("user_id", userId).eq("day", day);
-    if (error) throw new Error(`Failed to save skipped day: ${error.message}`);
+    const query = getSupabase().from("calibration_day_overrides");
+    const { error } =
+        counted === null
+            ? await query.delete().eq("user_id", userId).eq("day", day)
+            : await query.upsert(
+                  { user_id: userId, day, counted },
+                  { onConflict: "user_id,day" },
+              );
+    if (error)
+        throw new Error(`Failed to save calibration day: ${error.message}`);
 }
 
 /** Every activity row for the export, oldest first. Paged and reconciled
@@ -1518,7 +1527,7 @@ export async function deleteAllUserData(userId: string): Promise<void> {
         throw new Error(`Failed to delete activity: ${activityErr.message}`);
 
     const { error: calibrationErr } = await sb
-        .from("calibration_skipped_days")
+        .from("calibration_day_overrides")
         .delete()
         .eq("user_id", userId);
     if (calibrationErr && !calibrationErr.message.includes("does not exist"))

@@ -1,209 +1,280 @@
 import { describe, expect, test } from "bun:test";
-import { buildCalibration, type CalibrationDay } from "./calibration.js";
+import {
+    buildCalibration,
+    calibratedBaseline,
+    energyWindow,
+    metabolismSeries,
+    type EnergyDay,
+} from "./calibration.js";
 import { buildDashboardPayload, dashboardWindow } from "./dashboard.js";
+import { countDay } from "./dashboard-stats.js";
 import { buildScenario, previewInputs } from "./dashboard-fixture.js";
 
-const TODAY = "2026-12-01";
-const BMR = 2_000;
-const date = (n: number) =>
+const iso = (n: number) =>
     new Date(Date.parse("2026-10-01T00:00:00Z") + n * 86_400_000)
         .toISOString()
         .slice(0, 10);
 
-function sample(span: number, counted = span, deltaG = 0) {
-    const days: CalibrationDay[] = Array.from({ length: span }, (_, i) => ({
-        date: date(i),
-        bmr_kcal: BMR,
-        balance_g: i < counted ? 0 : null,
-        in_progress: false,
+/** `len` days from Oct 1: 2000 eaten, 300 active, BMR 1700. */
+function days(len: number, counted = (_i: number) => true): EnergyDay[] {
+    return Array.from({ length: len }, (_, i) => ({
+        date: iso(i),
+        calories: 2000,
+        active_kcal: 300,
+        bmr_kcal: 1700,
+        counted: counted(i),
     }));
-    const weighIns = [
-        { date: date(0), weight_g: 80_000 },
-        { date: date(span), weight_g: 80_000 + deltaG },
-    ];
-    return buildCalibration(days, weighIns, date(25), "calibrated");
 }
 
-describe("buildCalibration", () => {
-    test("clamps resting burn at both 25% bounds", () => {
-        expect(sample(20, 20, 10_000).resting_kcal).toBe(1_500);
-        expect(sample(20, 20, -10_000).resting_kcal).toBe(2_500);
-    });
-
-    test("positive implied offset lowers resting burn", () => {
-        const c = sample(20, 20, 500);
-        expect(c.implied_kcal_per_day).toBeGreaterThan(0);
-        expect(c.resting_kcal).toBeLessThan(BMR);
-    });
-
-    test("derives offset from formula-burn balances only", () => {
-        const days = Array.from({ length: 20 }, (_, i) => ({
-            date: date(i),
-            bmr_kcal: BMR,
-            balance_g: 10,
-            in_progress: false,
-        }));
-        const c = buildCalibration(
-            days,
-            [
-                { date: date(0), weight_g: 80_000 },
-                { date: date(20), weight_g: 80_000 + 200 },
-            ],
-            date(25),
-            "calibrated",
-        );
-        expect(c.implied_kcal_per_day).toBe(
-            Math.round(((200 - 200) * 7.7) / 20),
-        );
-    });
-
-    test("excludes skipped days and scales remaining balance across the span", () => {
-        const days = Array.from({ length: 20 }, (_, i) => ({
-            date: date(i),
-            bmr_kcal: BMR,
-            balance_g: 10,
-            in_progress: false,
-            skipped: i === 0,
-        }));
-        const c = buildCalibration(
-            days,
-            [
-                { date: date(0), weight_g: 80_000 },
-                { date: date(20), weight_g: 80_000 },
-            ],
-            date(25),
-            "calibrated",
-            [date(0)],
-        );
-        expect(c.counted_days).toBe(19);
-        expect(c.skipped_days).toEqual([date(0)]);
-        expect(c.implied_kcal_per_day).toBe(-77);
-    });
-
-    test("requires a 14-day span and 70% coverage", () => {
-        expect(sample(13).status).toBe("too_few_days");
-        expect(sample(14).status).toBe("ok");
-        expect(sample(20, 13).status).toBe("too_few_days");
-        expect(sample(20, 14).status).toBe("ok");
-    });
-
-    test("falls back to BMR with each non-ok status", () => {
-        const noWeighins = buildCalibration([], [], TODAY, "calibrated");
-        const noEstimate = buildCalibration(
-            [
-                {
-                    date: date(1),
-                    bmr_kcal: BMR,
-                    balance_g: null,
-                    in_progress: false,
-                },
-            ],
-            [
-                { date: date(0), weight_g: 80_000 },
-                { date: date(20), weight_g: 80_000 },
-            ],
-            date(25),
-            "calibrated",
-        );
-        const missingBmr = buildCalibration(
-            Array.from({ length: 20 }, (_, i) => ({
-                date: date(i),
-                bmr_kcal: null,
-                balance_g: 0,
-                in_progress: false,
-            })),
-            [
-                { date: date(0), weight_g: 80_000 },
-                { date: date(20), weight_g: 80_000 },
-            ],
-            date(25),
-            "calibrated",
-        );
-        for (const c of [noWeighins, noEstimate, sample(13), missingBmr]) {
-            expect(c.applied).toBe(false);
-            expect(c.resting_kcal).toBe(c.bmr_kcal);
-        }
-        expect([
-            noWeighins.status,
-            noEstimate.status,
-            sample(13).status,
-            missingBmr.status,
-        ]).toEqual([
-            "no_weighins",
-            "no_estimate",
-            "too_few_days",
-            "missing_bmr",
-        ]);
-    });
-
-    test("automatically excludes no-meal and in-progress days", () => {
-        const days: CalibrationDay[] = Array.from(
-            { length: 20 },
-            (_, i): CalibrationDay => ({
-                date: date(i),
-                bmr_kcal: BMR,
-                balance_g: 10,
-                in_progress: i === 19,
-            }),
-        );
-        days[0]!.balance_g = null; // no meal
-        const c = buildCalibration(
-            days,
-            [
-                { date: date(0), weight_g: 80_000 },
-                { date: date(20), weight_g: 80_000 },
-            ],
-            date(25),
-            "calibrated",
-        );
-        expect(c.counted_days).toBe(18);
-    });
-
-    test("a skipped dashboard day reduces counted days and changes applied resting burn", () => {
-        const today = TODAY;
-        const fx = buildScenario("calibrate", today);
-        const inputs = previewInputs(fx, 90, today);
-        const initial = buildDashboardPayload(inputs);
-        const skipDate = initial.daily
-            .filter(
-                (r) =>
-                    r.counts_in_calibration &&
-                    r.date < initial.weights.at(-1)!.date,
-            )
-            .at(-1)!.date;
-        const skipped = buildDashboardPayload({
-            ...inputs,
-            skippedDays: [skipDate],
+/** A weigh-in every `step` days up to day `last`, on a straight line
+ *  (gPerDay), with optional per-index noise. */
+function weighIns(
+    last: number,
+    step: number,
+    gPerDay: number,
+    noise: number[] = [],
+) {
+    const out = [];
+    for (let d = 0, k = 0; d <= last; d += step, k++)
+        out.push({
+            date: iso(d),
+            weight_g: 80_000 + gPerDay * d + (noise[k] ?? 0),
         });
-        expect(skipped.calibration.counted_days).toBe(
-            initial.calibration.counted_days - 1,
+    return out;
+}
+
+describe("energyWindow", () => {
+    test("TDEE = intake − slope × 6; baseline = TDEE − active − 10% TEF", () => {
+        // −20 g/day: T = 2000 + 20 × 6 = 2120; baseline = 2120 − 300 − 200.
+        const w = energyWindow(days(28), weighIns(21, 3, -20), iso(0), iso(27));
+        expect(w.status).toBe("ok");
+        expect(w.tdee_kcal).toBe(2120);
+        expect(w.tef_kcal).toBe(200);
+        expect(w.baseline_kcal).toBe(1620);
+        // Positive: the formula (1700) runs 80 high.
+        expect(w.offset_kcal).toBe(80);
+        // The card's gap gives the same number: gap × 6 ÷ span.
+        expect(Math.round((w.gap_g! * 6) / w.span_days!)).toBe(80);
+        expect(w.uncertainty_kcal).toBe(0);
+    });
+
+    test("the trend damps one water-heavy weigh-in that endpoints would not", () => {
+        const clean = energyWindow(
+            days(28),
+            weighIns(21, 3, -20),
+            iso(0),
+            iso(27),
         );
-        expect(skipped.calibration.applied).toBe(true);
+        const wet = energyWindow(
+            days(28),
+            weighIns(21, 3, -20, [0, 0, 0, 0, 0, 0, 0, 700]),
+            iso(0),
+            iso(27),
+        );
+        // Endpoints would move the offset by 700 × 6 ÷ 21 = 200 kcal/day.
+        const moved = wet.offset_kcal! - clean.offset_kcal!;
+        expect(moved).toBeGreaterThan(0);
+        expect(moved).toBeLessThan(200);
+        expect(wet.uncertainty_kcal!).toBeGreaterThan(0);
+    });
+
+    test("needs 21 days, 4 weigh-in days, 80% counted, and a quiet trend", () => {
         expect(
-            skipped.daily.find((r) => r.date === skipDate)!.bmr_kcal,
-        ).not.toBe(initial.daily.find((r) => r.date === skipDate)!.bmr_kcal);
+            energyWindow(days(28), weighIns(18, 3, 0), iso(0), iso(27)).status,
+        ).toBe("too_few_days");
+        expect(
+            energyWindow(days(28), weighIns(21, 7, 0), iso(0), iso(27)).status,
+        ).toBe("ok"); // days 0, 7, 14, 21: exactly 4
+        expect(
+            energyWindow(days(28), weighIns(21, 10, 0), iso(0), iso(27)).status,
+        ).toBe("too_few_weighins");
+        const sparse = days(28, (i) => i % 3 !== 0); // 67% counted
+        expect(
+            energyWindow(sparse, weighIns(21, 3, 0), iso(0), iso(27)).status,
+        ).toBe("too_few_days");
+        const noisy = weighIns(
+            21,
+            3,
+            0,
+            [0, 900, -900, 900, -900, 900, -900, 0],
+        );
+        expect(energyWindow(days(28), noisy, iso(0), iso(27)).status).toBe(
+            "too_noisy",
+        );
+    });
+
+    test("uncounted days are left out of the means", () => {
+        const d = days(28).map((r, i) =>
+            i % 5 === 0 ? { ...r, calories: 500, counted: false } : r,
+        );
+        const w = energyWindow(d, weighIns(21, 3, -20), iso(0), iso(27));
+        expect(w.mean_intake_kcal).toBe(2000);
+        expect(w.counted_days).toBe(16);
+    });
+});
+
+describe("calibratedBaseline", () => {
+    test("BMR − offset, held to ±25% with the limit flagged", () => {
+        expect(calibratedBaseline(2000, 100)).toEqual({
+            kcal: 1900,
+            clamped: false,
+        });
+        expect(calibratedBaseline(2000, 900)).toEqual({
+            kcal: 1500,
+            clamped: true,
+        });
+        expect(calibratedBaseline(2000, -900)).toEqual({
+            kcal: 2500,
+            clamped: true,
+        });
+    });
+});
+
+describe("buildCalibration", () => {
+    test("28 days ending yesterday; applied only on the calibrated basis", () => {
+        const d = days(40);
+        const w = weighIns(39, 3, -20);
+        const today = iso(29);
+        const formula = buildCalibration(d, w, today, "formula");
+        const calibrated = buildCalibration(d, w, today, "calibrated");
+        expect(formula.window.from).toBe(iso(1));
+        expect(formula.window.to).toBe(iso(28));
+        expect(formula.status).toBe("ok");
+        expect(formula.applied).toBe(false);
+        expect(calibrated.applied).toBe(true);
+        expect(calibrated.resting_kcal).toBe(1620);
+    });
+
+    test("falls back to the formula BMR when the window does not qualify", () => {
+        const c = buildCalibration(days(40), [], iso(29), "calibrated");
+        expect(c.status).toBe("no_weighins");
+        expect(c.applied).toBe(false);
+        expect(c.resting_kcal).toBe(c.bmr_kcal);
+    });
+});
+
+describe("metabolismSeries", () => {
+    test("the last point is the calibration's baseline", () => {
+        const d = days(60);
+        const w = weighIns(59, 3, -20);
+        const today = iso(59);
+        const series = metabolismSeries(d, w, [iso(40), iso(50), today]);
+        const c = buildCalibration(d, w, today, "calibrated");
+        expect(series.at(-1)!.data_kcal).toBe(c.resting_kcal);
+        expect(series.every((p) => p.formula_kcal === 1700)).toBe(true);
+    });
+});
+
+describe("countDay", () => {
+    const row = {
+        in_progress: false,
+        mealCount: 3,
+        active_kcal: 300 as number | null,
+        meals_complete: true,
+    };
+    test("automatic: breakfast, lunch and dinner logged", () => {
+        expect(countDay(row, null, true).counted).toBe(true);
+        expect(countDay({ ...row, meals_complete: false }, null, true)).toEqual(
+            {
+                counted: false,
+                reason: "auto_incomplete",
+            },
+        );
+    });
+    test("a manual choice wins over the rule, both ways", () => {
+        expect(
+            countDay({ ...row, meals_complete: false }, true, true).reason,
+        ).toBe("manual_on");
+        expect(countDay(row, false, true).reason).toBe("manual_off");
+    });
+    test("today, empty days and unsynced watch days never count", () => {
+        expect(countDay({ ...row, in_progress: true }, true, true).reason).toBe(
+            "in_progress",
+        );
+        expect(countDay({ ...row, mealCount: 0 }, true, true).reason).toBe(
+            "no_meals",
+        );
+        expect(countDay({ ...row, active_kcal: null }, true, true).reason).toBe(
+            "no_watch",
+        );
+        // No watch at all: a null active is just "no activity data".
+        expect(
+            countDay({ ...row, active_kcal: null }, null, false).counted,
+        ).toBe(true);
+    });
+});
+
+describe("dashboard payload", () => {
+    const TODAY = "2026-12-01";
+    const fx = buildScenario("calibrate", TODAY);
+    const at = (days: number, dayOverrides?: Record<string, boolean>) =>
+        buildDashboardPayload({
+            ...previewInputs(fx, days, TODAY),
+            dayOverrides,
+        });
+
+    test("finds the fixture's 150 kcal/day offset through the noise", () => {
+        const p = at(30);
+        expect(p.calibration.status).toBe("ok");
+        expect(
+            Math.abs(p.calibration.implied_kcal_per_day! - 150),
+        ).toBeLessThan(60);
+    });
+
+    test("Body figure, Estimate-vs-reality and the chart's last point agree", () => {
+        const p = at(30);
+        expect(p.estimateVsScale.implied_kcal_per_day).toBe(
+            p.calibration.implied_kcal_per_day,
+        );
+        expect(p.metabolism.at(-1)!.data_kcal).toBe(p.calibration.resting_kcal);
+        expect(p.metabolism).toHaveLength(30);
+        expect(p.metabolism.every((m) => m.data_kcal != null)).toBe(true);
+    });
+
+    test("the figures do not depend on the chart range", () => {
+        const a = at(7);
+        const b = at(90);
+        expect(a.calibration).toEqual(b.calibration);
+        expect(a.estimateVsScale).toEqual(b.estimateVsScale);
+        expect(a.metabolism).toEqual(b.metabolism.slice(-7));
+    });
+
+    test("a manual choice moves a day in or out of the calibration", () => {
+        const base = at(30);
+        const incomplete = base.daily.find(
+            (r) =>
+                r.count_reason === "auto_incomplete" &&
+                r.date >= base.calibration.window.first_date! &&
+                r.date < base.calibration.window.last_date!,
+        )!;
+        expect(incomplete).toBeDefined();
+        const forced = at(30, { [incomplete.date]: true });
+        expect(forced.calibration.counted_days).toBe(
+            base.calibration.counted_days + 1,
+        );
+        expect(
+            forced.daily.find((r) => r.date === incomplete.date)!.count_reason,
+        ).toBe("manual_on");
+    });
+
+    test("default goal on calibrated days counts active kcal once", () => {
+        const p = buildDashboardPayload(
+            previewInputs({ ...fx, goals: null }, 30, TODAY),
+        );
+        expect(p.calibration.applied).toBe(true);
+        const row = p.daily.find((r) => (r.active_kcal ?? 0) > 0)!;
+        const expected = Math.round(row.bmr_kcal! / 0.9) + row.active_kcal!;
+        expect(Math.abs(row.goal_calories! - expected)).toBeLessThanOrEqual(1);
     });
 });
 
 describe("dashboardWindow", () => {
-    test("fetches the 49-day history window whatever the chart range", () => {
+    test("fetches the 28 calibration days before the range's first day", () => {
         const w = dashboardWindow("2026-11-11", 7);
         expect(w.startDate).toBe("2026-11-05");
-        expect(w.fetchStart).toBe("2026-09-24");
-    });
-});
-
-describe("range-independent history", () => {
-    test("estimateVsScale and history are the same for 7 and 90 days", () => {
-        const today = TODAY;
-        const fx = buildScenario("offset", today);
-        const at = (days: number) =>
-            buildDashboardPayload(previewInputs(fx, days, today));
-        const a = at(7);
-        const b = at(90);
-        expect(a.estimateVsScale.status).toBe("ok");
-        expect(a.estimateVsScale).toEqual(b.estimateVsScale);
-        expect(a.history).toEqual(b.history);
-        expect(a.history).toHaveLength(49);
+        expect(w.fetchStart).toBe("2026-10-08");
+        expect(dashboardWindow("2026-11-11", 365).weightFetchStart).toBe(
+            "2025-10-15",
+        );
     });
 });
