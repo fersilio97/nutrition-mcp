@@ -116,7 +116,8 @@ import {
     isLocalDate,
     type ActivityAdjustment,
 } from "./activity.js";
-import { checkBodyPatch, ageOn } from "./body.js";
+import { checkBodyPatch, ageOn, bmrFor, type BodyDetails } from "./body.js";
+import { withBurnDefault } from "./dashboard-stats.js";
 
 /** get_profile / set_body_profile's one-line summary of the body details. */
 function bodyProfileLine(profile: Profile | null): string {
@@ -598,6 +599,37 @@ function activityLine(adj: ActivityAdjustment): string {
     return `\nCalorie goal: ${describeCalorieGoal(adj)} — protein, carbs and fat scaled ×${adj.factor.toFixed(2)}.`;
 }
 
+/** Stored goals, with the estimated burn standing in for an unset calorie goal
+ *  (break-even until the user picks a target) — the same default the dashboard
+ *  shows, so the assistant's progress line and the page cannot disagree. A
+ *  stored goal always wins; without height/birth date/sex/weight there is no
+ *  burn and the goal stays unset. */
+async function goalsWithBurnDefault(
+    userId: string,
+    profile: Profile | null,
+    stored: NutritionGoals | null,
+    date: string,
+): Promise<NutritionGoals | null> {
+    if (stored?.daily_calories != null && stored.daily_calories > 0)
+        return stored;
+    try {
+        const latest = await getLatestWeight(userId);
+        const body: BodyDetails = {
+            height_cm:
+                profile?.height_cm == null ? null : Number(profile.height_cm),
+            birth_date: profile?.birth_date ?? null,
+            sex: profile?.sex ?? null,
+        };
+        return withBurnDefault(
+            stored,
+            bmrFor(body, latest?.weight_g ?? null, date),
+        );
+    } catch (err) {
+        console.error(`[burn-goal] weight read failed: ${err}`);
+        return stored;
+    }
+}
+
 // log_meal and update_meal share the same MCP Apps widget
 // (public/widgets/meal-logged.html). Both declare this identical output shape
 // and both build their payload via buildMealProgress() below, so the widget can
@@ -910,7 +942,10 @@ async function buildMealProgress(
         getNutritionGoals(userId),
         activityOrNull(userId, mealDate),
     ]);
-    const adj = adjustGoalsForActivity(storedGoals, activity?.active_kcal);
+    const adj = adjustGoalsForActivity(
+        await goalsWithBurnDefault(userId, profile, storedGoals, mealDate),
+        activity?.active_kcal,
+    );
     const goals = adj.goals;
     const totals = sumMeals(meals);
     totals.water_ml = sumWater(waterEntries);
@@ -2889,7 +2924,12 @@ export function registerTools(
                             activityOrNull(userId, targetDate),
                         ]);
                     const adj = adjustGoalsForActivity(
-                        storedGoals,
+                        await goalsWithBurnDefault(
+                            userId,
+                            profile,
+                            storedGoals,
+                            targetDate,
+                        ),
                         activity?.active_kcal,
                     );
                     const goals = adj.goals;

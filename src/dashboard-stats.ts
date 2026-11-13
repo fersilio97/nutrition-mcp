@@ -149,9 +149,10 @@ export function countDay(
  *  the baseline is the break-even intake on a rest day — resting ÷ (1 − TEF),
  *  since eating I kcal also burns TEF_FRACTION × I digesting it — so the
  *  effective goal (baseline + active kcal) is about the estimated burn: eat
- *  to break even until the user picks a target. Without body details there is no burn to default to,
- *  so the goal stays unset. Dashboard-only: the MCP tools keep reading the
- *  stored goal, so "no goal set" there still means no goal. */
+ *  to break even until the user picks a target. Without body details there
+ *  is no burn to default to, so the goal stays unset. Also used by
+ *  log_meal / update_meal / get_goal_progress (src/mcp.ts), so the
+ *  assistant's progress matches the dashboard. */
 export function withBurnDefault(
     goals: NutritionGoals | null,
     bmr: number | null,
