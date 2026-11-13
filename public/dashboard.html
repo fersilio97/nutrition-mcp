@@ -103,6 +103,7 @@
                 --gain: #a35a0b;
                 --loss: #2563a6;
                 --warn: #8a5a00;
+                --cal2-eaten: #4d5d7a;
                 --shadow-card:
                     0 1px 2px rgba(17, 26, 21, 0.04),
                     0 12px 32px -12px rgba(17, 26, 21, 0.12);
@@ -143,6 +144,7 @@
                     --gain: #f2b25c;
                     --loss: #7fb0f0;
                     --warn: #e8b45a;
+                    --cal2-eaten: #a3b1cc;
                     --shadow-card:
                         0 1px 2px rgba(0, 0, 0, 0.3),
                         0 12px 32px -12px rgba(0, 0, 0, 0.6);
@@ -182,6 +184,7 @@
                 --gain: #f2b25c;
                 --loss: #7fb0f0;
                 --warn: #e8b45a;
+                --cal2-eaten: #a3b1cc;
                 --shadow-card:
                     0 1px 2px rgba(0, 0, 0, 0.3),
                     0 12px 32px -12px rgba(0, 0, 0, 0.6);
@@ -1197,6 +1200,22 @@
             }
             .met-scale {
                 stroke: var(--accent);
+            }
+            .cal2-deficit {
+                fill: var(--accent);
+                opacity: 0.18;
+                stroke: none;
+            }
+            .cal2-surplus {
+                fill: var(--over);
+                opacity: 0.22;
+                stroke: none;
+            }
+            .cal2-goal {
+                fill: none;
+                stroke: var(--ink-2);
+                stroke-dasharray: 4 4;
+                stroke-width: 1.5;
             }
             .met-band {
                 fill: var(--accent);
@@ -3287,6 +3306,9 @@
 
                 let token = null;
                 let data = null;
+                const mockCalories =
+                    new URLSearchParams(location.search).get("mock") ===
+                    "calories";
                 let loading = false;
                 let loadError = false;
                 let active = "today";
@@ -5175,6 +5197,45 @@
                         calcHtml()
                     );
                 }
+                function calories2Html() {
+                    const rows = data.daily || [];
+                    const hasBurn = rows.some((r) => r.burn_kcal != null);
+                    const logged = rows.some(
+                        (r) => r.mealCount > 0 && !r.in_progress,
+                    );
+                    const smooth = data.days > 14;
+                    const legendSvg = (cls, dashed) =>
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="' +
+                        cls +
+                        '"' +
+                        (dashed ? ' stroke-dasharray="4 4"' : "") +
+                        "/></svg>";
+                    const head = secHead({
+                        wide: true,
+                        eyebrow: "Energy · mock",
+                        id: "h-cal2",
+                        title: 'Eaten vs burned <span class="est">(estimate)</span>',
+                        note:
+                            "What you ate each day next to what you burned (resting + watch activity + digestion). Green where you ate under your burn (deficit), pink where you ate over it (surplus). The dashed line is your goal. Days that look partly logged are left out (see the Meals tab)." +
+                            (smooth ? " Lines are 7-day averages." : ""),
+                        legend: legend([
+                            [legendSvg("met-est", false), "Eaten"],
+                            [legendSvg("met-scale", false), "Est. burn"],
+                            [legendSvg("cal2-goal", true), "Goal"],
+                        ]),
+                    });
+                    if (!hasBurn || !logged)
+                        return (
+                            head +
+                            '<p class="empty">Nothing logged in these ' +
+                            rows.length +
+                            " days.</p>"
+                        );
+                    return (
+                        head +
+                        '<div class="plot" id="cal2-plot"></div><div class="strip three rv" id="cal2-stats"></div><p class="met-highlight" id="cal2-today"></p>'
+                    );
+                }
                 function calcHtml() {
                     if (!data.calibration || !data.calibrationDetail) return "";
                     const c = data.calibration,
@@ -6260,6 +6321,11 @@
                     $("trends-body").innerHTML =
                         '<div class="stack">' +
                         tilesHtml(rows, s) +
+                        (mockCalories
+                            ? '<section class="rv" aria-labelledby="h-cal2">' +
+                              calories2Html() +
+                              "</section>"
+                            : "") +
                         '<section class="rv" aria-labelledby="h-cal">' +
                         secHead({
                             wide: true,
@@ -6476,6 +6542,336 @@
                     );
                 }
                 const stepWord = () => (gran() === "day" ? "day" : perWord());
+
+                function calories2Chart() {
+                    const host = $("cal2-plot");
+                    if (!host || !host.clientWidth) return;
+                    const raw = (data.daily || []).filter(
+                        (r) => !r.in_progress,
+                    );
+                    const smooth = data.days > 14;
+                    const points = raw.map((r, i) => {
+                        if (!smooth)
+                            return {
+                                ...r,
+                                // A day that does not look completely
+                                // logged leaves a gap, not a fake deficit.
+                                eaten: r.counts_in_calibration
+                                    ? r.calories
+                                    : null,
+                                burn: r.counts_in_calibration
+                                    ? r.burn_kcal
+                                    : null,
+                                goal: r.goal_calories,
+                            };
+                        const window = raw.slice(Math.max(0, i - 6), i + 1);
+                        // Only days that look completely logged (the same
+                        // rule as the calibration): a half-logged day would
+                        // drag the average toward a deficit that never was.
+                        const counted = window.filter(
+                            (x) => x.mealCount > 0 && x.counts_in_calibration,
+                        );
+                        const goals = window.filter(
+                            (x) => x.goal_calories != null,
+                        );
+                        const mean = (arr, key) =>
+                            arr.length
+                                ? arr.reduce((a, x) => a + (x[key] || 0), 0) /
+                                  arr.length
+                                : null;
+                        return {
+                            ...r,
+                            eaten:
+                                counted.length >= 4
+                                    ? mean(counted, "calories")
+                                    : null,
+                            burn:
+                                counted.length >= 4
+                                    ? mean(
+                                          counted.filter(
+                                              (x) => x.burn_kcal != null,
+                                          ),
+                                          "burn_kcal",
+                                      )
+                                    : null,
+                            goal: mean(goals, "goal_calories"),
+                        };
+                    });
+                    const vals = points
+                        .flatMap((p) => [p.eaten, p.burn, p.goal])
+                        .filter((v) => v != null);
+                    if (!vals.length) return;
+                    // Round ticks: a step of 50/100/200/250/500 kcal giving
+                    // about four intervals, the axis snapped to it.
+                    const span0 = Math.max(
+                        1,
+                        Math.max(...vals) - Math.min(...vals),
+                    );
+                    const step =
+                        [50, 100, 200, 250, 500, 1000].find(
+                            (x) => span0 / x <= 4,
+                        ) || 1000;
+                    const lo = Math.floor(Math.min(...vals) / step) * step,
+                        hi = Math.ceil(Math.max(...vals) / step) * step,
+                        ticks = Math.round((hi - lo) / step);
+                    const c = chartSvg(
+                        host,
+                        innerWidth <= 480 ? 240 : 280,
+                        "Eaten, estimated burn and calorie goal, kcal per day.",
+                    );
+                    const base = c.h - PAD.b,
+                        L = gutter(yLabels(hi, 4)),
+                        W = c.w - L - PAD.r,
+                        H = base - PAD.t;
+                    const yAt = (v) => base - ((v - lo) / (hi - lo)) * H,
+                        svg = c.svg;
+                    for (let i = 0; i <= ticks; i++) {
+                        const v = lo + step * i,
+                            y = yAt(v);
+                        if (i)
+                            svg.appendChild(
+                                svgEl("line", {
+                                    x1: L,
+                                    x2: L + W,
+                                    y1: y,
+                                    y2: y,
+                                    class: "gridline",
+                                }),
+                            );
+                        svgText(svg, L - 8, y + 4, fmt(v), "lbl", "end");
+                    }
+                    const xAt = (i) =>
+                        L +
+                        (points.length < 2
+                            ? W / 2
+                            : (W * i) / (points.length - 1));
+                    const line = (key) => {
+                        let d = "",
+                            prev = false;
+                        points.forEach((p, i) => {
+                            if (p[key] == null) {
+                                prev = false;
+                                return;
+                            }
+                            d +=
+                                (prev ? "L" : "M") + xAt(i) + "," + yAt(p[key]);
+                            prev = true;
+                        });
+                        return d;
+                    };
+                    // Each adjacent pair forms a quad; when signs differ, interpolate the exact crossing and split the quad there.
+                    for (let i = 0; i < points.length - 1; i++) {
+                        const a = points[i],
+                            b = points[i + 1];
+                        if (
+                            a.eaten == null ||
+                            a.burn == null ||
+                            b.eaten == null ||
+                            b.burn == null
+                        )
+                            continue;
+                        const d0 = a.eaten - a.burn,
+                            d1 = b.eaten - b.burn,
+                            cls = d0 <= 0 ? "cal2-deficit" : "cal2-surplus";
+                        const polygon = (coords, klass) => {
+                            let d =
+                                "M" +
+                                coords.map((q) => q[0] + "," + q[1]).join("L") +
+                                "Z";
+                            svg.appendChild(svgEl("path", { d, class: klass }));
+                        };
+                        const A = [xAt(i), yAt(a.eaten)],
+                            B = [xAt(i + 1), yAt(b.eaten)],
+                            C = [xAt(i + 1), yAt(b.burn)],
+                            D = [xAt(i), yAt(a.burn)];
+                        if (d0 * d1 < 0) {
+                            const t = d0 / (d0 - d1),
+                                x = xAt(i) + (xAt(i + 1) - xAt(i)) * t,
+                                v = a.eaten + (b.eaten - a.eaten) * t,
+                                X = [x, yAt(v)];
+                            polygon(
+                                [
+                                    A,
+                                    X,
+                                    [x, yAt(a.burn + (b.burn - a.burn) * t)],
+                                    D,
+                                ],
+                                d0 < 0 ? "cal2-deficit" : "cal2-surplus",
+                            );
+                            polygon(
+                                [
+                                    X,
+                                    B,
+                                    C,
+                                    [x, yAt(a.burn + (b.burn - a.burn) * t)],
+                                ],
+                                d1 < 0 ? "cal2-deficit" : "cal2-surplus",
+                            );
+                        } else polygon([A, B, C, D], cls);
+                    }
+                    svg.appendChild(
+                        svgEl("path", {
+                            d: line("eaten"),
+                            class: "met-line met-est",
+                        }),
+                    );
+                    svg.appendChild(
+                        svgEl("path", {
+                            d: line("burn"),
+                            class: "met-line met-scale",
+                        }),
+                    );
+                    svg.appendChild(
+                        svgEl("path", { d: line("goal"), class: "cal2-goal" }),
+                    );
+                    if (!smooth)
+                        points.forEach((p, i) => {
+                            if (p.eaten != null)
+                                svg.appendChild(
+                                    svgEl("circle", {
+                                        cx: xAt(i),
+                                        cy: yAt(p.eaten),
+                                        r: 2.5,
+                                        class: "met-est",
+                                    }),
+                                );
+                        });
+                    baseline(svg, L, L + W, base);
+                    const labels = xLabelIdx(points.length, W, 5),
+                        idx =
+                            labels.length > 7
+                                ? [...Array(7)].map((_, k) =>
+                                      Math.round((k * (points.length - 1)) / 6),
+                                  )
+                                : labels;
+                    idx.forEach((i) =>
+                        svgText(
+                            svg,
+                            xAt(i),
+                            c.h - 8,
+                            shortDay(points[i].date),
+                            "xl",
+                            "middle",
+                        ),
+                    );
+                    const last = points
+                        .slice()
+                        .reverse()
+                        .find((p) => p.eaten != null && p.burn != null);
+                    if (last) {
+                        const i = points.indexOf(last);
+                        svgText(
+                            svg,
+                            xAt(i),
+                            Math.min(yAt(last.eaten), yAt(last.burn)) - 7,
+                            fmtSigned(Math.round(last.eaten - last.burn)),
+                            "met-label",
+                            "end",
+                        );
+                    }
+                    inspect(
+                        svg,
+                        points.map((p, i) => {
+                            const delta =
+                                    p.eaten == null || p.burn == null
+                                        ? null
+                                        : Math.round(p.eaten - p.burn),
+                                rows = [
+                                    [
+                                        null,
+                                        "Eaten",
+                                        p.eaten == null
+                                            ? "not logged"
+                                            : fmt(p.eaten) + " kcal",
+                                    ],
+                                    [
+                                        null,
+                                        "Est. burn",
+                                        p.burn == null
+                                            ? "—"
+                                            : fmt(p.burn) + " kcal",
+                                    ],
+                                    [
+                                        null,
+                                        "Goal",
+                                        p.goal == null
+                                            ? "—"
+                                            : fmt(p.goal) + " kcal",
+                                    ],
+                                ];
+                            if (delta != null)
+                                rows.push([
+                                    null,
+                                    delta < 0 ? "Deficit" : "Surplus",
+                                    fmt(Math.abs(delta)) + " kcal",
+                                    1,
+                                ]);
+                            const t = tipContent(
+                                shortDay(p.date) +
+                                    (smooth ? " · 7-day avg" : ""),
+                                rows,
+                            );
+                            return { x: xAt(i), html: t.html, text: t.text };
+                        }),
+                        PAD.t,
+                        base,
+                    );
+                    // Eaten and burn over the SAME days: those that count
+                    // (look completely logged) and have a burn estimate.
+                    const logged = raw.filter(
+                            (r) =>
+                                r.mealCount > 0 &&
+                                r.counts_in_calibration &&
+                                r.burn_kcal != null,
+                        ),
+                        eatenRows = logged,
+                        avgE = eatenRows.length
+                            ? eatenRows.reduce((s, r) => s + r.calories, 0) /
+                              eatenRows.length
+                            : null,
+                        avgB = logged.length
+                            ? logged.reduce((s, r) => s + r.burn_kcal, 0) /
+                              logged.length
+                            : null,
+                        bal = avgE == null || avgB == null ? null : avgE - avgB;
+                    $("cal2-stats").innerHTML =
+                        stat(
+                            "Avg eaten",
+                            avgE == null ? "—" : fmt(avgE),
+                            "kcal/day",
+                        ) +
+                        stat(
+                            "Avg est. burn",
+                            avgB == null ? "—" : fmt(avgB),
+                            "kcal/day",
+                        ) +
+                        stat(
+                            "Avg balance",
+                            bal == null ? "—" : fmtSigned(bal),
+                            "kcal/day",
+                        );
+                    const n = logged.length,
+                        weekly = bal == null ? 0 : (Math.abs(bal) * 7) / 6;
+                    $("cal2-today").textContent =
+                        bal == null
+                            ? "Est. burn is available on logged days only."
+                            : Math.abs(bal) < 50
+                              ? "You ate about what you burned (within 50 kcal/day)."
+                              : "Over these " +
+                                n +
+                                " fully logged days you ate ~" +
+                                fmt(Math.abs(bal)) +
+                                " kcal/day " +
+                                (bal < 0 ? "under" : "over") +
+                                " your burn — about " +
+                                wDelta(weekly, data.weightUnit).replace(
+                                    /^[+−-]/,
+                                    "",
+                                ) +
+                                " per week of " +
+                                (bal < 0 ? "loss" : "gain") +
+                                " at 6 kcal per gram.";
+                }
 
                 function caloriesChart() {
                     const host = $("cal-plot");
@@ -7025,6 +7421,7 @@
                     );
                 }
                 CHARTS.trends = function () {
+                    if (mockCalories) calories2Chart();
                     caloriesChart();
                     balanceChart();
                     macroChart();
