@@ -5249,6 +5249,50 @@
                         "met-label",
                         "end",
                     );
+                    inspect(
+                        svg,
+                        points.map(function (p, i) {
+                            const gap =
+                                p.est != null && p.scale != null
+                                    ? p.est - p.scale
+                                    : null;
+                            const t = tipContent(
+                                shortDay(p.date),
+                                [
+                                    [
+                                        null,
+                                        "Estimated burn (7-day avg)",
+                                        p.est == null
+                                            ? "—"
+                                            : fmt(p.est) + " kcal",
+                                    ],
+                                    [
+                                        null,
+                                        "Scale-implied burn",
+                                        p.scale == null
+                                            ? "—"
+                                            : fmt(p.scale) + " kcal",
+                                    ],
+                                ].concat(
+                                    gap == null
+                                        ? []
+                                        : [
+                                              [
+                                                  null,
+                                                  gap >= 0
+                                                      ? "Estimate runs high by"
+                                                      : "Estimate runs low by",
+                                                  fmt(Math.abs(gap)) + " kcal",
+                                                  1,
+                                              ],
+                                          ],
+                                ),
+                            );
+                            return { x: xAt(i), html: t.html, text: t.text };
+                        }),
+                        PAD.t,
+                        base,
+                    );
                     $("met-stats").innerHTML =
                         stat("Estimated burn", fmt(latestEst.est), "kcal/day") +
                         stat(
