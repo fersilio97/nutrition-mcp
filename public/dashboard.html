@@ -5524,7 +5524,11 @@
                         id: "h-cal2",
                         title: 'Eaten vs burned <span class="est">(estimate)</span>',
                         note:
-                            "What you ate each day against what you burned, split into baseline, digestion and workout (watch active kcal). Pink shows days you ate over your burn; dots turn red over your goal; the dashed line is your goal. Days that look partly logged are left out (see the Meals tab)." +
+                            "What you ate each day against what you burned, split into baseline, digestion and workout (watch active kcal). Pink shows days you ate over your burn" +
+                            (data.goals && data.goals.calories > 0
+                                ? "; dots turn red over your goal; the dashed line is your goal."
+                                : ".") +
+                            " Days that look partly logged are left out (see the Meals tab)." +
                             (smooth ? " Lines are 7-day averages." : ""),
                         legend: legend([
                             [eatenLegend, "Eaten"],
@@ -5532,7 +5536,14 @@
                             [swatch("cal2-legend-digestion"), "Digestion"],
                             [swatch("cal2-legend-workout"), "Workout / active"],
                             [swatch("cal2-legend-surplus"), "Surplus"],
-                            [svgLine("cal2-goal"), "Goal"],
+                            // With no custom goal the goal IS the est. burn:
+                            // one line, not two that differ by digestion.
+                            !(data.goals && data.goals.calories > 0)
+                                ? [
+                                      svgLine("cal2-burn-top"),
+                                      "Est. burn = your goal",
+                                  ]
+                                : [svgLine("cal2-goal"), "Goal"],
                         ]),
                     });
                     if (!hasBurn || !logged)
@@ -5544,7 +5555,11 @@
                         );
                     return (
                         head +
-                        '<div class="plot" id="cal2-plot"></div><p class="cal2-why">Why goal and est. burn differ: est. burn includes digesting what you actually ate (about 10%). Your goal is the break-even intake — eat exactly that and the two match; eat less and you also burn a little less digesting it.</p><div class="strip four rv" id="cal2-stats"></div><p class="met-highlight" id="cal2-today"></p>'
+                        '<div class="plot" id="cal2-plot"></div>' +
+                        (!(data.goals && data.goals.calories > 0)
+                            ? '<p class="cal2-why">Your goal is your est. burn (set in Body), so the burn line is your goal.</p>'
+                            : "") +
+                        '<div class="strip four rv" id="cal2-stats"></div><p class="met-highlight" id="cal2-today"></p>'
                     );
                 }
                 function calcHtml() {
@@ -7097,7 +7112,12 @@
                         }),
                     );
                     svg.appendChild(
-                        svgEl("path", { d: line("goal"), class: "cal2-goal" }),
+                        svgEl("path", {
+                            d: !(data.goals && data.goals.calories > 0)
+                                ? ""
+                                : line("goal"),
+                            class: "cal2-goal",
+                        }),
                     );
                     if (!smooth)
                         points.forEach((p, i) => {
@@ -7194,14 +7214,19 @@
                                         : fmt(p.burn) + " kcal",
                                     1,
                                 ],
-                                [
-                                    "cal2-goal",
-                                    "Goal",
-                                    p.goal == null
-                                        ? "—"
-                                        : fmt(p.goal) + " kcal",
-                                ],
-                            ];
+                            ].concat(
+                                !(data.goals && data.goals.calories > 0)
+                                    ? []
+                                    : [
+                                          [
+                                              "cal2-goal",
+                                              "Goal",
+                                              p.goal == null
+                                                  ? "—"
+                                                  : fmt(p.goal) + " kcal",
+                                          ],
+                                      ],
+                            );
                             if (delta != null)
                                 rows.push([
                                     null,
