@@ -5809,12 +5809,12 @@
                         ],
                         [
                             b === "deficit_share" || b === "deficit_kcal",
-                            "A daily deficit of 25% of your burn (or 1,000 kcal, if lower)",
+                            "A daily deficit of 25% of your total burn, digestion included (or 1,000 kcal, if lower)",
                             deficitG,
                         ],
                         [
                             b === "intake_floor",
-                            "Eating no less than your resting burn (or 1,200 kcal women / 1,500 kcal men, if higher)",
+                            "Eating no less than your BMR from your body details (or 1,200 kcal women / 1,500 kcal men, if higher)",
                             lim.intake_floor,
                         ],
                     ];
@@ -5841,15 +5841,26 @@
                             })
                             .join("") +
                         "</ul>" +
-                        '<p class="note">Worked out from your resting burn of ' +
+                        '<p class="note">Your total burn is ' +
+                        fmt(
+                            Math.round(
+                                (p.resting_kcal + L.active_ref_kcal) /
+                                    (1 - p.tef_share),
+                            ),
+                        ) +
+                        " kcal: resting " +
                         fmt(p.resting_kcal) +
-                        " kcal (" +
+                        " (" +
                         p.resting_basis +
-                        ") plus " +
+                        ") + " +
                         fmt(L.active_ref_kcal) +
-                        " kcal of average active calories, " +
+                        " average active, with " +
+                        (p.tef_share * 100).toFixed(1) +
+                        '% of what you eat going to digestion (the same "Est. burn" as the goal). The floor uses your formula BMR of ' +
+                        fmt(p.bmr_kcal) +
+                        " kcal, not the calibrated figure, so it does not drift with logging noise. Weight change is counted at " +
                         p.kcal_per_gram +
-                        " kcal per gram of weight change" +
+                        " kcal per gram" +
                         (p.trend
                             ? " and a trend weight of " +
                               wfmt(p.trend.weight_g, u) +

@@ -293,9 +293,11 @@ describe("goalFlags", () => {
             weighin_days: 20,
         },
         restingKcal: 1700,
+        bmrKcal: 1700,
         activeKcal: 300,
         goalKcal: 1756, // (1700 + 300 - 420) / 0.9
         kcalPerGram: 6,
+        tefShare: 0.1,
         sex: "male",
         age: 35,
         heightCm: 180,
@@ -336,20 +338,57 @@ describe("goalFlags", () => {
         ).not.toContain("fast_gain");
     });
 
-    test("big deficit: over 25% of burn or 1000 kcal", () => {
-        // -70 g/d × 6 = 420 vs 25% of 2000 = 500: fine; -90 -> 540: flagged.
-        expect(codes(input({ plan: plan({ rate_g_per_day: -90 }) }))).toContain(
+    test("big deficit: over 25% of total burn including digestion, or 1000 kcal", () => {
+        // Total burn = (1700 + 300) ÷ 0.9 = 2222, so the 25% line is 555.6
+        // kcal of balance deficit (not 500 of resting + active alone).
+        // -90 g/d × 6 = 540: fine; -95 -> 570: flagged.
+        expect(
+            codes(input({ plan: plan({ rate_g_per_day: -90 }) })),
+        ).not.toContain("big_deficit");
+        expect(codes(input({ plan: plan({ rate_g_per_day: -95 }) }))).toContain(
             "big_deficit",
         );
         expect(codes(input())).not.toContain("big_deficit");
+        // The 1,000 kcal cap is the same balance deficit, with no gross-up.
+        expect(
+            codes(
+                input({
+                    plan: plan({ rate_g_per_day: -170 }),
+                    restingKcal: 3000,
+                    activeKcal: 1500,
+                }),
+            ),
+        ).toContain("big_deficit");
     });
 
-    test("low intake: below max(resting, 1200/1500)", () => {
+    test("low intake: below max(BMR, 1200/1500)", () => {
         expect(codes(input())).not.toContain("low_intake");
         expect(codes(input({ goalKcal: 1650 }))).toContain("low_intake");
         expect(
-            codes(input({ goalKcal: 1300, sex: "female", restingKcal: 1100 })),
+            codes(
+                input({
+                    goalKcal: 1300,
+                    sex: "female",
+                    restingKcal: 1100,
+                    bmrKcal: 1100,
+                }),
+            ),
         ).not.toContain("low_intake");
+    });
+
+    test("the floor is anchored on the formula BMR, not the calibrated baseline", () => {
+        // A calibrated baseline that drifted low must not lower the floor...
+        expect(
+            codes(input({ restingKcal: 1500, bmrKcal: 1700, goalKcal: 1650 })),
+        ).toContain("low_intake");
+        // ...nor one that drifted high raise it.
+        expect(
+            codes(input({ restingKcal: 2000, bmrKcal: 1700, goalKcal: 1750 })),
+        ).not.toContain("low_intake");
+        // With no BMR the usual minimum still applies.
+        expect(codes(input({ bmrKcal: null, goalKcal: 1400 }))).toContain(
+            "low_intake",
+        );
     });
 
     test("underweight target and minors", () => {
@@ -539,6 +578,7 @@ describe("recommendedRates", () => {
     const base = {
         trendG: 80_000,
         restingKcal: 1700,
+        bmrKcal: 1700,
         activeKcal: 300,
         kcalPerGram: 6,
         tefShare: 0.1,
@@ -556,7 +596,8 @@ describe("recommendedRates", () => {
         // Every limit is listed, so the page can show them all.
         expect(r.loss_limits.weekly_pct).toBeCloseTo((80_000 * 0.01) / 7, 6);
         expect(r.loss_limits.weekly_kg).toBeCloseTo(1000 / 7, 6);
-        expect(r.loss_limits.deficit_share).toBeCloseTo(500 / 6, 6);
+        // 25% of total burn incl. digestion: 0.25 × 2000 ÷ 0.9 = 555.6 kcal.
+        expect(r.loss_limits.deficit_share).toBeCloseTo(500 / 0.9 / 6, 6);
         expect(r.loss_limits.deficit_kcal).toBeCloseTo(1000 / 6, 6);
         expect(r.active_ref_kcal).toBe(300);
         expect(r.max_gain_g_per_day).toBeCloseTo((80_000 * 0.005) / 7, 6);
@@ -567,10 +608,12 @@ describe("recommendedRates", () => {
             ...base,
             trendG: 150_000,
             restingKcal: 3000,
+            bmrKcal: 3000,
             activeKcal: 1500,
         });
-        // Burn 4500: 25% = 1125 → 1000 kcal cap = 166.7 g/day; the floor
-        // leaves 1800; 1% of 150 kg = 214 g/day; 1 kg/week = 142.9 g/day.
+        // Burn 4500: 25% of 4500 ÷ 0.9 = 1250 → the 1000 kcal cap = 166.7
+        // g/day; the floor leaves 1800; 1% of 150 kg = 214 g/day; 1 kg/week =
+        // 142.9 g/day.
         expect(r.max_loss_g_per_day).toBeCloseTo(1000 / 7, 6);
         expect(r.loss_binding).toBe("weekly_kg");
     });
@@ -597,6 +640,26 @@ describe("recommendedRates", () => {
         ).toBeNull();
     });
 
+    test("a calibrated baseline below the BMR: deficits use it, the floor uses the BMR", () => {
+        // Calibrated resting 1594, formula BMR 1726, active 346, f 0.112.
+        const r = recommendedRates({
+            trendG: 78_900,
+            restingKcal: 1594,
+            bmrKcal: 1726,
+            activeKcal: 346,
+            kcalPerGram: 6,
+            tefShare: 0.112,
+            sex: "male",
+            age: 35,
+        });
+        // 25% of total burn: 0.25 × 1940 ÷ 0.888 = 546.2 kcal = 91.0 g/day.
+        expect(r.loss_limits.deficit_share).toBeCloseTo(546.2 / 6, 1);
+        // Floor: max(1726, 1500) = 1726 leaves 1940 − 1726×0.888 = 407.3 kcal.
+        expect(r.loss_limits.intake_floor).toBeCloseTo(407.3 / 6, 1);
+        expect(r.loss_binding).toBe("intake_floor");
+        expect(r.max_loss_g_per_day).toBeCloseTo(67.9, 1);
+    });
+
     test("the maximum rate is exactly what the flags accept", () => {
         const r = recommendedRates(base);
         const rate = -(r.max_loss_g_per_day ?? 0);
@@ -616,9 +679,11 @@ describe("recommendedRates", () => {
                 weighin_days: 20,
             },
             restingKcal: 1700,
+            bmrKcal: 1700,
             activeKcal: 300,
             goalKcal: goalKcal(1700, 300, rate, 6, 0.1),
             kcalPerGram: 6,
+            tefShare: 0.1,
             sex: "male",
             age: 35,
             heightCm: 180,

@@ -255,10 +255,19 @@ export interface GoalFlag {
 export interface FlagInput {
     plan: RatePlan;
     trend: TrendWeight | null;
+    /** Resting burn the deficit is measured against (calibrated when applied). */
     restingKcal: number | null;
+    /** The formula BMR from the body details: the intake floor's anchor, kept
+     *  off the calibrated baseline so a safety floor does not drift with
+     *  logging noise. */
+    bmrKcal: number | null;
+    /** A steady active-kcal figure (the window's mean), not a part-finished day. */
     activeKcal: number | null;
+    /** The goal at that same steady active figure. */
     goalKcal: number | null;
     kcalPerGram: number;
+    /** Digestion share of intake: total burn is (resting + active) ÷ (1 − it). */
+    tefShare: number;
     sex: BodySex | null;
     age: number | null;
     heightCm: number | null;
@@ -331,23 +340,29 @@ export function goalFlags(i: FlagInput): GoalFlag[] {
         });
     }
     const deficit = -plan.rate_g_per_day * i.kcalPerGram;
-    const burn = (i.restingKcal ?? 0) + (i.activeKcal ?? 0);
+    // The deficit is an energy-balance deficit (total burn − intake), so the
+    // 25% is taken of total burn including digestion: (resting + active) ÷ (1 − f),
+    // which is also the break-even intake and what "Est. burn" shows.
+    const burn =
+        i.restingKcal == null
+            ? 0
+            : (i.restingKcal + (i.activeKcal ?? 0)) / (1 - i.tefShare);
     if (deficit > DEFICIT_KCAL || (burn > 0 && deficit > burn * DEFICIT_SHARE))
         out.push({
             code: "big_deficit",
             level: "red",
-            message: `A ${Math.round(deficit).toLocaleString("en-US")} kcal/day deficit is above 25% of your burn (or 1,000 kcal).`,
+            message: `A ${Math.round(deficit).toLocaleString("en-US")} kcal/day deficit is above 25% of your total daily burn including digestion (or 1,000 kcal).`,
         });
     if (i.goalKcal != null && plan.rate_g_per_day < 0) {
         const floor = Math.max(
-            i.restingKcal ?? 0,
+            i.bmrKcal ?? 0,
             i.sex === "male" ? FLOOR_MALE : FLOOR_FEMALE,
         );
         if (i.goalKcal < floor)
             out.push({
                 code: "low_intake",
                 level: "red",
-                message: `${i.goalKcal.toLocaleString("en-US")} kcal is below ${Math.round(floor).toLocaleString("en-US")} kcal (your resting burn or the usual minimum).`,
+                message: `${i.goalKcal.toLocaleString("en-US")} kcal is below ${Math.round(floor).toLocaleString("en-US")} kcal (your BMR or the usual minimum).`,
             });
     }
     if (plan.target_weight_g != null && i.heightCm != null) {
@@ -437,6 +452,8 @@ export type LossLimit =
 export function recommendedRates(i: {
     trendG: number | null;
     restingKcal: number | null;
+    /** Formula BMR from the body details: the intake floor's anchor. */
+    bmrKcal: number | null;
     activeKcal: number;
     kcalPerGram: number;
     tefShare: number;
@@ -454,10 +471,14 @@ export function recommendedRates(i: {
     if (i.restingKcal != null) {
         const burn = i.restingKcal + i.activeKcal;
         const floor = Math.max(
-            i.restingKcal,
+            i.bmrKcal ?? 0,
             i.sex === "male" ? FLOOR_MALE : FLOOR_FEMALE,
         );
-        limits.deficit_share = (burn * DEFICIT_SHARE) / i.kcalPerGram;
+        // d is the energy-balance deficit (total burn − intake). The 25% is
+        // of total burn including digestion, (R + A) ÷ (1 − f); the 1,000
+        // kcal cap is the same balance deficit with no gross-up.
+        limits.deficit_share =
+            (burn * DEFICIT_SHARE) / ((1 - i.tefShare) * i.kcalPerGram);
         limits.deficit_kcal = DEFICIT_KCAL / i.kcalPerGram;
         // goal = (burn − d) ÷ (1 − f) must stay ≥ floor.
         limits.intake_floor =
@@ -501,6 +522,8 @@ export interface GoalPlanView extends RatePlan {
     kcal_per_gram: number;
     /** Today's resting burn and whether it is the calibrated baseline. */
     resting_kcal: number | null;
+    /** The formula BMR from the body details (the intake floor's anchor). */
+    bmr_kcal: number | null;
     resting_basis: "calibrated" | "formula";
     /** Today's goal, kcal (resting + active + rate, grossed up). */
     goal_kcal: number | null;
@@ -590,15 +613,25 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
           inWindow.length
         : (row?.active_kcal ?? 0);
     const age = i.body.birth_date ? ageOn(i.body.birth_date, i.today) : null;
+    // The formula BMR from the body details anchors the intake floor; the
+    // (possibly calibrated) resting burn measures the deficit.
+    const bmr = i.calibration.bmr_kcal ?? null;
     const limits = recommendedRates({
         trendG: trend?.weight_g ?? null,
         restingKcal: row?.bmr_kcal ?? null,
+        bmrKcal: bmr,
         activeKcal: activeRef,
         kcalPerGram: k,
         tefShare: f,
         sex: i.body.sex,
         age,
     });
+    // The goal at the same steady active figure as the limits, so a flag and
+    // the recommended maximum cannot disagree (today's own active is partial).
+    const steadyGoal =
+        row?.bmr_kcal == null
+            ? null
+            : goalKcal(row.bmr_kcal, activeRef, plan.rate_g_per_day, k, f);
     return {
         ...plan,
         limits,
@@ -606,15 +639,18 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
         tef_share: f,
         kcal_per_gram: k,
         resting_kcal: row?.bmr_kcal ?? null,
+        bmr_kcal: bmr,
         resting_basis: calibrated ? "calibrated" : "formula",
         goal_kcal: goalToday,
         flags: goalFlags({
             plan,
             trend,
             restingKcal: row?.bmr_kcal ?? null,
+            bmrKcal: bmr,
             activeKcal: activeRef,
-            goalKcal: goalToday,
+            goalKcal: mode === "fixed" ? null : steadyGoal,
             kcalPerGram: k,
+            tefShare: f,
             sex: i.body.sex,
             age,
             heightCm: i.body.height_cm,
