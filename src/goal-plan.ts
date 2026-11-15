@@ -433,6 +433,10 @@ export interface RecommendedRates {
     loss_binding: LossLimit | "minor" | null;
     /** The steady active-kcal figure the deficit limits were worked out from. */
     active_ref_kcal: number;
+    /** The intake floor itself, kcal: max(BMR, 1,200 / 1,500), and whether
+     *  the BMR or the usual minimum set it. */
+    intake_floor_kcal: number;
+    intake_floor_source: "bmr" | "minimum";
 }
 
 export type LossLimit =
@@ -460,6 +464,8 @@ export function recommendedRates(i: {
     sex: BodySex | null;
     age: number | null;
 }): RecommendedRates {
+    // The usual unsupervised minimum; the BMR sets the floor when higher.
+    const minimum = i.sex === "male" ? FLOOR_MALE : FLOOR_FEMALE;
     const limits: Partial<Record<LossLimit, number | null>> = {
         weekly_pct:
             i.trendG == null ? null : (i.trendG * LOSS_PCT_PER_WEEK) / 7,
@@ -470,10 +476,7 @@ export function recommendedRates(i: {
     };
     if (i.restingKcal != null) {
         const burn = i.restingKcal + i.activeKcal;
-        const floor = Math.max(
-            i.bmrKcal ?? 0,
-            i.sex === "male" ? FLOOR_MALE : FLOOR_FEMALE,
-        );
+        const floor = Math.max(i.bmrKcal ?? 0, minimum);
         // d is the energy-balance deficit (total burn − intake). The 25% is
         // of total burn including digestion, (R + A) ÷ (1 − f); the 1,000
         // kcal cap is the same balance deficit with no gross-up.
@@ -509,6 +512,8 @@ export function recommendedRates(i: {
         loss_limits: limits,
         loss_binding: binding,
         active_ref_kcal: Math.round(i.activeKcal),
+        intake_floor_kcal: Math.round(Math.max(i.bmrKcal ?? 0, minimum)),
+        intake_floor_source: (i.bmrKcal ?? 0) >= minimum ? "bmr" : "minimum",
     };
 }
 
@@ -520,6 +525,9 @@ export interface GoalPlanView extends RatePlan {
     /** The share of intake burned digesting it that the goal grosses up by. */
     tef_share: number;
     kcal_per_gram: number;
+    /** The lookback, in days, that the averages (active kcal, digestion
+     *  share) and the trend weight are taken over. */
+    window_days: number;
     /** Today's resting burn and whether it is the calibrated baseline. */
     resting_kcal: number | null;
     /** The formula BMR from the body details (the intake floor's anchor). */
@@ -638,6 +646,7 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
         trend,
         tef_share: f,
         kcal_per_gram: k,
+        window_days: i.model.windowDays,
         resting_kcal: row?.bmr_kcal ?? null,
         bmr_kcal: bmr,
         resting_basis: calibrated ? "calibrated" : "formula",

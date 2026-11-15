@@ -5814,7 +5814,15 @@
                         ],
                         [
                             b === "intake_floor",
-                            "Eating no less than your BMR from your body details (or 1,200 kcal women / 1,500 kcal men, if higher)",
+                            L.intake_floor_source === "bmr"
+                                ? "Eating no less than " +
+                                  fmt(L.intake_floor_kcal) +
+                                  " kcal (your BMR, from your body details)"
+                                : "Eating no less than " +
+                                  fmt(L.intake_floor_kcal) +
+                                  " kcal (the usual minimum; your BMR of " +
+                                  fmt(p.bmr_kcal) +
+                                  " is lower)",
                             lim.intake_floor,
                         ],
                     ];
@@ -5841,24 +5849,31 @@
                             })
                             .join("") +
                         "</ul>" +
-                        '<p class="note">Your total burn is ' +
+                        '<p class="note">Averages over the last ' +
+                        p.window_days +
+                        " days. Total burn " +
                         fmt(
                             Math.round(
                                 (p.resting_kcal + L.active_ref_kcal) /
                                     (1 - p.tef_share),
                             ),
                         ) +
-                        " kcal: resting " +
+                        " kcal = (" +
+                        (p.resting_basis === "calibrated"
+                            ? "calibrated baseline "
+                            : "BMR ") +
                         fmt(p.resting_kcal) +
-                        " (" +
-                        p.resting_basis +
-                        ") + " +
+                        " + " +
                         fmt(L.active_ref_kcal) +
-                        " average active, with " +
+                        " average active) ÷ (1 − " +
                         (p.tef_share * 100).toFixed(1) +
-                        '% of what you eat going to digestion (the same "Est. burn" as the goal). The floor uses your formula BMR of ' +
-                        fmt(p.bmr_kcal) +
-                        " kcal, not the calibrated figure, so it does not drift with logging noise. Weight change is counted at " +
+                        '% average digestion), the same "Est. burn" as the goal.' +
+                        (p.resting_basis === "calibrated"
+                            ? " The floor uses your BMR of " +
+                              fmt(p.bmr_kcal) +
+                              " kcal, not the calibrated baseline, so it does not drift with logging noise."
+                            : "") +
+                        " Weight change is counted at " +
                         p.kcal_per_gram +
                         " kcal per gram" +
                         (p.trend

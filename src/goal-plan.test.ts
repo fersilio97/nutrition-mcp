@@ -658,6 +658,13 @@ describe("recommendedRates", () => {
         expect(r.loss_limits.intake_floor).toBeCloseTo(407.3 / 6, 1);
         expect(r.loss_binding).toBe("intake_floor");
         expect(r.max_loss_g_per_day).toBeCloseTo(67.9, 1);
+        // The row shows the exact floor, and says the BMR set it.
+        expect(r.intake_floor_kcal).toBe(1726);
+        expect(r.intake_floor_source).toBe("bmr");
+        // A low BMR falls back to the usual minimum.
+        const low = recommendedRates({ ...base, bmrKcal: 1300 });
+        expect(low.intake_floor_kcal).toBe(1500);
+        expect(low.intake_floor_source).toBe("minimum");
     });
 
     test("the maximum rate is exactly what the flags accept", () => {
