@@ -405,8 +405,61 @@ export function scaleDerivedMacros(
     };
 }
 
+export interface RecommendedRates {
+    /** The fastest loss the rules of thumb allow, g/day (positive number;
+     *  0 when none is advised, e.g. under 18). Null without body details. */
+    max_loss_g_per_day: number | null;
+    /** The fastest gain, g/day. Null without a trend weight. */
+    max_gain_g_per_day: number | null;
+}
+
+/**
+ * The fastest rates goalFlags would not flag, so the page can offer them. The
+ * loss limit is the tightest of: 1% of trend weight per week, 1 kg per week,
+ * 25% of burn (or 1000 kcal) as a deficit, and an intake that stays at or
+ * above max(resting burn, 1200/1500 kcal). `activeKcal` should be a steady
+ * reference (the window's mean), not a part-finished day.
+ */
+export function recommendedRates(i: {
+    trendG: number | null;
+    restingKcal: number | null;
+    activeKcal: number;
+    kcalPerGram: number;
+    tefShare: number;
+    sex: BodySex | null;
+    age: number | null;
+}): RecommendedRates {
+    let loss: number | null = null;
+    if (i.restingKcal != null) {
+        const burn = i.restingKcal + i.activeKcal;
+        const floor = Math.max(
+            i.restingKcal,
+            i.sex === "male" ? FLOOR_MALE : FLOOR_FEMALE,
+        );
+        // goal = (burn − d) ÷ (1 − f) must stay ≥ floor.
+        const kcal = Math.min(
+            DEFICIT_KCAL,
+            burn * DEFICIT_SHARE,
+            burn - floor * (1 - i.tefShare),
+        );
+        let g = Math.max(0, kcal) / i.kcalPerGram;
+        g = Math.min(g, LOSS_G_PER_WEEK / 7);
+        if (i.trendG != null)
+            g = Math.min(g, (i.trendG * LOSS_PCT_PER_WEEK) / 7);
+        if (i.age != null && i.age < 18) g = 0;
+        loss = g;
+    }
+    return {
+        max_loss_g_per_day: loss,
+        max_gain_g_per_day:
+            i.trendG == null ? null : (i.trendG * GAIN_PCT_PER_WEEK) / 7,
+    };
+}
+
 /** Everything the page and the tools say about the plan behind today's goal. */
 export interface GoalPlanView extends RatePlan {
+    /** The fastest rates within the rules of thumb, for the form's hints. */
+    limits: RecommendedRates;
     trend: TrendWeight | null;
     /** The share of intake burned digesting it that the goal grosses up by. */
     tef_share: number;
@@ -492,8 +545,28 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
     const row = i.rows.find((r) => r.date === i.today);
     const calibrated = i.calibration.applied;
     const goalToday = mode === "fixed" ? null : (row?.goal_calories ?? null);
+    // A steady active-kcal reference: the window's mean over counted days
+    // (today's figure is partial until the day ends).
+    const inWindow = i.energyDays.filter(
+        (d) => d.counted && d.date >= from && d.date <= to,
+    );
+    const activeRef = inWindow.length
+        ? inWindow.reduce((s, d) => s + (d.active_kcal ?? 0), 0) /
+          inWindow.length
+        : (row?.active_kcal ?? 0);
+    const age = i.body.birth_date ? ageOn(i.body.birth_date, i.today) : null;
+    const limits = recommendedRates({
+        trendG: trend?.weight_g ?? null,
+        restingKcal: row?.bmr_kcal ?? null,
+        activeKcal: activeRef,
+        kcalPerGram: k,
+        tefShare: f,
+        sex: i.body.sex,
+        age,
+    });
     return {
         ...plan,
+        limits,
         trend,
         tef_share: f,
         kcal_per_gram: k,
@@ -504,11 +577,11 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
             plan,
             trend,
             restingKcal: row?.bmr_kcal ?? null,
-            activeKcal: row?.active_kcal ?? null,
+            activeKcal: activeRef,
             goalKcal: goalToday,
             kcalPerGram: k,
             sex: i.body.sex,
-            age: i.body.birth_date ? ageOn(i.body.birth_date, i.today) : null,
+            age,
             heightCm: i.body.height_cm,
             calibrated,
             today: i.today,

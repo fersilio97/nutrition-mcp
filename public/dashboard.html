@@ -1135,8 +1135,17 @@
                 min-width: 0;
                 flex: 1 1 auto;
             }
-            .goal-sec .pair select {
-                min-width: 8.5rem;
+            .goal-sec .pair {
+                grid-template-columns: minmax(0, 1fr) minmax(0, 9.5rem);
+            }
+            .goal-hint:empty {
+                display: none;
+            }
+            .goal-hint {
+                margin-top: var(--s3);
+            }
+            .goal-hint .note {
+                margin: 0 0 var(--s2);
             }
             .plan-readout .note {
                 margin: 0 0 var(--s2);
@@ -5306,10 +5315,10 @@
                 // this form only chooses the mode and its figures, and the
                 // readout under it shows the working and any advisory flags.
                 const GOAL_MODES = [
-                    ["fixed", "Fixed"],
                     ["burn", "Burn"],
-                    ["rate", "Rate"],
                     ["date", "By date"],
+                    ["rate", "Rate"],
+                    ["fixed", "Fixed"],
                 ];
                 function round2(n) {
                     return Math.round(n * 100) / 100;
@@ -5388,7 +5397,7 @@
                         return (
                             '<div class="field wide"><label for="g-rate">Weight change (' +
                             u +
-                            ", negative loses)</label>" +
+                            ")</label>" +
                             '<span class="pair"><input class="input" id="g-rate" type="number" inputmode="decimal" step="0.05" placeholder="-0.5" value="' +
                             esc(v.rate) +
                             '" /><select class="input" id="g-period" aria-label="Per">' +
@@ -5530,6 +5539,214 @@
                             "</p>";
                     return h + planFlagsHtml(p) + "</div>";
                 }
+                function addDayIso(iso, n) {
+                    const d = parseDay(iso);
+                    d.setDate(d.getDate() + n);
+                    return (
+                        d.getFullYear() +
+                        "-" +
+                        String(d.getMonth() + 1).padStart(2, "0") +
+                        "-" +
+                        String(d.getDate()).padStart(2, "0")
+                    );
+                }
+                function gramsOf(n, unit) {
+                    return unit === "lb" ? n * 453.59237 : n * 1000;
+                }
+                // A button that fills a field (and optionally a second one)
+                // with a recommended value; wired in wireGoalForm.
+                function useBtn(field, value, label, field2, value2) {
+                    return (
+                        '<button type="button" class="link-btn" data-field="' +
+                        field +
+                        '" data-use="' +
+                        esc(value) +
+                        '"' +
+                        (field2
+                            ? ' data-field2="' +
+                              field2 +
+                              '" data-use2="' +
+                              esc(value2) +
+                              '"'
+                            : "") +
+                        ">" +
+                        esc(label) +
+                        "</button>"
+                    );
+                }
+                function hintLine(red, html) {
+                    return (
+                        '<p class="note">' +
+                        (red ? '<span class="chip over">check</span> ' : "") +
+                        html +
+                        "</p>"
+                    );
+                }
+                // What the rules of thumb allow, live as the user types: the
+                // recommended maximum rate, and for a date goal the lowest
+                // (or highest) weight reachable by the chosen date and the
+                // earliest date for the chosen weight. Advisory only; the
+                // user can still save anything.
+                function goalHintHtml(v) {
+                    const p = data.goalPlan;
+                    const L = p && p.limits;
+                    const u = data.weightUnit;
+                    if (!L || !p.trend) return "";
+                    if (v.mode !== "rate" && v.mode !== "date") return "";
+                    const w = p.trend.weight_g;
+                    const loss = L.max_loss_g_per_day;
+                    const gain = L.max_gain_g_per_day;
+                    const wk = function (g, down) {
+                        const x = toUnit(g * 7, u);
+                        return (
+                            (down ? Math.floor(x * 100) : Math.ceil(x * 100)) /
+                            100
+                        );
+                    };
+                    if (v.mode === "rate") {
+                        if (loss == null) return "";
+                        if (loss === 0)
+                            return hintLine(
+                                false,
+                                "A weight-loss rate is not advised for you.",
+                            );
+                        let h = hintLine(
+                            false,
+                            "Recommended limit: lose up to " +
+                                wk(loss, true) +
+                                " " +
+                                u +
+                                "/week" +
+                                (gain != null
+                                    ? ", gain up to " +
+                                      wk(gain, true) +
+                                      " " +
+                                      u +
+                                      "/week"
+                                    : "") +
+                                ". " +
+                                useBtn(
+                                    "g-rate",
+                                    String(-wk(loss, true)),
+                                    "Use −" + wk(loss, true),
+                                    "g-period",
+                                    "week",
+                                ),
+                        );
+                        const r = Number(v.rate);
+                        if (v.rate.trim() !== "" && isFinite(r)) {
+                            const days = {
+                                week: 7,
+                                month: 30.4375,
+                                year: 365.25,
+                            }[v.period];
+                            const perDay = gramsOf(r, u) / days;
+                            if (
+                                (perDay < 0 && -perDay > loss + 0.5) ||
+                                (perDay > 0 &&
+                                    gain != null &&
+                                    perDay > gain + 0.5)
+                            )
+                                h =
+                                    hintLine(
+                                        true,
+                                        "That is faster than the recommended limit.",
+                                    ) + h;
+                        }
+                        return h;
+                    }
+                    // By date
+                    const days = v.date ? dayDiff(data.endDate, v.date) : 0;
+                    const tw =
+                        v.tw.trim() === "" ? NaN : gramsOf(Number(v.tw), u);
+                    const fix1 = function (g, up) {
+                        const x = toUnit(g, u) * 10;
+                        return (
+                            (up ? Math.ceil(x) : Math.floor(x)) / 10
+                        ).toFixed(1);
+                    };
+                    let h = "";
+                    if (isFinite(tw) && days > 0) {
+                        const diff = tw - w;
+                        const rate = diff < 0 ? loss : gain;
+                        if (rate === 0)
+                            return hintLine(
+                                true,
+                                "A weight-loss goal is not advised for you.",
+                            );
+                        if (rate != null && Math.abs(diff) > rate * days) {
+                            const earliest = addDayIso(
+                                data.endDate,
+                                Math.ceil(Math.abs(diff) / rate),
+                            );
+                            const edge =
+                                diff < 0 ? w - rate * days : w + rate * days;
+                            const edgeTxt = fix1(edge, diff < 0);
+                            h +=
+                                hintLine(
+                                    true,
+                                    "Faster than the recommended limit. By " +
+                                        shortDay(v.date) +
+                                        " the " +
+                                        (diff < 0 ? "lowest" : "highest") +
+                                        " within it is <b>" +
+                                        edgeTxt +
+                                        " " +
+                                        u +
+                                        "</b> " +
+                                        useBtn(
+                                            "g-tw",
+                                            edgeTxt,
+                                            "Use " + edgeTxt + " " + u,
+                                        ),
+                                ) +
+                                hintLine(
+                                    false,
+                                    "Or keep " +
+                                        fix1(tw, false) +
+                                        " " +
+                                        u +
+                                        " and pick a date from <b>" +
+                                        shortDay(earliest) +
+                                        "</b> " +
+                                        useBtn(
+                                            "g-date",
+                                            earliest,
+                                            "Use " + shortDay(earliest),
+                                        ),
+                                );
+                            return h;
+                        }
+                    }
+                    if (days > 0 && loss) {
+                        const edgeTxt = fix1(w - loss * days, true);
+                        h += hintLine(
+                            false,
+                            "By " +
+                                shortDay(v.date) +
+                                " the lowest within the recommended limit is " +
+                                edgeTxt +
+                                " " +
+                                u +
+                                ". " +
+                                useBtn(
+                                    "g-tw",
+                                    edgeTxt,
+                                    "Use " + edgeTxt + " " + u,
+                                ),
+                        );
+                    } else if (loss) {
+                        h += hintLine(
+                            false,
+                            "Pick a date to see the lowest weight within the recommended limit (up to " +
+                                wk(loss, true) +
+                                " " +
+                                u +
+                                "/week).",
+                        );
+                    }
+                    return h;
+                }
                 function goalFormHtml() {
                     const v = goalVals();
                     return (
@@ -5543,6 +5760,8 @@
                         "</p>" +
                         '<form id="goal-form" class="body-form" novalidate><div class="form-grid" id="g-fields">' +
                         goalFieldsHtml(v) +
+                        '</div><div class="goal-hint" id="g-hint" aria-live="polite">' +
+                        goalHintHtml(v) +
                         '</div><div class="form-foot"><button type="submit" class="btn primary" id="g-save">Save</button>' +
                         '<span class="b-status ' +
                         goalStatus.cls +
@@ -5666,7 +5885,22 @@
                     box.addEventListener("toggle", function () {
                         goalOpen = box.open;
                     });
-                    $("goal-form").addEventListener("input", captureGoalDraft);
+                    const refreshHint = function () {
+                        captureGoalDraft();
+                        $("g-hint").innerHTML = goalHintHtml(goalVals());
+                    };
+                    $("goal-form").addEventListener("input", refreshHint);
+                    // "Use …" buttons in the hint fill the field they name.
+                    $("g-hint").addEventListener("click", function (ev) {
+                        const b = ev.target.closest("button[data-use]");
+                        if (!b) return;
+                        const target = $(b.getAttribute("data-field"));
+                        if (target) target.value = b.getAttribute("data-use");
+                        const second = b.getAttribute("data-field2");
+                        if ($(second))
+                            $(second).value = b.getAttribute("data-use2");
+                        refreshHint();
+                    });
                     $("g-mode").addEventListener("click", function (ev) {
                         const b = ev.target.closest("button[data-mode]");
                         if (!b) return;
@@ -5676,6 +5910,7 @@
                         $("g-fields").innerHTML = goalFieldsHtml(v);
                         $("g-note").textContent = goalNote(v.mode);
                         $("g-mode").innerHTML = goalSegHtml(v.mode);
+                        $("g-hint").innerHTML = goalHintHtml(v);
                     });
                     $("goal-form").addEventListener("submit", function (ev) {
                         ev.preventDefault();

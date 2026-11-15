@@ -14,6 +14,7 @@ import {
     gramsPerDayToRate,
     planRate,
     rateToGramsPerDay,
+    recommendedRates,
     resolveGoalMode,
     tefRatio,
     trendWeightToday,
@@ -531,6 +532,89 @@ describe("derived goals in the dashboard payload", () => {
             );
         expect(withWindow(null).goalPlan.trend!.window_days).toBe(42);
         expect(withWindow(28).goalPlan.trend!.window_days).toBe(28);
+    });
+});
+
+describe("recommendedRates", () => {
+    const base = {
+        trendG: 80_000,
+        restingKcal: 1700,
+        activeKcal: 300,
+        kcalPerGram: 6,
+        tefShare: 0.1,
+        sex: "male" as const,
+        age: 35,
+    };
+
+    test("1% of body weight per week binds for a typical adult", () => {
+        // 80 kg: 1% = 800 g/week = 114 g/day. Burn 2000: the 25% cap is 500
+        // kcal, but the intake floor max(1700, 1500) = 1700 leaves only
+        // 2000 − 1700×0.9 = 470 kcal, so the floor binds.
+        const r = recommendedRates(base);
+        expect(r.max_loss_g_per_day).toBeCloseTo(470 / 6, 6);
+        expect(r.max_gain_g_per_day).toBeCloseTo((80_000 * 0.005) / 7, 6);
+    });
+
+    test("a heavy, high-burn user is held by 1%/week or 1 kg/week", () => {
+        const r = recommendedRates({
+            ...base,
+            trendG: 150_000,
+            restingKcal: 3000,
+            activeKcal: 1500,
+        });
+        // Burn 4500: 25% = 1125 → 1000 kcal cap = 166.7 g/day; the floor
+        // leaves 1800; 1% of 150 kg = 214 g/day; 1 kg/week = 142.9 g/day.
+        expect(r.max_loss_g_per_day).toBeCloseTo(1000 / 7, 6);
+    });
+
+    test("the intake floor binds when burn is close to it", () => {
+        // burn 1700+100 = 1800; floor max(1700, 1500) = 1700; room to cut:
+        // 1800 − 1700×0.9 = 270 kcal.
+        const r = recommendedRates({ ...base, activeKcal: 100 });
+        expect(r.max_loss_g_per_day).toBeCloseTo(270 / 6, 6);
+    });
+
+    test("no loss is advised under 18, and none without body details", () => {
+        expect(recommendedRates({ ...base, age: 16 }).max_loss_g_per_day).toBe(
+            0,
+        );
+        expect(
+            recommendedRates({ ...base, restingKcal: null }).max_loss_g_per_day,
+        ).toBeNull();
+        expect(
+            recommendedRates({ ...base, trendG: null }).max_gain_g_per_day,
+        ).toBeNull();
+    });
+
+    test("the maximum rate is exactly what the flags accept", () => {
+        const r = recommendedRates(base);
+        const rate = -(r.max_loss_g_per_day ?? 0);
+        const f = goalFlags({
+            plan: {
+                mode: "rate",
+                rate_g_per_day: rate,
+                target_weight_g: null,
+                target_date: null,
+                days_left: null,
+                reached: false,
+            },
+            trend: {
+                weight_g: 80_000,
+                source: "trend",
+                window_days: 42,
+                weighin_days: 20,
+            },
+            restingKcal: 1700,
+            activeKcal: 300,
+            goalKcal: goalKcal(1700, 300, rate, 6, 0.1),
+            kcalPerGram: 6,
+            sex: "male",
+            age: 35,
+            heightCm: 180,
+            calibrated: true,
+            today: iso(0),
+        }).filter((x) => x.level === "red");
+        expect(f).toEqual([]);
     });
 });
 
