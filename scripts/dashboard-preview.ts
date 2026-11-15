@@ -56,7 +56,9 @@ import {
 import { checkBodyPatch } from "../src/body.js";
 import { listFoods, suggestFood } from "../src/simple-foods.js";
 import { buildFrequentMeals } from "../src/dashboard-stats.js";
-import { dateInTz, todayInTz } from "../src/tz.js";
+import { dateInTz, shiftLocalDate, todayInTz } from "../src/tz.js";
+import { buildAdvisorReport, ADVISOR_DAYS } from "../src/advisor.js";
+import { buildDailyBuckets } from "../src/insights.js";
 import type { Meal, MealInput } from "../src/supabase.js";
 
 // The same CSP production sends for /dashboard (src/dashboard-fixture.test.ts
@@ -177,6 +179,39 @@ const server = Bun.serve({
             if (!params) return json({ error: "invalid_request" }, 400);
             return json(
                 whatIf(previewInputsFor(state.scenario, 30, edits()), params),
+            );
+        }
+
+        // The Advisor tab: same pure builder as production, fed by the fixture.
+        if (req.method === "GET" && path === "/api/dashboard/advisor") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            if (state.delay) await Bun.sleep(state.delay);
+            if (state.fail === 401)
+                return json({ error: "invalid_token" }, 401);
+            if (state.fail === 500) return json({ error: "server_error" }, 500);
+            const inputs = previewInputsFor(state.scenario, 30, edits());
+            const tz = scenarioTz(state.scenario);
+            const end = shiftLocalDate(inputs.today, -1);
+            const start = shiftLocalDate(end, -(ADVISOR_DAYS - 1));
+            return json(
+                buildAdvisorReport(
+                    buildDailyBuckets(
+                        inputs.meals,
+                        inputs.water,
+                        start,
+                        end,
+                        tz,
+                    ),
+                    inputs.goals,
+                    {
+                        tz,
+                        weightKg: inputs.latestWeight
+                            ? inputs.latestWeight.weight_g / 1000
+                            : null,
+                        alcoholEnabled:
+                            inputs.profile?.alcohol_tracking_enabled ?? false,
+                    },
+                ),
             );
         }
 

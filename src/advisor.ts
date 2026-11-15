@@ -13,6 +13,9 @@ import { hourInTz } from "./tz.js";
  * routine, not a server-side call). It is always null here.
  */
 
+/** Days the review looks at: the complete days ending at the window's end. */
+export const ADVISOR_DAYS = 7;
+
 // ---------- Tunable rubric ----------
 
 /** Fewer logged days than this and a score would mostly measure what was
