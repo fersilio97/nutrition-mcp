@@ -1495,6 +1495,12 @@
                 padding-bottom: 0.35rem;
                 border-bottom: 1px solid var(--rule);
             }
+            .lm-actions {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+                gap: var(--s2);
+            }
             .facts-title h3,
             p.facts-title {
                 font-family: var(--font-display);
@@ -5052,6 +5058,34 @@
                 // Est. change, each with its explanation indented under it.
                 // What the Goal row says under its figure: the plan behind a
                 // derived goal, or the typed baseline plus active kcal.
+                // The derived goal's working with today's numbers. One string
+                // for the Today Goal row and the Body goal readout, so the two
+                // can never show different formulas (they did: Today dropped
+                // the plan's deficit and rounded digestion to 9%).
+                function goalFormulaText(p, t) {
+                    const delta = Math.round(
+                        p.rate_g_per_day * p.kcal_per_gram,
+                    );
+                    return (
+                        "(" +
+                        fmt(p.resting_kcal) +
+                        " resting (" +
+                        p.resting_basis +
+                        ") + " +
+                        fmt((t && t.active_kcal) || 0) +
+                        " active" +
+                        (delta
+                            ? " " +
+                              (delta > 0 ? "+" : "−") +
+                              " " +
+                              fmt(Math.abs(delta)) +
+                              " for your plan"
+                            : "") +
+                        ") ÷ (1 − " +
+                        (p.tef_share * 100).toFixed(1) +
+                        "% digestion)"
+                    );
+                }
                 function goalSubText(t, goal) {
                     const p = data.goalPlan;
                     if (p.mode === "rate" || p.mode === "date") {
@@ -5066,9 +5100,9 @@
                                   " " +
                                   data.weightUnit +
                                   "/week") +
-                            " · resting + active ÷ (1 − " +
-                            (p.tef_share * 100).toFixed(0) +
-                            "% digestion)"
+                            (p.goal_kcal != null
+                                ? " · " + goalFormulaText(p, t)
+                                : "")
                         );
                     }
                     if (goalCustom())
@@ -5158,11 +5192,26 @@
                                   fmt(t.burn_kcal) + kcal,
                                   // The model's split, so the figure
                                   // explains itself: resting + active + digestion.
+                                  // Digestion is known once something is
+                                  // logged (a share of what was eaten), so
+                                  // it gets its number like the other two.
                                   t.bmr_kcal != null
                                       ? fmt(t.bmr_kcal) +
                                             " resting + " +
                                             fmt(t.active_kcal || 0) +
-                                            " active + digestion · est."
+                                            " active + " +
+                                            fmt(
+                                                t.tef_kcal != null
+                                                    ? t.tef_kcal
+                                                    : Math.max(
+                                                          0,
+                                                          t.burn_kcal -
+                                                              t.bmr_kcal -
+                                                              (t.active_kcal ||
+                                                                  0),
+                                                      ),
+                                            ) +
+                                            " digestion · est."
                                       : "full day · estimate",
                               )
                             : factsRow("Est. burn", "—", ADD_BODY, {
@@ -5577,23 +5626,12 @@
                     const u = data.weightUnit;
                     let h = '<div class="plan-readout">';
                     if (p.goal_kcal != null) {
-                        const delta = Math.round(
-                            p.rate_g_per_day * p.kcal_per_gram,
-                        );
                         h +=
                             '<p class="note"><b>Today: ' +
                             fmt(p.goal_kcal) +
-                            " kcal</b> = (resting " +
-                            fmt(p.resting_kcal) +
-                            " (" +
-                            p.resting_basis +
-                            ") + " +
-                            fmt((t && t.active_kcal) || 0) +
-                            " active" +
-                            (delta ? " " + sgn(delta) + " for your plan" : "") +
-                            ") ÷ (1 − " +
-                            (p.tef_share * 100).toFixed(1) +
-                            "% digestion).</p>" +
+                            " kcal</b> = " +
+                            esc(goalFormulaText(p, t)) +
+                            ".</p>" +
                             (p.resting_basis !== "calibrated" &&
                             calibrationNeedHtml()
                                 ? '<p class="note">' +
@@ -10735,11 +10773,19 @@
                         which +
                         '"><div class="facts-title"><h3 id="h-lm-' +
                         which +
-                        '">Log a meal</h3><button type="button" class="btn btn-sm" data-lm-open aria-expanded="' +
+                        '">Log a meal</h3><span class="lm-actions">' +
+                        // Today is where you start the day, so the weigh-in
+                        // has a button beside the meal one, not only the
+                        // small link in the Scale card. It opens the same
+                        // form as Body's "+ Log weight".
+                        (full
+                            ? ""
+                            : '<button type="button" class="btn btn-sm" data-go="log-weight">+ Log weight</button>') +
+                        '<button type="button" class="btn btn-sm" data-lm-open aria-expanded="' +
                         (full && lmOpen) +
                         '"' +
                         (full && lmOpen ? " hidden" : "") +
-                        ">+ Log meal</button></div>" +
+                        ">+ Log meal</button></span></div>" +
                         lmFlashHtml() +
                         quickChips(which) +
                         (full && lmOpen ? logMealForm() : "") +
