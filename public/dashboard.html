@@ -103,7 +103,6 @@
                 --gain: #a35a0b;
                 --loss: #2563a6;
                 --warn: #8a5a00;
-                --cal2-eaten: #4d5d7a;
                 --shadow-card:
                     0 1px 2px rgba(17, 26, 21, 0.04),
                     0 12px 32px -12px rgba(17, 26, 21, 0.12);
@@ -144,7 +143,6 @@
                     --gain: #f2b25c;
                     --loss: #7fb0f0;
                     --warn: #e8b45a;
-                    --cal2-eaten: #a3b1cc;
                     --shadow-card:
                         0 1px 2px rgba(0, 0, 0, 0.3),
                         0 12px 32px -12px rgba(0, 0, 0, 0.6);
@@ -184,7 +182,6 @@
                 --gain: #f2b25c;
                 --loss: #7fb0f0;
                 --warn: #e8b45a;
-                --cal2-eaten: #a3b1cc;
                 --shadow-card:
                     0 1px 2px rgba(0, 0, 0, 0.3),
                     0 12px 32px -12px rgba(0, 0, 0, 0.6);
@@ -196,18 +193,20 @@
 
             /* ---------- scale ---------- */
             :root {
-                --cal2-c-eaten: var(--ink);
-                --cal2-c-base: color-mix(in srgb, var(--burn) 16%, var(--bg));
-                --cal2-c-digestion: color-mix(
-                    in srgb,
-                    var(--accent) 35%,
-                    var(--bg)
-                );
-                --cal2-c-workout: color-mix(
-                    in srgb,
-                    var(--burn) 60%,
-                    var(--bg)
-                );
+                /* Energy: one meaning per colour on every chart (Today bar,
+                   Today strip, Trends). Eaten is ink; the three parts of the
+                   burn are one hue (--burn) light → dark, since they are
+                   parts of one thing. 14/45/75% pass the dataviz validator's
+                   adjacent normal-vision and CVD checks (ΔE ≥ 15) on both
+                   surfaces; re-run it before changing a step. */
+                --e-eaten: var(--ink);
+                --e-base: color-mix(in srgb, var(--burn) 14%, var(--bg));
+                --e-tef: color-mix(in srgb, var(--burn) 45%, var(--bg));
+                --e-active: color-mix(in srgb, var(--burn) 75%, var(--bg));
+                --cal2-c-eaten: var(--e-eaten);
+                --cal2-c-base: var(--e-base);
+                --cal2-c-digestion: var(--e-tef);
+                --cal2-c-workout: var(--e-active);
                 --cal2-c-surplus: color-mix(
                     in srgb,
                     var(--over) 45%,
@@ -606,7 +605,7 @@
                 vertical-align: 0.12em;
             }
             .s-kcal {
-                background: var(--kcal);
+                background: var(--e-eaten);
             }
             .s-protein {
                 background: var(--protein);
@@ -1247,10 +1246,60 @@
             .met-scale {
                 stroke: var(--accent);
             }
+            /* Deficit = eaten below est. burn: green hatch with no fill of
+               its own, so the burn layers underneath stay readable. The
+               mirror of the pink surplus fill. */
             .cal2-deficit {
-                fill: var(--accent);
-                opacity: 0.18;
+                fill: url(#hatch-deficit);
                 stroke: none;
+            }
+            .hatch-deficit-fg {
+                fill: var(--accent);
+            }
+            .sw.cal2-deficit {
+                background: repeating-linear-gradient(
+                    45deg,
+                    var(--accent) 0 1.5px,
+                    transparent 1.5px 4px
+                );
+                box-shadow: inset 0 0 0 1px var(--accent);
+            }
+            /* Today's eaten-vs-burned bar, inside the facts label. */
+            .energy {
+                padding: var(--s3) 0 var(--s2);
+                border-bottom: 1px solid var(--line);
+            }
+            .energy-head {
+                margin: 0;
+                font-weight: 700;
+            }
+            .energy-head .est {
+                font-weight: 400;
+                color: var(--ink-2);
+            }
+            .energy .plot {
+                margin-top: var(--s2);
+            }
+            .energy .legend {
+                margin-top: var(--s2);
+            }
+            .energy-cap {
+                margin: var(--s2) 0 0;
+                color: var(--ink-2);
+                font-size: var(--fs-small);
+            }
+            .energy-cap b {
+                color: var(--ink);
+            }
+            .e-mark {
+                stroke: var(--e-eaten);
+                stroke-width: 3;
+                stroke-linecap: round;
+            }
+            .cal2-legend-deficit {
+                fill: url(#hatch-deficit);
+                stroke: var(--accent);
+                stroke-width: 1;
             }
             .cal2-goal {
                 fill: none;
@@ -1785,7 +1834,7 @@
                 stroke: var(--surface-2);
             }
             .ring-arc {
-                stroke: var(--kcal);
+                stroke: var(--e-eaten);
                 stroke-linecap: round;
                 transition: stroke-dashoffset 700ms var(--ease-out);
             }
@@ -1999,7 +2048,7 @@
                 fill: var(--ink-2);
             }
             .m-kcal {
-                fill: var(--kcal);
+                fill: var(--e-eaten);
             }
             .m-over {
                 fill: url(#hatch-over);
@@ -3326,6 +3375,19 @@
                     <rect class="hatch-bg" width="4" height="4"></rect>
                     <rect class="hatch-fg" width="2" height="4"></rect>
                 </pattern>
+                <pattern
+                    id="hatch-deficit"
+                    width="5"
+                    height="5"
+                    patternUnits="userSpaceOnUse"
+                    patternTransform="rotate(45)"
+                >
+                    <rect
+                        class="hatch-deficit-fg"
+                        width="1.6"
+                        height="5"
+                    ></rect>
+                </pattern>
             </defs>
         </svg>
 
@@ -4648,10 +4710,13 @@
                                         ),
                                     ),
                             ]);
+                            // null = the watch didn't sync, not a rest day.
                             rows.push([
                                 "cal2-area-workout",
                                 "Workout / active",
-                                "+" + fmt(r.active_kcal || 0),
+                                r.active_kcal == null
+                                    ? "not synced"
+                                    : "+" + fmt(r.active_kcal),
                             ]);
                         }
                         rows.push([
@@ -4669,7 +4734,9 @@
                     }
                     if (r.balance_kcal != null)
                         rows.push([
-                            r.balance_kcal >= 0 ? "cal2-surplus" : "s-loss",
+                            r.balance_kcal >= 0
+                                ? "cal2-surplus"
+                                : "cal2-deficit",
                             (r.balance_kcal < 0 ? "Deficit" : "Surplus") + per,
                             fmt(Math.abs(r.balance_kcal)) + " kcal",
                             1,
@@ -5356,6 +5423,7 @@
                         fmt(eaten) +
                         unitSm("kcal") +
                         "</p></div>" +
+                        energyHtml(t) +
                         todayRows(t) +
                         '<ul class="facts-nut"><li class="nut-head"><span>Nutrients</span><span>% of goal</span></li>' +
                         nutrientRow(
@@ -5449,7 +5517,207 @@
                     });
                 };
 
+                // Today's energy bar: what you ate against what you burned,
+                // the burn split into its parts. Every figure comes from the
+                // same daily row, so the segments always add up to Est. burn.
+                // Today is a partial day (full-day resting, activity and
+                // digestion so far), so the gap is labelled "so far".
+                function energyParts(t) {
+                    const base = t.bmr_kcal || 0;
+                    const active = t.active_kcal || 0;
+                    return {
+                        base: base,
+                        tef: Math.max(0, t.burn_kcal - base - active),
+                        active: active,
+                        burn: t.burn_kcal,
+                        eaten: t.mealCount > 0 ? t.calories : null,
+                        // A stored goal only: with none the goal IS the
+                        // burn, and a second line would just repeat it.
+                        goal:
+                            goalCustom() && t.goal_calories
+                                ? t.goal_calories
+                                : null,
+                    };
+                }
+                function energyHtml(t) {
+                    if (t.burn_kcal == null) return "";
+                    const p = energyParts(t);
+                    const sw = (cls) =>
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="1" width="12" height="12" class="' +
+                        cls +
+                        '"/></svg>';
+                    const mark =
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="7" y1="0" x2="7" y2="14" class="e-mark"/></svg>';
+                    const dash =
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="7" y1="0" x2="7" y2="14" class="cal2-goal"/></svg>';
+                    const items = [
+                        [mark, "Eaten"],
+                        [sw("cal2-legend-base"), baselineLabel()],
+                        [sw("cal2-legend-digestion"), "Digestion"],
+                    ];
+                    if (t.active_kcal != null)
+                        items.push([sw("cal2-legend-workout"), "Workout"]);
+                    if (p.eaten != null)
+                        items.push(
+                            p.eaten <= p.burn
+                                ? [sw("cal2-legend-deficit"), "Deficit"]
+                                : [sw("cal2-legend-surplus"), "Surplus"],
+                        );
+                    if (p.goal != null) items.push([dash, "Goal"]);
+                    let cap;
+                    if (p.eaten == null)
+                        cap =
+                            "Nothing logged yet — this is what you’ve burned so far.";
+                    else {
+                        const bal = Math.round(p.eaten - p.burn);
+                        cap =
+                            "<b>" +
+                            (bal <= 0
+                                ? "−" + fmt(-bal) + " kcal deficit"
+                                : "+" + fmt(bal) + " kcal surplus") +
+                            "</b>" +
+                            (t.in_progress
+                                ? " so far — final once the day ends."
+                                : ".");
+                    }
+                    if (t.active_kcal == null)
+                        cap +=
+                            " Watch not synced yet, so no workout is counted.";
+                    return (
+                        '<div class="energy" aria-labelledby="h-energy"><p class="energy-head" id="h-energy">Eaten vs burned <span class="est">(estimate)</span></p>' +
+                        '<div class="plot" id="energy-plot"></div>' +
+                        legend(items) +
+                        '<p class="energy-cap">' +
+                        cap +
+                        "</p></div>"
+                    );
+                }
+                function energyBar() {
+                    const host = $("energy-plot");
+                    if (!host || !host.clientWidth) return;
+                    const t = data.daily[data.daily.length - 1];
+                    if (t.burn_kcal == null) return;
+                    const p = energyParts(t);
+                    const c = chartSvg(
+                        host,
+                        84,
+                        "Today: est. burn " +
+                            fmt(p.burn) +
+                            " kcal (" +
+                            baselineLabel() +
+                            " " +
+                            fmt(p.base) +
+                            ", digestion " +
+                            fmt(p.tef) +
+                            ", workout " +
+                            (t.active_kcal == null
+                                ? "not synced"
+                                : fmt(p.active)) +
+                            ")" +
+                            (p.eaten == null
+                                ? ", nothing eaten logged."
+                                : ", eaten " + fmt(p.eaten) + " kcal."),
+                    );
+                    const svg = c.svg;
+                    const W = c.w;
+                    const y0 = 22;
+                    const bh = 26;
+                    // From zero, never cut: on a single bar a cut axis
+                    // makes the gap look far bigger than it is.
+                    const max =
+                        Math.max(p.burn, p.eaten || 0, p.goal || 0) * 1.03;
+                    const xAt = (v) => (v / max) * W;
+                    const rect = (a, b, cls, gap) => {
+                        const w = xAt(b) - xAt(a) - (gap ? 2 : 0);
+                        if (w <= 0) return;
+                        svg.appendChild(
+                            svgEl("rect", {
+                                x: xAt(a),
+                                y: y0,
+                                width: w,
+                                height: bh,
+                                class: cls,
+                            }),
+                        );
+                    };
+                    const segs = [
+                        [0, p.base, "cal2-area-base"],
+                        [p.base, p.base + p.tef, "cal2-area-digestion"],
+                        [p.base + p.tef, p.burn, "cal2-area-workout"],
+                    ].filter((s) => s[1] - s[0] > 0);
+                    // 2px surface gap between segments, none after the last.
+                    segs.forEach((s, i) =>
+                        rect(s[0], s[1], s[2], i < segs.length - 1),
+                    );
+                    if (p.eaten != null) {
+                        if (p.eaten < p.burn)
+                            rect(
+                                p.eaten,
+                                p.burn,
+                                "cal2-deficit" + (t.in_progress ? " dim" : ""),
+                            );
+                        else if (p.eaten > p.burn)
+                            rect(p.burn, p.eaten, "cal2-surplus");
+                    }
+                    const vline = (x, cls, ext) =>
+                        svg.appendChild(
+                            svgEl("line", {
+                                x1: x,
+                                x2: x,
+                                y1: y0 - ext,
+                                y2: y0 + bh + ext,
+                                class: cls,
+                            }),
+                        );
+                    const anchor = (x) =>
+                        x < 56 ? "start" : x > W - 56 ? "end" : "middle";
+                    const xb = xAt(p.burn);
+                    vline(xb, "cal2-burn-top", 3);
+                    svgText(
+                        svg,
+                        xb,
+                        y0 + bh + 18,
+                        "Burn " + fmt(p.burn),
+                        "lbl",
+                        anchor(xb),
+                    );
+                    if (p.goal != null) {
+                        const xg = xAt(p.goal);
+                        vline(xg, "cal2-goal", 6);
+                        // Room permitting; the legend and tooltip carry it.
+                        if (Math.abs(xg - xb) > 96)
+                            svgText(
+                                svg,
+                                xg,
+                                y0 + bh + 18,
+                                "Goal " + fmt(p.goal),
+                                "lbl sub",
+                                anchor(xg),
+                            );
+                    }
+                    if (p.eaten != null) {
+                        const xe = xAt(p.eaten);
+                        vline(xe, "e-mark", 6);
+                        svgText(
+                            svg,
+                            xe,
+                            y0 - 10,
+                            "Eaten " + fmt(p.eaten),
+                            "lbl",
+                            anchor(xe),
+                        );
+                    }
+                    const tc = calTip(dayRow(t));
+                    inspect(
+                        svg,
+                        [{ x: xb, html: tc.html, text: tc.text }],
+                        y0 - 6,
+                        y0 + bh + 6,
+                    );
+                }
+
                 CHARTS.today = function () {
+                    energyBar();
                     const host = $("strip-plot");
                     if (!host || !host.clientWidth) return;
                     const rows = data.daily.slice(-7).map(dayRow);
@@ -5640,7 +5908,7 @@
                             ) +
                             "</div>",
                         note:
-                            "What you ate each day against what you burned, split into baseline, digestion and workout (watch active kcal). Pink shows days you ate over your burn" +
+                            "What you ate each day against what you burned, split into baseline, digestion and workout (watch active kcal). Pink shows days you ate over your burn, green hatching days under it" +
                             (data.goals && data.goals.calories > 0
                                 ? "; dots turn red over your goal; the dashed line is your goal."
                                 : ".") +
@@ -5652,6 +5920,7 @@
                             [swatch("cal2-legend-digestion"), "Digestion"],
                             [swatch("cal2-legend-workout"), "Workout / active"],
                             [swatch("cal2-legend-surplus"), "Surplus"],
+                            [swatch("cal2-legend-deficit"), "Deficit"],
                             // With no custom goal the goal IS the est. burn:
                             // one line, not two that differ by digestion.
                             !(data.goals && data.goals.calories > 0)
@@ -7208,8 +7477,9 @@
                             class: "cal2-burn-top",
                         }),
                     );
-                    // Pink surplus quads are split at the exact line crossing.
-                    const polygon = (coords) =>
+                    // Pink surplus and hatched deficit quads between eaten
+                    // and burn, split at the exact line crossing.
+                    const polygon = (coords, cls) =>
                         svg.appendChild(
                             svgEl("path", {
                                 d:
@@ -7218,7 +7488,7 @@
                                         .map((q) => q[0] + "," + q[1])
                                         .join("L") +
                                     "Z",
-                                class: "cal2-surplus",
+                                class: cls,
                             }),
                         );
                     for (let i = 0; i < points.length - 1; i++) {
@@ -7233,11 +7503,13 @@
                             continue;
                         const d0 = a.eaten - a.burn,
                             d1 = b.eaten - b.burn;
-                        if (d0 <= 0 && d1 <= 0) continue;
+                        if (d0 === 0 && d1 === 0) continue;
                         const A = [xAt(i), yAt(a.eaten)],
                             B = [xAt(i + 1), yAt(b.eaten)],
                             C = [xAt(i + 1), yAt(b.burn)],
                             D = [xAt(i), yAt(a.burn)];
+                        const cls = (d) =>
+                            d > 0 ? "cal2-surplus" : "cal2-deficit";
                         if (d0 * d1 < 0) {
                             const t = d0 / (d0 - d1),
                                 x = xAt(i) + (xAt(i + 1) - xAt(i)) * t,
@@ -7245,9 +7517,9 @@
                                 burn = a.burn + (b.burn - a.burn) * t,
                                 X = [x, yAt(eaten)],
                                 Y = [x, yAt(burn)];
-                            if (d0 > 0) polygon([A, X, Y, D]);
-                            else polygon([X, B, C, Y]);
-                        } else polygon([A, B, C, D]);
+                            polygon([A, X, Y, D], cls(d0));
+                            polygon([X, B, C, Y], cls(d1));
+                        } else polygon([A, B, C, D], cls(d0 || d1));
                     }
                     svg.appendChild(
                         svgEl("path", {
@@ -7349,7 +7621,11 @@
                                     "Workout / active",
                                     p.workout == null
                                         ? "—"
-                                        : fmt(p.workout) + " kcal",
+                                        : !smooth &&
+                                            p.burn != null &&
+                                            p.active_kcal == null
+                                          ? "not synced"
+                                          : fmt(p.workout) + " kcal",
                                 ],
                                 [
                                     "cal2-burn-top",
@@ -7374,7 +7650,7 @@
                             );
                             if (delta != null)
                                 rows.push([
-                                    null,
+                                    delta < 0 ? "cal2-deficit" : "cal2-surplus",
                                     delta < 0 ? "Deficit" : "Surplus",
                                     fmt(Math.abs(delta)) + " kcal",
                                     1,

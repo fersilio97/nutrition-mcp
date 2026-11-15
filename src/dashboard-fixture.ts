@@ -47,6 +47,7 @@ export const SCENARIOS = [
     "lb",
     "calibrate",
     "offset",
+    "no-watch",
 ] as const;
 export type ScenarioName = (typeof SCENARIOS)[number];
 
@@ -307,6 +308,10 @@ function generateScenario(name: ScenarioName, today: string): FixtureData {
             activity: [],
         };
     if (name === "calibrate") return calibrateScenario(profile, today, tz);
+    // The full scenario with no watch ever synced: burn is resting +
+    // digestion only, and the charts must say "not synced", not "+0".
+    if (name === "no-watch")
+        return { ...generateScenario("full", today), profile, activity: [] };
     // Same 45 days of data, resting burn left on the plain formula: the
     // Estimate-vs-reality card shows the full ~150 kcal/day gap.
     if (name === "offset")

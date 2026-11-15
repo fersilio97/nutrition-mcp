@@ -169,6 +169,36 @@ describe("preview scenarios say what they claim", () => {
         }
     });
 
+    test("no-watch: burn without active kcal, so the charts must say 'not synced'", () => {
+        const d = payloadAt("no-watch", 30);
+        expect(d.daily.every((r) => r.active_kcal === null)).toBe(true);
+        expect(d.daily.some((r) => r.burn_kcal != null)).toBe(true);
+        expect(d.daily.at(-1)!.mealCount).toBeGreaterThan(0);
+    });
+
+    // The Today energy bar and the Trends stack draw resting, digestion and
+    // workout from one daily row and must add up to that row's est. burn —
+    // including after calibration rewrites bmr_kcal and burn_kcal in place.
+    test(
+        "every daily row's burn parts add up to its est. burn",
+        () => {
+            for (const name of SCENARIOS)
+                for (const days of [7, 30]) {
+                    for (const r of payloadAt(name, days).daily) {
+                        if (r.burn_kcal == null) continue;
+                        const sum =
+                            (r.bmr_kcal ?? 0) +
+                            (r.tef_kcal ?? 0) +
+                            (r.active_kcal ?? 0);
+                        expect(Math.abs(sum - r.burn_kcal)).toBeLessThanOrEqual(
+                            1,
+                        );
+                    }
+                }
+        },
+        HEAVY_MS,
+    );
+
     test("the dashboard CSP is the default with font-src 'self', shared by prod and preview", async () => {
         // Read as text: importing the preview would start its server.
         const index = await Bun.file("src/index.ts").text();
