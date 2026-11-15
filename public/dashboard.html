@@ -5512,6 +5512,62 @@
                             : "")
                     );
                 }
+                // Why the baseline burn is still the formula BMR, and what is
+                // left before "Calibrated from my data" can differ from it.
+                // Mirrors the gates in src/calibration.ts (8 weigh-in days,
+                // 21-day span, 70% of those days counted).
+                function calibrationNeedHtml() {
+                    const c = data.calibration;
+                    if (!c || c.status === "ok") return "";
+                    const w = c.window || {};
+                    const plural = (n, s) => n + " " + s + (n === 1 ? "" : "s");
+                    const need = [];
+                    if (c.status === "missing_bmr") {
+                        need.push("height, birth date and sex in Body details");
+                    } else {
+                        const weighIns = w.weighin_days || 0;
+                        if (weighIns < 8)
+                            need.push(
+                                plural(8 - weighIns, "more weigh-in day") +
+                                    " (" +
+                                    weighIns +
+                                    " of 8)",
+                            );
+                        const span = w.span_days || 0;
+                        if (span < 21)
+                            need.push(
+                                plural(21 - span, "more day") +
+                                    " between your first and last weigh-in (" +
+                                    span +
+                                    " of 21)",
+                            );
+                        const counted = c.counted_days || 0;
+                        const wantCounted = Math.ceil(Math.max(span, 21) * 0.7);
+                        if (counted < wantCounted)
+                            need.push(
+                                plural(
+                                    wantCounted - counted,
+                                    "more counted day",
+                                ) +
+                                    " (" +
+                                    counted +
+                                    " of " +
+                                    wantCounted +
+                                    "; 2+ meals or at least half a typical day)",
+                            );
+                        if (!need.length && c.status === "too_noisy")
+                            need.push(
+                                "steadier weigh-ins (±" +
+                                    fmt(w.uncertainty_kcal) +
+                                    " kcal/day of scatter; weigh in at the same time of day)",
+                            );
+                    }
+                    return (
+                        "Using your BMR for now: not enough data yet for “Calibrated from my data”, so both choices give the same number. Still needed: " +
+                        (need.length ? need.join("; ") : "a little more data") +
+                        "."
+                    );
+                }
                 // The working behind today's derived goal, so the number
                 // explains itself like the burn does.
                 function goalReadoutHtml() {
@@ -5537,7 +5593,13 @@
                             (delta ? " " + sgn(delta) + " for your plan" : "") +
                             ") ÷ (1 − " +
                             (p.tef_share * 100).toFixed(1) +
-                            "% digestion).</p>";
+                            "% digestion).</p>" +
+                            (p.resting_basis !== "calibrated" &&
+                            calibrationNeedHtml()
+                                ? '<p class="note">' +
+                                  esc(calibrationNeedHtml()) +
+                                  "</p>"
+                                : "");
                     } else {
                         h +=
                             '<p class="note">' +
@@ -9146,27 +9208,9 @@
                               ) +
                               ")</p>"
                             : data.calibration &&
-                                data.calibration.basis === "calibrated"
+                                data.calibration.status !== "ok"
                               ? '<p class="note">' +
-                                (data.calibration.status === "no_weighins" ||
-                                data.calibration.status === "too_few_weighins"
-                                    ? "Calibration needs weigh-ins on at least 4 different days in the last " +
-                                      data.calibration.window_days +
-                                      " days."
-                                    : data.calibration.status === "missing_bmr"
-                                      ? "Calibration needs height, birth date and sex to calculate BMR."
-                                      : data.calibration.status ===
-                                          "no_estimate"
-                                        ? "Calibration needs counted days between weigh-ins (2+ entries and at least half your typical day, or marked on the Meals tab)."
-                                        : data.calibration.status ===
-                                            "too_few_days"
-                                          ? "Calibration needs 3+ weeks between first and last weigh-in, with 70% of those days counted."
-                                          : "Your weigh-ins scatter too much to calibrate yet (±" +
-                                            fmt(
-                                                data.calibration.window
-                                                    .uncertainty_kcal,
-                                            ) +
-                                            " kcal/day). Weigh in more often, at the same time of day.") +
+                                esc(calibrationNeedHtml()) +
                                 "</p>"
                               : data.calibration &&
                                   data.calibration.status === "ok"
