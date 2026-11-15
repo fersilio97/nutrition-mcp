@@ -552,6 +552,13 @@ describe("recommendedRates", () => {
         // 2000 − 1700×0.9 = 470 kcal, so the floor binds.
         const r = recommendedRates(base);
         expect(r.max_loss_g_per_day).toBeCloseTo(470 / 6, 6);
+        expect(r.loss_binding).toBe("intake_floor");
+        // Every limit is listed, so the page can show them all.
+        expect(r.loss_limits.weekly_pct).toBeCloseTo((80_000 * 0.01) / 7, 6);
+        expect(r.loss_limits.weekly_kg).toBeCloseTo(1000 / 7, 6);
+        expect(r.loss_limits.deficit_share).toBeCloseTo(500 / 6, 6);
+        expect(r.loss_limits.deficit_kcal).toBeCloseTo(1000 / 6, 6);
+        expect(r.active_ref_kcal).toBe(300);
         expect(r.max_gain_g_per_day).toBeCloseTo((80_000 * 0.005) / 7, 6);
     });
 
@@ -565,6 +572,7 @@ describe("recommendedRates", () => {
         // Burn 4500: 25% = 1125 → 1000 kcal cap = 166.7 g/day; the floor
         // leaves 1800; 1% of 150 kg = 214 g/day; 1 kg/week = 142.9 g/day.
         expect(r.max_loss_g_per_day).toBeCloseTo(1000 / 7, 6);
+        expect(r.loss_binding).toBe("weekly_kg");
     });
 
     test("the intake floor binds when burn is close to it", () => {
@@ -577,6 +585,9 @@ describe("recommendedRates", () => {
     test("no loss is advised under 18, and none without body details", () => {
         expect(recommendedRates({ ...base, age: 16 }).max_loss_g_per_day).toBe(
             0,
+        );
+        expect(recommendedRates({ ...base, age: 16 }).loss_binding).toBe(
+            "minor",
         );
         expect(
             recommendedRates({ ...base, restingKcal: null }).max_loss_g_per_day,

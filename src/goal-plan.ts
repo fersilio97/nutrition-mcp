@@ -411,7 +411,21 @@ export interface RecommendedRates {
     max_loss_g_per_day: number | null;
     /** The fastest gain, g/day. Null without a trend weight. */
     max_gain_g_per_day: number | null;
+    /** Each loss limit on its own, g/day (null when it cannot be worked
+     *  out), so the page can list all of them and mark the binding one. */
+    loss_limits: Partial<Record<LossLimit, number | null>>;
+    /** Which loss limit is the tightest, or "minor" when no loss is advised. */
+    loss_binding: LossLimit | "minor" | null;
+    /** The steady active-kcal figure the deficit limits were worked out from. */
+    active_ref_kcal: number;
 }
+
+export type LossLimit =
+    | "weekly_pct"
+    | "weekly_kg"
+    | "deficit_share"
+    | "deficit_kcal"
+    | "intake_floor";
 
 /**
  * The fastest rates goalFlags would not flag, so the page can offer them. The
@@ -429,30 +443,51 @@ export function recommendedRates(i: {
     sex: BodySex | null;
     age: number | null;
 }): RecommendedRates {
-    let loss: number | null = null;
+    const limits: Partial<Record<LossLimit, number | null>> = {
+        weekly_pct:
+            i.trendG == null ? null : (i.trendG * LOSS_PCT_PER_WEEK) / 7,
+        weekly_kg: LOSS_G_PER_WEEK / 7,
+        deficit_share: null,
+        deficit_kcal: null,
+        intake_floor: null,
+    };
     if (i.restingKcal != null) {
         const burn = i.restingKcal + i.activeKcal;
         const floor = Math.max(
             i.restingKcal,
             i.sex === "male" ? FLOOR_MALE : FLOOR_FEMALE,
         );
+        limits.deficit_share = (burn * DEFICIT_SHARE) / i.kcalPerGram;
+        limits.deficit_kcal = DEFICIT_KCAL / i.kcalPerGram;
         // goal = (burn − d) ÷ (1 − f) must stay ≥ floor.
-        const kcal = Math.min(
-            DEFICIT_KCAL,
-            burn * DEFICIT_SHARE,
-            burn - floor * (1 - i.tefShare),
-        );
-        let g = Math.max(0, kcal) / i.kcalPerGram;
-        g = Math.min(g, LOSS_G_PER_WEEK / 7);
-        if (i.trendG != null)
-            g = Math.min(g, (i.trendG * LOSS_PCT_PER_WEEK) / 7);
-        if (i.age != null && i.age < 18) g = 0;
-        loss = g;
+        limits.intake_floor =
+            Math.max(0, burn - floor * (1 - i.tefShare)) / i.kcalPerGram;
+    }
+    let loss: number | null = null;
+    let binding: RecommendedRates["loss_binding"] = null;
+    // Loss needs a burn to measure the deficit against.
+    if (i.restingKcal != null) {
+        for (const [code, g] of Object.entries(limits) as [
+            LossLimit,
+            number | null,
+        ][]) {
+            if (g != null && (loss == null || g < loss)) {
+                loss = g;
+                binding = code;
+            }
+        }
+        if (i.age != null && i.age < 18) {
+            loss = 0;
+            binding = "minor";
+        }
     }
     return {
         max_loss_g_per_day: loss,
         max_gain_g_per_day:
             i.trendG == null ? null : (i.trendG * GAIN_PCT_PER_WEEK) / 7,
+        loss_limits: limits,
+        loss_binding: binding,
+        active_ref_kcal: Math.round(i.activeKcal),
     };
 }
 

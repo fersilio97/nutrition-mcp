@@ -1138,6 +1138,35 @@
             .goal-sec .pair {
                 grid-template-columns: minmax(0, 1fr) minmax(0, 9.5rem);
             }
+            .limit-how {
+                margin-top: var(--s2);
+            }
+            .limit-how summary {
+                cursor: pointer;
+                color: var(--accent-text);
+                font-size: var(--fs-small);
+            }
+            .limit-list {
+                list-style: none;
+                margin: var(--s2) 0;
+                padding: 0;
+                display: grid;
+                gap: var(--s2);
+            }
+            .limit-list li {
+                display: flex;
+                justify-content: space-between;
+                gap: var(--s3);
+                color: var(--ink-2);
+            }
+            .limit-list li > span:last-child {
+                flex: none;
+                font-variant-numeric: tabular-nums;
+            }
+            .limit-list li.bind {
+                color: var(--ink);
+                font-weight: 600;
+            }
             .goal-hint:empty {
                 display: none;
             }
@@ -5747,6 +5776,90 @@
                     }
                     return h;
                 }
+                // The rules behind the recommended maximum, with the user's own
+                // figures, the binding limit marked. Static markup (outside the
+                // live hint) so it stays open while the user types.
+                function limitExplainHtml(mode) {
+                    const p = data.goalPlan;
+                    const L = p && p.limits;
+                    const u = data.weightUnit;
+                    if (!L || !L.loss_limits) return "";
+                    if (mode !== "rate" && mode !== "date") return "";
+                    const lim = L.loss_limits;
+                    const wk = function (g) {
+                        return g == null
+                            ? "—"
+                            : round2(toUnit(g * 7, u)) + " " + u + "/week";
+                    };
+                    const b = L.loss_binding;
+                    const deficitG =
+                        lim.deficit_share == null || lim.deficit_kcal == null
+                            ? null
+                            : Math.min(lim.deficit_share, lim.deficit_kcal);
+                    const rows = [
+                        [
+                            b === "weekly_pct",
+                            "1% of your trend weight per week",
+                            lim.weekly_pct,
+                        ],
+                        [
+                            b === "weekly_kg",
+                            "1 kg per week at most",
+                            lim.weekly_kg,
+                        ],
+                        [
+                            b === "deficit_share" || b === "deficit_kcal",
+                            "A daily deficit of 25% of your burn (or 1,000 kcal, if lower)",
+                            deficitG,
+                        ],
+                        [
+                            b === "intake_floor",
+                            "Eating no less than your resting burn (or 1,200 kcal women / 1,500 kcal men, if higher)",
+                            lim.intake_floor,
+                        ],
+                    ];
+                    return (
+                        '<details class="limit-how"><summary>How the maximum is calculated</summary><div>' +
+                        '<p class="note">The recommended maximum loss is the tightest of these four limits' +
+                        (b === "minor"
+                            ? ", but no weight loss is advised under 18"
+                            : "") +
+                        ":</p>" +
+                        '<ul class="limit-list">' +
+                        rows
+                            .map(function (r) {
+                                return (
+                                    '<li class="' +
+                                    (r[0] ? "bind" : "") +
+                                    '"><span>' +
+                                    esc(r[1]) +
+                                    (r[0] ? " · sets your limit" : "") +
+                                    "</span><span>" +
+                                    wk(r[2]) +
+                                    "</span></li>"
+                                );
+                            })
+                            .join("") +
+                        "</ul>" +
+                        '<p class="note">Worked out from your resting burn of ' +
+                        fmt(p.resting_kcal) +
+                        " kcal (" +
+                        p.resting_basis +
+                        ") plus " +
+                        fmt(L.active_ref_kcal) +
+                        " kcal of average active calories, " +
+                        p.kcal_per_gram +
+                        " kcal per gram of weight change" +
+                        (p.trend
+                            ? " and a trend weight of " +
+                              wfmt(p.trend.weight_g, u) +
+                              " " +
+                              u
+                            : "") +
+                        ". Gaining is held to 0.5% of body weight per week. These are rules of thumb, not medical advice, and they never block a goal.</p>" +
+                        "</div></details>"
+                    );
+                }
                 function goalFormHtml() {
                     const v = goalVals();
                     return (
@@ -5762,6 +5875,8 @@
                         goalFieldsHtml(v) +
                         '</div><div class="goal-hint" id="g-hint" aria-live="polite">' +
                         goalHintHtml(v) +
+                        '</div><div id="g-how">' +
+                        limitExplainHtml(v.mode) +
                         '</div><div class="form-foot"><button type="submit" class="btn primary" id="g-save">Save</button>' +
                         '<span class="b-status ' +
                         goalStatus.cls +
@@ -5911,6 +6026,7 @@
                         $("g-note").textContent = goalNote(v.mode);
                         $("g-mode").innerHTML = goalSegHtml(v.mode);
                         $("g-hint").innerHTML = goalHintHtml(v);
+                        $("g-how").innerHTML = limitExplainHtml(v.mode);
                     });
                     $("goal-form").addEventListener("submit", function (ev) {
                         ev.preventDefault();
