@@ -82,6 +82,8 @@ import {
     dateDiffDays,
     type DailyBucket,
 } from "./insights.js";
+import { formatAdvisorText, type AdvisorReport } from "./advisor.js";
+import { loadAdvisorReport } from "./advisor-data.js";
 import {
     toGrams,
     formatWeight,
@@ -628,6 +630,65 @@ async function goalsWithBurnDefault(
         console.error(`[burn-goal] weight read failed: ${err}`);
         return stored;
     }
+}
+
+// get_eating_review's structured output: the weekly review as data, so a client
+// (or the scheduled Claude routine that will write its prose advice) reads the
+// findings instead of re-parsing text. Nullable fields are emitted REQUIRED
+// with an explicit null, so eatingReviewPayload() builds every field literally.
+export const EATING_REVIEW_OUTPUT_SCHEMA = z.object({
+    window: z.object({ start: z.string(), end: z.string() }),
+    window_days: z.number(),
+    logged_days: z.number(),
+    enough_data: z.boolean(),
+    score: z.number().nullable(),
+    verdict: z.string().nullable(),
+    components: z.array(
+        z.object({
+            id: z.string(),
+            label: z.string(),
+            weight: z.number(),
+            score: z.number().nullable(),
+            points: z.number(),
+        }),
+    ),
+    findings: z.array(
+        z.object({
+            id: z.string(),
+            kind: z.enum(["good", "improve"]),
+            title: z.string(),
+            detail: z.string(),
+            evidence: z.record(z.string(), z.number()),
+        }),
+    ),
+    // Reserved for the LLM-written narrative; always null today.
+    advice: z.string().nullable(),
+});
+
+export function eatingReviewPayload(report: AdvisorReport) {
+    return {
+        window: { start: report.window.start, end: report.window.end },
+        window_days: report.windowDays,
+        logged_days: report.loggedDays,
+        enough_data: report.enoughData,
+        score: report.score,
+        verdict: report.verdict,
+        components: report.components.map((c) => ({
+            id: c.id,
+            label: c.label,
+            weight: c.weight,
+            score: c.score,
+            points: c.points,
+        })),
+        findings: report.findings.map((f) => ({
+            id: f.id,
+            kind: f.kind,
+            title: f.title,
+            detail: f.detail,
+            evidence: f.evidence,
+        })),
+        advice: report.advice,
+    };
 }
 
 // log_meal and update_meal share the same MCP Apps widget
@@ -1458,7 +1519,7 @@ export function registerTools(
     // endpoint URL. Optional for the same reason as protocolEra.
     baseUrl: string = "http://localhost",
 ) {
-    // One context for all 39 tools. clientInfo is a getter, not a value: at
+    // One context for all 40 tools. clientInfo is a getter, not a value: at
     // registration time the SDK has not yet resolved who is calling, and on the
     // modern leg it backfills the identity per request before dispatch.
     const analytics = {
@@ -4468,6 +4529,73 @@ export function registerTools(
                 },
                 analytics,
                 { days: days ?? 30 },
+            );
+        },
+    );
+
+    server.registerTool(
+        "get_eating_review",
+        {
+            title: "Get Eating Review",
+            description:
+                "A rule-based review of the user's last 7 complete days of eating (ending yesterday unless end_date is given): a 0-100 score with a breakdown, what went well and what to improve. It checks back-loaded eating (most calories late in the day), spike days including weekend overeating, calorie consistency against the goal, protein, fiber, sugar and alcohol against limits, breakfast, water and how complete the logging is. Needs at least 4 logged days and says so otherwise. Narrate the findings conversationally and kindly. These are descriptive estimates from logged data, not medical or dietary advice.",
+            annotations: {
+                readOnlyHint: true,
+                destructiveHint: false,
+                idempotentHint: true,
+                openWorldHint: false,
+            },
+            inputSchema: z.object({
+                end_date: z
+                    .string()
+                    .optional()
+                    .describe(
+                        "Last day of the 7-day window, YYYY-MM-DD (default yesterday, so today's partial logging is not judged).",
+                    ),
+            }),
+            outputSchema: EATING_REVIEW_OUTPUT_SCHEMA,
+        },
+        async ({ end_date }) => {
+            return withAnalytics(
+                "get_eating_review",
+                async () => {
+                    // Bounds live here, not in Zod: a schema rejection happens
+                    // before the handler and would skip the analytics row.
+                    if (
+                        end_date !== undefined &&
+                        (!/^\d{4}-\d{2}-\d{2}$/.test(end_date) ||
+                            new Date(`${end_date}T00:00:00Z`)
+                                .toISOString()
+                                .slice(0, 10) !== end_date)
+                    ) {
+                        return {
+                            content: [
+                                {
+                                    type: "text",
+                                    text: "end_date must be a real calendar date in YYYY-MM-DD format.",
+                                },
+                            ],
+                            isError: true,
+                        };
+                    }
+                    const report = await loadAdvisorReport(userId, end_date);
+                    return {
+                        content: [
+                            { type: "text", text: formatAdvisorText(report) },
+                        ],
+                        structuredContent: eatingReviewPayload(report),
+                    };
+                },
+                analytics,
+                { end_date },
+                {
+                    // A refused date returns normally with isError set; without
+                    // this it would be logged as a success.
+                    outcome: (r) =>
+                        "isError" in r
+                            ? { success: false, errorCategory: "validation" }
+                            : { success: true },
+                },
             );
         },
     );

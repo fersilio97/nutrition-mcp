@@ -16,17 +16,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_FR: ToolsDoc = {
     meta: {
-        title: "Référence des outils : les 39 outils",
+        title: "Référence des outils : les 40 outils",
         description:
-            "Les 39 outils que le serveur Nutrition MCP donne à ton IA — enregistrer des repas, scanner des codes-barres, importer ton historique depuis une autre app, suivre l'eau et le poids, définir des objectifs et consulter les tendances. Référence complète avec descriptions et exemples de formulations.",
+            "Les 40 outils que le serveur Nutrition MCP donne à ton IA — enregistrer des repas, scanner des codes-barres, importer ton historique depuis une autre app, suivre l'eau et le poids, définir des objectifs et consulter les tendances. Référence complète avec descriptions et exemples de formulations.",
         ogDescription:
-            "Les 39 outils que le serveur Nutrition MCP donne à ton IA, dont un importateur CSV pour ton historique venu d'une autre app — avec descriptions et exemples de formulations.",
+            "Les 40 outils que le serveur Nutrition MCP donne à ton IA, dont un importateur CSV pour ton historique venu d'une autre app — avec descriptions et exemples de formulations.",
     },
     hero: {
         eyebrow: "Référence",
         title: "Tout ce que ton IA peut faire",
         lead: "Tu n'appelles jamais ces outils directement — tu parles simplement, et l'assistant choisit le bon outil. Voici l'ensemble complet exposé par le serveur Nutrition MCP, avec ce que fait chacun et une phrase qui le déclenche.",
-        countBold: "39 outils",
+        countBold: "40 outils",
         countTail: "répartis en 7 catégories",
     },
     categories: {
@@ -399,6 +399,16 @@ export const TOOLS_FR: ToolsDoc = {
             },
             example:
                 "Des habitudes dans ma façon de manger — comme des dîners tardifs ou sauter le petit-déjeuner ?",
+        },
+        get_eating_review: {
+            description:
+                "Fais le bilan de ta dernière semaine : un score de 0 à 100, ce qui s'est bien passé et ce qu'il faut améliorer — repas concentrés le soir, jours d'excès (y compris le week-end), protéines, fibres, sucre, alcool, petit-déjeuner, eau et complétude de ton suivi.",
+            params: {
+                end_date:
+                    "Dernier jour de la fenêtre de 7 jours (AAAA-MM-JJ). Par défaut : hier.",
+            },
+            example:
+                "Comment ai-je mangé cette dernière semaine ? Que devrais-je améliorer ?",
         },
         get_profile: {
             description:

@@ -19,6 +19,7 @@ import {
     missingNutrientNote,
     registerTools,
     START_IMPORT_OUTPUT_SCHEMA,
+    EATING_REVIEW_OUTPUT_SCHEMA,
     GOALS_ITEM,
     TOTALS_ITEM,
     TRENDS_DAY_ITEM,
@@ -5306,5 +5307,83 @@ describe("dashboard API", () => {
             expect(bad.status).toBe(404);
             expect(db.mealUpdates).toEqual([]);
         });
+    });
+});
+
+// ---------- get_eating_review ----------
+
+describe("get_eating_review", () => {
+    // The window is the 7 complete days ending yesterday, resolved against the
+    // real clock (the profile timezone is UTC), so fixtures are dated relative
+    // to it. getMealsInRange in the mock ignores dates; buildDailyBuckets is
+    // what keeps a meal in or out of the window.
+    const daysAgo = (n: number) => {
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() - n);
+        return d.toISOString().slice(0, 10);
+    };
+    const week = (loggedDays: number) =>
+        Array.from({ length: loggedDays }, (_, i) =>
+            meal({
+                id: `er-${i}`,
+                logged_at: `${daysAgo(i + 1)}T13:00:00.000Z`,
+                meal_type: "lunch",
+                calories: 2000,
+                protein_g: 120,
+                fiber_g: 30,
+                sugar_g: 40,
+                alcohol_g: null,
+            }),
+        );
+
+    test("returns the review as text and as schema-valid structured data", async () => {
+        db.meals = week(6);
+        await withTools(null, async (call) => {
+            const r = await call("get_eating_review");
+            expect(r.isError).toBeUndefined();
+            const out = EATING_REVIEW_OUTPUT_SCHEMA.parse(r.structuredContent);
+            expect(out.enough_data).toBe(true);
+            expect(out.logged_days).toBe(6);
+            expect(out.window_days).toBe(7);
+            expect(out.window.end).toBe(daysAgo(1));
+            expect(out.score).toBeGreaterThan(0);
+            expect(out.advice).toBeNull();
+            expect(textOf(r)).toContain("Score:");
+            expect(textOf(r)).toContain("not medical or dietary advice");
+        });
+    });
+
+    test("with too few logged days it says so and gives no score", async () => {
+        db.meals = week(2);
+        await withTools(null, async (call) => {
+            const r = await call("get_eating_review");
+            const out = EATING_REVIEW_OUTPUT_SCHEMA.parse(r.structuredContent);
+            expect(out.enough_data).toBe(false);
+            expect(out.score).toBeNull();
+            expect(out.verdict).toBeNull();
+            expect(textOf(r)).toContain("Only 2 of the last 7 days");
+        });
+    });
+
+    test("an impossible end_date is refused with a message, not a crash", async () => {
+        await withTools(null, async (call) => {
+            for (const bad of ["tomorrow", "2026-02-30", "26-01-01"]) {
+                const r = await call("get_eating_review", { end_date: bad });
+                expect(r.isError).toBe(true);
+                expect(textOf(r)).toContain("end_date must be a real calendar");
+            }
+        });
+    });
+
+    test("analytics counts a good call as a success and a refused date as a failure", async () => {
+        db.meals = week(5);
+        await withTools(null, async (call) => {
+            await call("get_eating_review");
+            await call("get_eating_review", { end_date: "2026-02-30" });
+        });
+        const rows = db.analyticsRows.filter(
+            (row) => row.tool_name === "get_eating_review",
+        );
+        expect(rows.map((row) => row.success)).toEqual([true, false]);
     });
 });

@@ -2,17 +2,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_PL: ToolsDoc = {
     meta: {
-        title: "Katalog narzędzi: wszystkie 39 narzędzi",
+        title: "Katalog narzędzi: wszystkie 40 narzędzi",
         description:
-            "Wszystkie 39 narzędzi, które serwer Nutrition MCP daje Twojemu AI — zapisuj posiłki, skanuj kody kreskowe, importuj historię z innej aplikacji, śledź wodę i wagę, ustawiaj cele i przeglądaj trendy. Pełny opis wraz z przykładowymi poleceniami.",
+            "Wszystkie 40 narzędzi, które serwer Nutrition MCP daje Twojemu AI — zapisuj posiłki, skanuj kody kreskowe, importuj historię z innej aplikacji, śledź wodę i wagę, ustawiaj cele i przeglądaj trendy. Pełny opis wraz z przykładowymi poleceniami.",
         ogDescription:
-            "Wszystkie 39 narzędzi, które serwer Nutrition MCP daje Twojemu AI, w tym importer CSV do przenoszenia historii z innej aplikacji — z opisami i przykładowymi poleceniami.",
+            "Wszystkie 40 narzędzi, które serwer Nutrition MCP daje Twojemu AI, w tym importer CSV do przenoszenia historii z innej aplikacji — z opisami i przykładowymi poleceniami.",
     },
     hero: {
         eyebrow: "Dokumentacja",
         title: "Wszystko, co potrafi Twój AI",
         lead: "Nigdy nie wywołujesz tych narzędzi bezpośrednio — po prostu mówisz, a asystent sam wybiera właściwe. Oto pełny zestaw udostępniany przez serwer Nutrition MCP, wraz z opisem działania i przykładowym poleceniem, które je uruchamia.",
-        countBold: "39 narzędzi",
+        countBold: "40 narzędzi",
         countTail: "w 7 obszarach",
     },
     categories: {
@@ -382,6 +382,16 @@ export const TOOLS_PL: ToolsDoc = {
             },
             example:
                 "Czy widać jakieś wzorce w moim jedzeniu — na przykład późne kolacje albo pomijanie śniadań?",
+        },
+        get_eating_review: {
+            description:
+                "Przejrzyj swój ostatni tydzień: wynik 0–100, co poszło dobrze i co warto poprawić — jedzenie głównie wieczorem, dni z nadmiarem (także weekendowe objadanie się), białko, błonnik, cukier, alkohol, śniadanie, woda i kompletność zapisów.",
+            params: {
+                end_date:
+                    "Ostatni dzień 7-dniowego okna (RRRR-MM-DD). Domyślnie: wczoraj.",
+            },
+            example:
+                "Jak wyglądało moje jedzenie w ostatnim tygodniu i co warto poprawić?",
         },
         get_profile: {
             description:

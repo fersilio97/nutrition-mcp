@@ -13,17 +13,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_IT: ToolsDoc = {
     meta: {
-        title: "Guida agli strumenti: tutti i 39 strumenti",
+        title: "Guida agli strumenti: tutti i 40 strumenti",
         description:
-            "Tutti i 39 strumenti che il server Nutrition MCP mette a disposizione della tua IA — registra i pasti, scansiona codici a barre, importa il tuo storico da un'altra app, monitora acqua e peso, imposta obiettivi e rivedi gli andamenti. Guida completa con descrizioni ed esempi di richieste.",
+            "Tutti i 40 strumenti che il server Nutrition MCP mette a disposizione della tua IA — registra i pasti, scansiona codici a barre, importa il tuo storico da un'altra app, monitora acqua e peso, imposta obiettivi e rivedi gli andamenti. Guida completa con descrizioni ed esempi di richieste.",
         ogDescription:
-            "Tutti i 39 strumenti che il server Nutrition MCP mette a disposizione della tua IA, incluso un importatore CSV per il tuo storico da un'altra app — con descrizioni ed esempi di richieste.",
+            "Tutti i 40 strumenti che il server Nutrition MCP mette a disposizione della tua IA, incluso un importatore CSV per il tuo storico da un'altra app — con descrizioni ed esempi di richieste.",
     },
     hero: {
         eyebrow: "Guida di riferimento",
         title: "Tutto quello che la tua IA può fare",
         lead: "Non li chiami mai direttamente — parli e basta, e l'assistente sceglie lo strumento giusto. Ecco l'elenco completo che il server Nutrition MCP mette a disposizione, con cosa fa ciascuno e una frase che lo attiva.",
-        countBold: "39 strumenti",
+        countBold: "40 strumenti",
         countTail: "in 7 aree",
     },
     categories: {
@@ -396,6 +396,16 @@ export const TOOLS_IT: ToolsDoc = {
             },
             example:
                 "Ci sono pattern in come mangio — tipo cene tardive o saltare la colazione?",
+        },
+        get_eating_review: {
+            description:
+                "Rivedi come hai mangiato nell'ultima settimana: un punteggio da 0 a 100, cosa è andato bene e cosa migliorare — pasti concentrati la sera, giorni di eccesso (anche nel weekend), proteine, fibre, zuccheri, alcol, colazione, acqua e quanto è completo il tuo registro.",
+            params: {
+                end_date:
+                    "Ultimo giorno della finestra di 7 giorni (AAAA-MM-GG). Predefinito: ieri.",
+            },
+            example:
+                "Come ho mangiato nell'ultima settimana? Cosa dovrei migliorare?",
         },
         get_profile: {
             description:

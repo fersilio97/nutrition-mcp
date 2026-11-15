@@ -40,7 +40,7 @@ export const CHROME_IT: ChromeCopy = {
     menu: {
         howSmall: "3 passaggi",
         installSmall: "meno di un minuto",
-        toolsSmall: "39 strumenti",
+        toolsSmall: "40 strumenti",
         examplesSmall: "demo live",
         liveStatsSmall: "da quando hai aperto la pagina",
         alternatives: "Alternative",

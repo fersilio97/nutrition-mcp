@@ -6,17 +6,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_DE: ToolsDoc = {
     meta: {
-        title: "Werkzeug-Referenz: Alle 39 Werkzeuge",
+        title: "Werkzeug-Referenz: Alle 40 Werkzeuge",
         description:
-            "Alle 39 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt — Mahlzeiten erfassen, Barcodes scannen, deine Historie aus einer anderen App importieren, Wasser und Gewicht verfolgen, Ziele festlegen und Trends auswerten. Vollständige Referenz mit Beschreibungen und Beispielsätzen.",
+            "Alle 40 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt — Mahlzeiten erfassen, Barcodes scannen, deine Historie aus einer anderen App importieren, Wasser und Gewicht verfolgen, Ziele festlegen und Trends auswerten. Vollständige Referenz mit Beschreibungen und Beispielsätzen.",
         ogDescription:
-            "Alle 39 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt, inklusive eines CSV-Importers für deine Historie aus einer anderen App — mit Beschreibungen und Beispielsätzen.",
+            "Alle 40 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt, inklusive eines CSV-Importers für deine Historie aus einer anderen App — mit Beschreibungen und Beispielsätzen.",
     },
     hero: {
         eyebrow: "Referenz",
         title: "Alles, was deine KI kann",
         lead: "Du rufst diese Werkzeuge nie selbst auf — du sprichst einfach, und der Assistent wählt das richtige Werkzeug. Hier ist die vollständige Liste, die der Nutrition-MCP-Server bereitstellt, mit dem, was jedes tut, und einem Satz, der es auslöst.",
-        countBold: "39 Werkzeuge",
+        countBold: "40 Werkzeuge",
         countTail: "in 7 Bereichen",
     },
     categories: {
@@ -393,6 +393,16 @@ export const TOOLS_DE: ToolsDoc = {
             },
             example:
                 "Gibt es Muster darin, wie ich esse — wie späte Abendessen oder ausgelassenes Frühstück?",
+        },
+        get_eating_review: {
+            description:
+                "Werte deine letzte Woche aus: ein Score von 0–100, was gut lief und was besser werden kann — spätlastiges Essen, Ausreißertage (auch Überessen am Wochenende), Eiweiß, Ballaststoffe, Zucker, Alkohol, Frühstück, Wasser und wie vollständig du protokolliert hast.",
+            params: {
+                end_date:
+                    "Letzter Tag des 7-Tage-Fensters (JJJJ-MM-TT). Standard: gestern.",
+            },
+            example:
+                "Wie habe ich letzte Woche gegessen — was sollte ich verbessern?",
         },
         get_profile: {
             description:
