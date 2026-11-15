@@ -257,9 +257,10 @@ export interface FlagInput {
     trend: TrendWeight | null;
     /** Resting burn the deficit is measured against (calibrated when applied). */
     restingKcal: number | null;
-    /** The formula BMR from the body details: the intake floor's anchor, kept
-     *  off the calibrated baseline so a safety floor does not drift with
-     *  logging noise. */
+    /** The intake floor's anchor: the resting figure chosen in Body details,
+     *  i.e. the calibrated baseline when calibration is applied, else the
+     *  formula BMR. (Days with bad data are excluded from calibration on the
+     *  Meals tab, which keeps the baseline clean.) */
     bmrKcal: number | null;
     /** A steady active-kcal figure (the window's mean), not a part-finished day. */
     activeKcal: number | null;
@@ -433,10 +434,10 @@ export interface RecommendedRates {
     loss_binding: LossLimit | "minor" | null;
     /** The steady active-kcal figure the deficit limits were worked out from. */
     active_ref_kcal: number;
-    /** The intake floor itself, kcal: max(BMR, 1,200 / 1,500), and whether
-     *  the BMR or the usual minimum set it. */
+    /** The intake floor itself, kcal: max(resting figure, 1,200 / 1,500), and
+     *  whether the resting figure or the usual minimum set it. */
     intake_floor_kcal: number;
-    intake_floor_source: "bmr" | "minimum";
+    intake_floor_source: "resting" | "minimum";
 }
 
 export type LossLimit =
@@ -456,7 +457,8 @@ export type LossLimit =
 export function recommendedRates(i: {
     trendG: number | null;
     restingKcal: number | null;
-    /** Formula BMR from the body details: the intake floor's anchor. */
+    /** The intake floor's anchor: the resting figure chosen in Body details
+     *  (calibrated baseline when applied, else formula BMR). */
     bmrKcal: number | null;
     activeKcal: number;
     kcalPerGram: number;
@@ -513,7 +515,8 @@ export function recommendedRates(i: {
         loss_binding: binding,
         active_ref_kcal: Math.round(i.activeKcal),
         intake_floor_kcal: Math.round(Math.max(i.bmrKcal ?? 0, minimum)),
-        intake_floor_source: (i.bmrKcal ?? 0) >= minimum ? "bmr" : "minimum",
+        intake_floor_source:
+            (i.bmrKcal ?? 0) >= minimum ? "resting" : "minimum",
     };
 }
 
@@ -621,13 +624,15 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
           inWindow.length
         : (row?.active_kcal ?? 0);
     const age = i.body.birth_date ? ageOn(i.body.birth_date, i.today) : null;
-    // The formula BMR from the body details anchors the intake floor; the
-    // (possibly calibrated) resting burn measures the deficit.
+    // The formula BMR (for display) and the resting figure the user chose in
+    // Body details (calibrated when applied), which both measures the deficit
+    // and anchors the intake floor.
     const bmr = i.calibration.bmr_kcal ?? null;
+    const floorBase = row?.bmr_kcal ?? bmr;
     const limits = recommendedRates({
         trendG: trend?.weight_g ?? null,
         restingKcal: row?.bmr_kcal ?? null,
-        bmrKcal: bmr,
+        bmrKcal: floorBase,
         activeKcal: activeRef,
         kcalPerGram: k,
         tefShare: f,
@@ -655,7 +660,7 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
             plan,
             trend,
             restingKcal: row?.bmr_kcal ?? null,
-            bmrKcal: bmr,
+            bmrKcal: floorBase,
             activeKcal: activeRef,
             goalKcal: mode === "fixed" ? null : steadyGoal,
             kcalPerGram: k,

@@ -376,16 +376,16 @@ describe("goalFlags", () => {
         ).not.toContain("low_intake");
     });
 
-    test("the floor is anchored on the formula BMR, not the calibrated baseline", () => {
-        // A calibrated baseline that drifted low must not lower the floor...
+    test("the floor follows the anchor it is given, not the deficit's resting figure", () => {
+        // The anchor (bmrKcal) is the resting figure chosen in Body details;
+        // restingKcal only measures the deficit.
         expect(
             codes(input({ restingKcal: 1500, bmrKcal: 1700, goalKcal: 1650 })),
         ).toContain("low_intake");
-        // ...nor one that drifted high raise it.
         expect(
             codes(input({ restingKcal: 2000, bmrKcal: 1700, goalKcal: 1750 })),
         ).not.toContain("low_intake");
-        // With no BMR the usual minimum still applies.
+        // With no anchor the usual minimum still applies.
         expect(codes(input({ bmrKcal: null, goalKcal: 1400 }))).toContain(
             "low_intake",
         );
@@ -500,6 +500,25 @@ describe("derived goals in the dashboard payload", () => {
         });
         expect(p.goalPlan.flags.map((f) => f.code)).toContain("fast_loss");
         expect(p.goalPlan.goal_kcal).not.toBeNull();
+    });
+
+    test("the intake floor follows the resting basis chosen in Body details", () => {
+        for (const scenario of ["calibrate", "offset"] as const) {
+            const f = buildScenario(scenario, TODAY);
+            const p = buildDashboardPayload(
+                previewInputs({ ...f, goals: null }, 30, TODAY),
+            );
+            const min = p.body.sex === "male" ? 1500 : 1200;
+            // resting_kcal is the calibrated baseline when calibration is
+            // applied, else the formula BMR: the floor anchors on it.
+            const anchor = p.goalPlan.resting_kcal!;
+            expect(p.goalPlan.limits.intake_floor_kcal).toBe(
+                Math.round(Math.max(anchor, min)),
+            );
+            expect(p.goalPlan.resting_basis).toBe(
+                p.calibration.applied ? "calibrated" : "formula",
+            );
+        }
     });
 
     test("protein holds while carbs and fat follow the day's calories", () => {
@@ -660,7 +679,7 @@ describe("recommendedRates", () => {
         expect(r.max_loss_g_per_day).toBeCloseTo(67.9, 1);
         // The row shows the exact floor, and says the BMR set it.
         expect(r.intake_floor_kcal).toBe(1726);
-        expect(r.intake_floor_source).toBe("bmr");
+        expect(r.intake_floor_source).toBe("resting");
         // A low BMR falls back to the usual minimum.
         const low = recommendedRates({ ...base, bmrKcal: 1300 });
         expect(low.intake_floor_kcal).toBe(1500);

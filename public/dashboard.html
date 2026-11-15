@@ -5814,14 +5814,20 @@
                         ],
                         [
                             b === "intake_floor",
-                            L.intake_floor_source === "bmr"
+                            L.intake_floor_source === "resting"
                                 ? "Eating no less than " +
                                   fmt(L.intake_floor_kcal) +
-                                  " kcal (your BMR, from your body details)"
+                                  (p.resting_basis === "calibrated"
+                                      ? " kcal (your calibrated baseline)"
+                                      : " kcal (your BMR, from your body details)")
                                 : "Eating no less than " +
                                   fmt(L.intake_floor_kcal) +
-                                  " kcal (the usual minimum; your BMR of " +
-                                  fmt(p.bmr_kcal) +
+                                  " kcal (the usual minimum; your " +
+                                  (p.resting_basis === "calibrated"
+                                      ? "calibrated baseline"
+                                      : "BMR") +
+                                  " of " +
+                                  fmt(p.resting_kcal) +
                                   " is lower)",
                             lim.intake_floor,
                         ],
@@ -5869,9 +5875,9 @@
                         (p.tef_share * 100).toFixed(1) +
                         '% average digestion), the same "Est. burn" as the goal.' +
                         (p.resting_basis === "calibrated"
-                            ? " The floor uses your BMR of " +
+                            ? " The floor uses the same calibrated baseline, as set in Body details. Days with bad data can be excluded on the Meals tab so they do not skew it (your BMR is " +
                               fmt(p.bmr_kcal) +
-                              " kcal, not the calibrated baseline, so it does not drift with logging noise."
+                              " kcal)."
                             : "") +
                         " Weight change is counted at " +
                         p.kcal_per_gram +
