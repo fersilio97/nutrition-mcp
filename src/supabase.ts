@@ -647,6 +647,9 @@ export interface Profile {
     resting_basis?: "formula" | "calibrated";
     energy_kcal_per_gram: number | null;
     trend_window_days: number | null;
+    /** Last 7 days chart: what its red measures. NULL = "surplus". Optional
+     *  because rows read before the migration carry no such key. */
+    week_chart_mode?: "surplus" | "goal" | null;
     created_at: string;
     updated_at: string;
 }
@@ -792,6 +795,7 @@ export async function upsertProfile(
         resting_basis?: "formula" | "calibrated";
         energy_kcal_per_gram?: number | null;
         trend_window_days?: number | null;
+        week_chart_mode?: "surplus" | "goal" | null;
     },
 ): Promise<Profile> {
     const payload: Record<string, unknown> = {
@@ -820,6 +824,8 @@ export async function upsertProfile(
         payload.energy_kcal_per_gram = patch.energy_kcal_per_gram;
     if (patch.trend_window_days !== undefined)
         payload.trend_window_days = patch.trend_window_days;
+    if (patch.week_chart_mode !== undefined)
+        payload.week_chart_mode = patch.week_chart_mode;
 
     const { data, error } = await getSupabase()
         .from("profiles")

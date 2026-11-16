@@ -582,6 +582,8 @@ export function previewInputs(
 /** What the dev preview has "written" this session, held in its memory. */
 export interface PreviewEdits {
     body?: BodyDetails;
+    /** Last 7 days chart mode saved from the page. */
+    weekChartMode?: "surplus" | "goal";
     restingBasis?: "formula" | "calibrated";
     /** Calibration day choices: true = count, false = exclude. */
     dayOverrides?: Record<string, boolean>;
@@ -648,6 +650,8 @@ export function scenarioWithEdits(
             .map((w) => (wPatch[w.id] ? { ...w, ...wPatch[w.id] } : w));
     }
     if (edits.model) fx.profile = { ...fx.profile, ...edits.model };
+    if (edits.weekChartMode)
+        fx.profile = { ...fx.profile, week_chart_mode: edits.weekChartMode };
     if (edits.goalCalories !== undefined)
         fx.goals = {
             ...(fx.goals ?? emptyGoals()),

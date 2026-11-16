@@ -91,6 +91,12 @@
                 --accent-soft: #e4efe6;
                 --focus-ring: #2f6440;
                 --kcal: #4a6a8f;
+                /* Last 7 days (Today tab): eaten bar, est. burn line, the
+                   red part, and the goal tick (ink). */
+                --wk-eaten: #3e5f8a;
+                --wk-burn: #e0a526;
+                --wk-red: #c8553d;
+                --wk-goal: #1b2a1f;
                 --protein: #6d4fc2;
                 --carbs: #2f7d3a;
                 --fat: #c2405e;
@@ -132,6 +138,10 @@
                     --accent-soft: #18291f;
                     --focus-ring: #9ad6a8;
                     --kcal: #9db7d6;
+                    --wk-eaten: #7f9fc4;
+                    --wk-burn: #f0bf4c;
+                    --wk-red: #e07a5f;
+                    --wk-goal: var(--ink);
                     --protein: #b6a1f2;
                     --carbs: #8acb7f;
                     --fat: #f08aa0;
@@ -172,6 +182,10 @@
                 --accent-soft: #18291f;
                 --focus-ring: #9ad6a8;
                 --kcal: #9db7d6;
+                --wk-eaten: #7f9fc4;
+                --wk-burn: #f0bf4c;
+                --wk-red: #e07a5f;
+                --wk-goal: var(--ink);
                 --protein: #b6a1f2;
                 --carbs: #8acb7f;
                 --fat: #f08aa0;
@@ -2154,6 +2168,35 @@
                 stroke: var(--rule);
                 stroke-width: 2;
             }
+            /* Last 7 days: the approved design (bars = eaten, tick = goal,
+               amber line = est. burn, red = over the chosen reference). */
+            .wk-eaten {
+                fill: var(--wk-eaten);
+            }
+            .wk-red {
+                fill: var(--wk-red);
+            }
+            .wk-goal {
+                stroke: var(--wk-goal);
+                stroke-width: 3;
+            }
+            .wk-burn {
+                fill: none;
+                stroke: var(--wk-burn);
+                stroke-width: 2.5;
+                stroke-linejoin: round;
+            }
+            .wk-burn-dot {
+                fill: var(--wk-burn);
+            }
+            .wk-today {
+                opacity: 0.4;
+            }
+            .wk-mode {
+                display: flex;
+                justify-content: flex-end;
+                margin: 4px 0 6px;
+            }
             .dim {
                 opacity: 0.55;
             }
@@ -2223,6 +2266,79 @@
                 margin-top: 4px;
                 padding-top: 6px;
                 border-top: 1px solid var(--rule);
+            }
+
+            /* Last 7 days tooltip: the chart's own marks as keys, a
+               heavy rule above the results, the lead result bold and the
+               other one smaller and grey. */
+            #tip .wk-k {
+                display: inline-flex;
+                justify-content: center;
+                align-self: center;
+                width: 14px;
+                margin-right: 7px;
+            }
+            #tip .wk-sq {
+                width: 10px;
+                height: 10px;
+                border-radius: 2px;
+                background: var(--wk-eaten);
+            }
+            #tip .wk-sq-red {
+                background: var(--wk-red);
+            }
+            #tip .wk-sq-out {
+                background: transparent;
+                box-shadow: inset 0 0 0 2px var(--wk-eaten);
+            }
+            #tip .wk-tk {
+                width: 14px;
+                height: 3px;
+                background: var(--wk-goal);
+            }
+            #tip .wk-ln {
+                position: relative;
+                width: 14px;
+                height: 2px;
+                background: var(--wk-burn);
+            }
+            #tip .wk-ln::after {
+                content: "";
+                position: absolute;
+                left: 4px;
+                top: -2.5px;
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: var(--wk-burn);
+            }
+            #tip .row.wk-big b {
+                font-size: 1.15em;
+            }
+            #tip .row b small {
+                font-weight: 400;
+                color: var(--ink-3, var(--ink-2));
+            }
+            #tip .wk-sub,
+            #tip .wk-g {
+                padding: 0 0 3px 21px;
+                font-size: 0.92em;
+                color: var(--ink-3, var(--ink-2));
+                font-variant-numeric: tabular-nums;
+            }
+            #tip .row.wk-res {
+                margin-top: 5px;
+                padding-top: 7px;
+                border-top: 3px solid var(--rule);
+            }
+            #tip .row.wk-res span {
+                color: var(--ink);
+            }
+            #tip .row.wk-sec,
+            #tip .row.wk-sec b {
+                font-size: 0.92em;
+                font-weight: 500;
+                color: var(--ink-2);
             }
 
             /* ---------- banners, notices, status ---------- */
@@ -4490,6 +4606,10 @@
                     if (prefButton) {
                         const key = prefButton.dataset.chartPref;
                         const value = prefButton.dataset.value;
+                        if (key === "week-chart") {
+                            setWeekMode(value);
+                            return;
+                        }
                         if (key === "macro-segments")
                             macroSegments = value === "on";
                         if (key === "macro-totals")
@@ -4771,6 +4891,19 @@
                     return t.charAt(0).toUpperCase() + t.slice(1);
                 }
                 const nz = (v) => (v == null ? "—" : fmt(v));
+                // How digestion (thermic effect of food) is worked out, for
+                // every text that names it: per macro (src/body.ts foodTef),
+                // unless the model runs with a fixed share (?tef=).
+                function digestionRule() {
+                    const f =
+                        data &&
+                        data.calibrationDetail &&
+                        data.calibrationDetail.constants &&
+                        data.calibrationDetail.constants.tef_fraction;
+                    return typeof f === "number"
+                        ? Math.round(f * 1000) / 10 + "% of what you eat"
+                        : "25% of protein kcal, 7.5% of carbs, 2% of fat";
+                }
                 function mealItem(m) {
                     return (
                         '<li><div class="m1"><span class="m-time">' +
@@ -6276,8 +6409,12 @@
                             ? ""
                             : "No calorie goal yet — add your body details for an estimated-burn default, or set one in Body. ") +
                         (data.calibration && data.calibration.applied
-                            ? "Each goal starts from your usual active calories and rises when your watch records more. Est. burn = resting (calibrated from your weight trend) + active + 10% of what you eat for digestion — estimates, not measurements."
-                            : "Each goal starts from your usual active calories and rises when your watch records more. Est. burn = resting (Mifflin-St Jeor) + active + 10% of what you eat for digestion — estimates, not measurements.") +
+                            ? "Each goal starts from your usual active calories and rises when your watch records more. Est. burn = resting (calibrated from your weight trend) + active + digestion (" +
+                              digestionRule() +
+                              ") — estimates, not measurements."
+                            : "Each goal starts from your usual active calories and rises when your watch records more. Est. burn = resting (Mifflin-St Jeor) + active + digestion (" +
+                              digestionRule() +
+                              ") — estimates, not measurements.") +
                         "</p></section></div>" +
                         '<div class="col">' +
                         '<section class="rv" aria-labelledby="h-strip">' +
@@ -6286,11 +6423,18 @@
                             id: "h-strip",
                             title: "Last 7 days",
                             aside: '<button type="button" class="link-btn" data-go="trends">See trends <span class="chev" aria-hidden="true">›</span></button>',
-                            note: "Scale change, estimated change and kcal balance over complete logged days; then calories per day with each day’s goal as a tick.",
+                            note: "Scale change, estimated change and kcal balance over complete logged days; then what you ate each day against its goal and your estimated burn.",
                         }) +
                         weekPairHtml() +
                         (anyLogged(last7) || last7.some((r) => r.goal_calories)
-                            ? '<div class="plot" id="strip-plot"></div>'
+                            ? '<div class="wk-mode">' +
+                              chartPref("week-chart", "Red shows", weekMode(), [
+                                  ["surplus", "Surplus"],
+                                  ["goal", "Goal exceeded"],
+                              ]) +
+                              '</div><div id="wk-legend">' +
+                              weekLegendHtml() +
+                              '</div><div class="plot" id="strip-plot"></div>'
                             : '<p class="empty">Nothing logged in the last 7 days.</p>') +
                         "</section>" +
                         '<section class="rv" aria-labelledby="h-meals-today">' +
@@ -6334,19 +6478,199 @@
                     });
                 };
 
+                // ---------- Last 7 days (Today tab) ----------
+                // Bars = eaten, a tick = that day's goal, the amber line =
+                // est. burn (always), and red = the part of the bar over the
+                // reference the user picked: the burn ("Surplus", default)
+                // or the goal ("Goal exceeded"). Kept on the profile so it
+                // follows the user across devices. Today has no red until it
+                // ends — a running day is not yet over anything.
+                function weekMode() {
+                    return data.prefs && data.prefs.weekChartMode === "goal"
+                        ? "goal"
+                        : "surplus";
+                }
+                function weekRef(r, mode) {
+                    return mode === "goal" ? r.goal_calories : r.burn_kcal;
+                }
+                function weekLegendHtml() {
+                    const goal = weekMode() === "goal";
+                    return legend([
+                        [LG.bar("wk-eaten"), "Eaten"],
+                        [
+                            '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="1" y1="7" x2="13" y2="7" class="wk-goal"/></svg>',
+                            "Goal",
+                        ],
+                        [
+                            '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="wk-burn"/><circle cx="7" cy="7" r="3" class="wk-burn-dot"/></svg>',
+                            "Est. burn",
+                        ],
+                        [
+                            LG.bar("wk-red"),
+                            goal
+                                ? "Over goal (eaten − goal)"
+                                : "Surplus (eaten − est. burn)",
+                        ],
+                    ]);
+                }
+                function setWeekMode(value) {
+                    if (value !== "surplus" && value !== "goal") return;
+                    const before = weekMode();
+                    data.prefs = Object.assign({}, data.prefs, {
+                        weekChartMode: value,
+                    });
+                    document
+                        .querySelectorAll('[data-chart-pref="week-chart"]')
+                        .forEach(function (b) {
+                            b.setAttribute(
+                                "aria-pressed",
+                                String(b.dataset.value === value),
+                            );
+                        });
+                    const lg = $("wk-legend");
+                    if (lg) lg.innerHTML = weekLegendHtml();
+                    CHARTS.today();
+                    if (before === value) return;
+                    fetch("/api/dashboard/prefs", {
+                        method: "POST",
+                        headers: {
+                            Authorization: "Bearer " + token,
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ weekChartMode: value }),
+                    })
+                        .then(function (r) {
+                            if (r.status === 401) return signOut();
+                            if (!r.ok) throw new Error("save");
+                        })
+                        .catch(function () {
+                            // Not saved: the chart keeps the choice for this
+                            // visit only; the next load shows the saved one.
+                        });
+                }
+                // The tooltip: the chart's own marks in the chart's order,
+                // then both results under a heavy rule. The mode picks which
+                // result leads; grams go under Surplus/Deficit. A running
+                // day has no results yet.
+                function weekTip(r, mode) {
+                    const sq = (cls) =>
+                        '<i class="wk-k"><i class="' + cls + '"></i></i>';
+                    const row = (k, label, value, cls) =>
+                        '<div class="row' +
+                        (cls ? " " + cls : "") +
+                        '"><span>' +
+                        k +
+                        label +
+                        "</span><b>" +
+                        value +
+                        "</b></div>";
+                    const kcal = " <small>kcal</small>";
+                    let html = '<div class="t-date">' + esc(r.title) + "</div>";
+                    const text = [r.title];
+                    html += row(
+                        sq("wk-sq"),
+                        "Eaten",
+                        fmt(r.calories || 0) + kcal,
+                        "wk-big",
+                    );
+                    text.push("Eaten " + fmt(r.calories || 0) + " kcal");
+                    if (r.goal_calories) {
+                        html += row(sq("wk-tk"), "Goal", fmt(r.goal_calories));
+                        text.push("Goal " + fmt(r.goal_calories));
+                    }
+                    if (r.burn_kcal != null) {
+                        html += row(sq("wk-ln"), "Est. burn", fmt(r.burn_kcal));
+                        text.push("Est. burn " + fmt(r.burn_kcal));
+                        if (r.bmr_kcal != null) {
+                            const act = r.active_kcal || 0;
+                            const dig = Math.max(
+                                0,
+                                r.burn_kcal - r.bmr_kcal - act,
+                            );
+                            const parts =
+                                (data.calibration && data.calibration.applied
+                                    ? "Calibrated "
+                                    : "BMR ") +
+                                fmt(r.bmr_kcal) +
+                                " + digestion " +
+                                fmt(dig) +
+                                " + active " +
+                                fmt(act);
+                            html += '<div class="wk-sub">' + parts + "</div>";
+                            text.push(parts);
+                        }
+                    }
+                    if (!r.in_progress && r.mealCount > 0) {
+                        const bal =
+                            r.burn_kcal != null && r.balance_kcal != null
+                                ? {
+                                      label:
+                                          r.balance_kcal > 0
+                                              ? "Surplus"
+                                              : "Deficit",
+                                      v: r.balance_kcal,
+                                      g: r.balance_g,
+                                  }
+                                : null;
+                        const vsGoal = r.goal_calories
+                            ? {
+                                  label:
+                                      r.calories > r.goal_calories
+                                          ? "Over goal"
+                                          : "Under goal",
+                                  v: Math.round(r.calories - r.goal_calories),
+                              }
+                            : null;
+                        const res = (o, lead, grams) =>
+                            row(
+                                sq(
+                                    o.v > 0
+                                        ? "wk-sq wk-sq-red"
+                                        : "wk-sq wk-sq-out",
+                                ),
+                                lead ? "<b>" + o.label + "</b>" : o.label,
+                                fmtSigned(o.v) + kcal,
+                                lead ? "wk-res" : "wk-sec",
+                            ) +
+                            (grams && o.g != null
+                                ? '<div class="wk-g">≈ ' +
+                                  fmtSigned(o.g) +
+                                  " g estimated</div>"
+                                : "");
+                        const first = mode === "goal" ? vsGoal : bal;
+                        const second = mode === "goal" ? bal : vsGoal;
+                        let done = false;
+                        [first, second].forEach(function (o) {
+                            if (!o) return;
+                            html += res(o, !done, o === bal);
+                            text.push(o.label + " " + fmtSigned(o.v) + " kcal");
+                            done = true;
+                        });
+                    }
+                    return { html: html, text: text.join(". ") + "." };
+                }
+
                 CHARTS.today = function () {
                     const host = $("strip-plot");
                     if (!host || !host.clientWidth) return;
+                    const mode = weekMode();
                     const rows = data.daily.slice(-7).map(dayRow);
                     const logged = rows.filter((r) => r.mealCount > 0).length;
+                    const over = rows.filter(function (r) {
+                        const ref = weekRef(r, mode);
+                        return !r.in_progress && ref && r.calories > ref;
+                    }).length;
                     const c = chartSvg(
                         host,
                         innerWidth <= 480 ? 120 : 140,
                         "Calories for the last 7 days: " +
                             plural(logged, "day") +
                             " logged, " +
-                            rows.filter(isOver).length +
-                            " over goal. Use the arrow keys to read each day.",
+                            over +
+                            (mode === "goal"
+                                ? " over goal"
+                                : " over the estimated burn") +
+                            ". Use the arrow keys to read each day.",
                     );
                     const svg = c.svg;
                     const top = 8;
@@ -6354,14 +6678,49 @@
                     const peak = Math.max.apply(
                         null,
                         rows.map((r) =>
-                            Math.max(r.calories, r.goal_calories || 0),
+                            Math.max(
+                                r.calories,
+                                r.goal_calories || 0,
+                                r.burn_kcal || 0,
+                            ),
                         ),
                     );
                     const maxY = niceMax(Math.max(peak, 500) * 1.05);
                     const yAt = (v) => base - (v / maxY) * (base - top);
                     const lay = bandLayout(rows.length, c.w);
                     lay.barW = Math.min(lay.barW, 44);
-                    calBars(svg, rows, 0, c.w, yAt, base, lay);
+                    rows.forEach(function (r, i) {
+                        if (r.calories <= 0) return;
+                        const x = lay.bw * i + (lay.bw - lay.barW) / 2;
+                        const w = lay.barW;
+                        const ref = weekRef(r, mode);
+                        const red =
+                            !r.in_progress && ref && r.calories > ref
+                                ? ref
+                                : null;
+                        const cut = red == null ? r.calories : red;
+                        const cls = r.in_progress ? " wk-today" : "";
+                        svg.appendChild(
+                            svgEl("path", {
+                                d: rectPath(x, yAt(cut), w, base - yAt(cut)),
+                                class: "wk-eaten grow" + cls,
+                                style: growDelay(i),
+                            }),
+                        );
+                        if (red != null)
+                            svg.appendChild(
+                                svgEl("path", {
+                                    d: rectPath(
+                                        x,
+                                        yAt(r.calories),
+                                        w,
+                                        yAt(red) - yAt(r.calories),
+                                    ),
+                                    class: "wk-red grow",
+                                    style: growDelay(i),
+                                }),
+                            );
+                    });
                     svg.appendChild(
                         svgEl("line", {
                             x1: 0,
@@ -6372,20 +6731,23 @@
                         }),
                     );
                     const cols = [];
+                    const burnPts = [];
                     rows.forEach(function (r, i) {
                         const cx = lay.bw * (i + 0.5);
                         if (r.goal_calories) {
-                            const half = lay.barW / 2 + 2;
+                            const half = lay.barW / 2 + 3;
                             svg.appendChild(
                                 svgEl("line", {
                                     x1: cx - half,
                                     x2: cx + half,
                                     y1: yAt(r.goal_calories),
                                     y2: yAt(r.goal_calories),
-                                    class: "m-tick",
+                                    class: "wk-goal",
                                 }),
                             );
                         }
+                        if (r.burn_kcal != null)
+                            burnPts.push([cx, yAt(r.burn_kcal)]);
                         svgText(
                             svg,
                             cx,
@@ -6395,8 +6757,27 @@
                             }),
                             "xl" + (r.in_progress ? " now" : ""),
                         );
-                        const tc = calTip(r);
+                        const tc = weekTip(r, mode);
                         cols.push({ x: cx, html: tc.html, text: tc.text });
+                    });
+                    if (burnPts.length > 1)
+                        svg.appendChild(
+                            svgEl("polyline", {
+                                points: burnPts
+                                    .map((p) => p[0] + "," + p[1])
+                                    .join(" "),
+                                class: "wk-burn",
+                            }),
+                        );
+                    burnPts.forEach(function (p) {
+                        svg.appendChild(
+                            svgEl("circle", {
+                                cx: p[0],
+                                cy: p[1],
+                                r: 3.5,
+                                class: "wk-burn-dot",
+                            }),
+                        );
                     });
                     inspect(svg, cols, top, base);
                 };
@@ -6771,7 +7152,9 @@
                         step(
                             4,
                             "Your baseline (without exercise)",
-                            "baseline = TDEE − average watch active kcal − digestion (10% of intake)",
+                            "baseline = TDEE − average watch active kcal − digestion (" +
+                                digestionRule() +
+                                ")",
                             " = " +
                                 v(tdee) +
                                 " − " +
@@ -6905,7 +7288,9 @@
                         ) +
                         '<p class="calc-foot">Every day on the chart repeats these steps over the ' +
                         d.constants.window_days +
-                        " days before it. 6 kcal per gram and 10% digestion are population averages. Figures are rounded, so the substituted numbers can differ from the result by a few kcal.</p></details>"
+                        " days before it. 6 kcal per gram and the digestion rates (" +
+                        digestionRule() +
+                        ") are population averages. Figures are rounded, so the substituted numbers can differ from the result by a few kcal.</p></details>"
                     );
                 }
                 document.addEventListener(
@@ -7390,7 +7775,9 @@
                                       ? "high"
                                       : "low") +
                                   ".") +
-                            ' <span class="aside">(It assumes your resting burn + your watch’s active kcal + digestion (10% of what you eat); a “low” reading means you burn more than that.)</span>';
+                            ' <span class="aside">(It assumes your resting burn + your watch’s active kcal + digestion (' +
+                            digestionRule() +
+                            "); a “low” reading means you burn more than that.)</span>";
                     }
                     return (
                         head +
@@ -7652,8 +8039,12 @@
                             : "No calorie goal set.") +
                         (hasBurn()
                             ? data.calibration && data.calibration.applied
-                                ? " Est. burn = resting (calibrated from your weight trend) + active + 10% of what you eat for digestion — estimates, not measurements."
-                                : " Est. burn = resting (Mifflin-St Jeor) + active + 10% of what you eat for digestion — estimates, not measurements."
+                                ? " Est. burn = resting (calibrated from your weight trend) + active + digestion (" +
+                                  digestionRule() +
+                                  ") — estimates, not measurements."
+                                : " Est. burn = resting (Mifflin-St Jeor) + active + digestion (" +
+                                  digestionRule() +
+                                  ") — estimates, not measurements."
                             : "") +
                         grouped;
                     $("trends-body").innerHTML =
@@ -9057,7 +9448,9 @@
                             ? factsRow(
                                   "Est. burn today",
                                   fmt(s.burn_today_kcal) + kcal,
-                                  "Resting + today’s active kcal + digestion (10% of what you eat)",
+                                  "Resting + today’s active kcal + digestion (" +
+                                      digestionRule() +
+                                      ")",
                               )
                             : miss("Est. burn today", ADD_BODY);
                     return '<dl class="facts-rows">' + h + "</dl>";

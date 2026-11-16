@@ -255,6 +255,17 @@ const server = Bun.serve({
             return json({ ok: true });
         }
 
+        // Same contract as production's display-preferences route.
+        if (req.method === "POST" && path === "/api/dashboard/prefs") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const b = await readJson(req);
+            const mode = b?.weekChartMode;
+            if (mode !== "surplus" && mode !== "goal")
+                return json({ error: "invalid_request" }, 400);
+            edits().weekChartMode = mode;
+            return json({ ok: true, weekChartMode: mode });
+        }
+
         if (req.method === "POST" && path === "/api/dashboard/goal") {
             if (!authed(req)) return json({ error: "invalid_token" }, 401);
             const b = await readJson(req);
