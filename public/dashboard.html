@@ -1186,6 +1186,93 @@
                 color: var(--ink);
                 font-weight: 600;
             }
+            /* Calibration gates as a checklist (calibrationNeedHtml). */
+            .req-count {
+                margin-left: var(--s2);
+                padding: 0.1em 0.55em;
+                border-radius: 999px;
+                background: var(--accent-soft, var(--line));
+                color: var(--ink);
+                font-family: var(--font-mono);
+                font-size: 0.7rem;
+                white-space: nowrap;
+            }
+            .req-list {
+                list-style: none;
+                margin: var(--s3) 0 var(--s2);
+                padding: 0;
+                display: grid;
+                gap: var(--s3);
+            }
+            .req {
+                display: grid;
+                grid-template-columns: 1.375rem minmax(0, 1fr);
+                gap: var(--s3);
+                align-items: start;
+            }
+            .req-ico {
+                width: 1.375rem;
+                height: 1.375rem;
+                border-radius: 50%;
+                border: 2px solid var(--ink-2);
+                display: grid;
+                place-items: center;
+                font-size: 0.75rem;
+                font-weight: 800;
+                line-height: 1;
+            }
+            .req.met .req-ico {
+                border-color: var(--accent);
+                background: var(--accent);
+                color: var(--bg);
+            }
+            .req-head {
+                margin: 0;
+                display: flex;
+                justify-content: space-between;
+                align-items: baseline;
+                gap: var(--s3);
+                font-weight: 600;
+                color: var(--ink);
+            }
+            .req.met .req-head {
+                font-weight: 400;
+                color: var(--ink-2);
+            }
+            .req-label small {
+                display: block;
+                font-weight: 400;
+                font-size: 0.8rem;
+                color: var(--ink-2);
+            }
+            .req-fig {
+                flex: none;
+                font-variant-numeric: tabular-nums;
+                font-size: var(--fs-small);
+            }
+            .req-bar {
+                display: block;
+                height: 4px;
+                margin-top: var(--s2);
+                border-radius: 2px;
+                background: var(--line);
+                overflow: hidden;
+            }
+            .req-bar i {
+                display: block;
+                height: 100%;
+                border-radius: inherit;
+                background: var(--ink-2);
+            }
+            .req.met .req-bar i {
+                background: var(--accent);
+            }
+            .req-hint {
+                margin: var(--s2) 0 0;
+                font-size: 0.8rem;
+                line-height: 1.45;
+                color: var(--ink-2);
+            }
             .goal-hint:empty {
                 display: none;
             }
@@ -2945,10 +3032,14 @@
             @media (min-width: 1024px) {
                 .body-grid {
                     grid-template-columns: 5fr 7fr;
+                    /* Only the weight panel sits beside the chart. The three
+                       boxes below take the full row, so an open box uses the
+                       width instead of being pinned to the 5fr column under a
+                       tall chart, and splits it with .box-cols instead. */
                     grid-template-areas:
                         "panel chart"
-                        "goal chart"
-                        "details chart"
+                        "goal goal"
+                        "details details"
                         "lab lab";
                     column-gap: clamp(2rem, 4vw, 3.5rem);
                     align-items: start;
@@ -2967,6 +3058,60 @@
                 }
                 .body-grid > .lab-sec {
                     grid-area: lab;
+                }
+                /* Inside a full-width box: what you set on the left, what it
+                   works out to on the right. The DOM order is the phone's
+                   reading order, so below 1024px nothing moves. */
+                .box-cols {
+                    display: grid;
+                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                    column-gap: clamp(2rem, 4vw, 3.5rem);
+                    align-items: start;
+                }
+                .box-cols > .plan-readout {
+                    margin-top: 0;
+                    padding-top: 0;
+                    border-top: 0;
+                }
+                /* The lab's table needs the full width, so its controls sit
+                   side by side above it instead: lookback and kcal/g share a
+                   row, and digestion (the widest switch) takes its own so no
+                   pill switch wraps onto two lines. */
+                .lab-controls {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    column-gap: clamp(1.5rem, 3vw, 2.5rem);
+                }
+                .lab-controls > .lab-row:nth-child(3) {
+                    grid-column: 1 / -1;
+                }
+                .lab-controls .lab-row {
+                    grid-template-columns: 1fr;
+                    gap: var(--s2);
+                }
+                .lab-controls .lab-reset {
+                    grid-column: 1 / -1;
+                    justify-self: start;
+                }
+                details.body-box > .note {
+                    max-width: 70ch;
+                }
+            }
+            .box-sub {
+                margin: 0 0 var(--s2);
+                font-family: var(--font-mono);
+                font-size: 0.7rem;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--ink-2);
+            }
+            .box-aside > .form-grid + .note {
+                margin-top: var(--s3);
+            }
+            /* Stacked on a phone, the second group's label needs air so it
+               does not read as a caption for the box above it. */
+            @media (max-width: 1023.98px) {
+                .box-aside > .box-sub:first-child {
+                    margin-top: var(--s6);
                 }
             }
             .w-now .fig-hero b {
@@ -3108,7 +3253,8 @@
                 font-size: 0.8rem;
                 color: var(--ink-2);
             }
-            details.body-box > .note {
+            details.body-box > .note,
+            details.body-box .box-main > .note {
                 margin: var(--s3) 0 var(--s4);
             }
             .body-form .form-foot {
@@ -5747,8 +5893,8 @@
                     if (!c || c.status === "ok") return "";
                     const w = c.window || {};
                     const rows = [];
-                    const add = (label, have, want, hint) =>
-                        rows.push({ label, have, want, hint });
+                    const add = (label, have, want, hint, sub) =>
+                        rows.push({ label, have, want, hint, sub });
                     if (c.status === "missing_bmr") {
                         rows.push({
                             label: "Height, birth date and sex in Body details",
@@ -5764,21 +5910,21 @@
                                   shortDay(w.last_date)
                                 : "";
                         add(
-                            "Time between your first and last weigh-in" +
-                                (range ? " (" + range + ")" : ""),
+                            "Days between your first and last weigh-in",
                             span,
                             21,
-                            "Counted in days. The span ends at your latest weigh-in, not today.",
+                            "The span ends at your latest weigh-in, not today.",
+                            range,
                         );
                         const wantSpan = Math.max(span, 21);
                         add(
-                            "Days with a full food log" +
-                                (range ? ", " + range : ""),
+                            "Days with a full food log",
                             c.counted_days || 0,
                             Math.ceil(wantSpan * 0.7),
                             "Out of the " +
                                 wantSpan +
                                 " days in that period, 70% need a full log. A day is full with 2+ meals and at least half your typical day’s calories. Marking a day on or off in the Meals tab changes this count straight away; a day with no meals can’t count.",
+                            range,
                         );
                         if (c.status === "too_noisy")
                             rows.push({
@@ -5789,37 +5935,73 @@
                                 text: "too scattered",
                             });
                     }
+                    // A checklist, not a table: each gate gets a tick or an
+                    // open ring, a bar towards its target, and its count, so
+                    // "what is left" reads at a glance. Rows with no count
+                    // (missing details, scattered weigh-ins) get no bar.
+                    let metCount = 0;
                     const items = rows
                         .map((r) => {
-                            const met = r.want != null && r.have >= r.want;
-                            const text =
-                                r.text ||
-                                (met
-                                    ? "✓ " + r.have + " of " + r.want
-                                    : r.have +
-                                      " of " +
-                                      r.want +
-                                      " needed · " +
-                                      (r.want - r.have) +
-                                      " to go");
+                            const counted = r.want != null;
+                            const met = counted && r.have >= r.want;
+                            if (met) metCount++;
+                            const fig = r.text
+                                ? r.text
+                                : met
+                                  ? r.have + " · needs " + r.want
+                                  : r.have +
+                                    " of " +
+                                    r.want +
+                                    " · " +
+                                    (r.want - r.have) +
+                                    " to go";
+                            const pct = counted
+                                ? Math.max(
+                                      0,
+                                      Math.min(
+                                          100,
+                                          Math.round((r.have / r.want) * 100),
+                                      ),
+                                  )
+                                : 0;
                             return (
-                                '<li class="' +
-                                (met ? "" : "bind") +
-                                '"><span>' +
+                                '<li class="req' +
+                                (met ? " met" : "") +
+                                '"><span class="req-ico" aria-hidden="true">' +
+                                (met ? "✓" : "") +
+                                '</span><div class="req-body"><p class="req-head"><span class="req-label">' +
                                 esc(r.label) +
-                                (r.hint && !met
-                                    ? "<br><small>" + esc(r.hint) + "</small>"
+                                '<span class="sr-only">' +
+                                (met ? " (met)" : " (not met yet)") +
+                                "</span>" +
+                                (r.sub
+                                    ? "<small>" + esc(r.sub) + "</small>"
                                     : "") +
-                                "</span><span>" +
-                                esc(text) +
-                                "</span></li>"
+                                '</span><span class="req-fig">' +
+                                esc(fig) +
+                                "</span></p>" +
+                                (counted
+                                    ? '<span class="req-bar" aria-hidden="true"><i style="width:' +
+                                      pct +
+                                      '%"></i></span>'
+                                    : "") +
+                                (r.hint && !met
+                                    ? '<p class="req-hint">' +
+                                      esc(r.hint) +
+                                      "</p>"
+                                    : "") +
+                                "</div></li>"
                             );
                         })
                         .join("");
                     return (
-                        '<details class="limit-how"><summary>Why it is using your BMR for now</summary><div><p class="note">There is not enough data yet for “Calibrated from my data”, so both choices give the same number. Calibration switches on when all of these are met:</p><ul class="limit-list">' +
+                        '<details class="limit-how"><summary>Why it is using your BMR for now <span class="req-count">' +
+                        metCount +
+                        " of " +
+                        rows.length +
+                        ' met</span></summary><div><p class="note">There is not enough data yet for “Calibrated from my data”, so both choices give the same number. Calibration switches on when all of these are met:</p><ol class="req-list">' +
                         items +
-                        "</ul></div></details>"
+                        "</ol></div></details>"
                     );
                 }
                 // The working behind today's derived goal, so the number
@@ -6252,6 +6434,7 @@
                         '<section class="goal-sec rv"><details class="body-box" id="goal-box"' +
                         (goalOpen ? " open" : "") +
                         "><summary>Calorie goal</summary>" +
+                        '<div class="box-cols"><div class="box-main">' +
                         '<div class="seg goal-seg" role="group" aria-label="Calorie goal type" id="g-mode">' +
                         goalSegHtml(v.mode) +
                         '</div><p class="note" id="g-note">' +
@@ -6268,9 +6451,9 @@
                         goalStatus.cls +
                         '" id="g-status" role="status">' +
                         esc(goalStatus.text) +
-                        "</span></div></form>" +
+                        "</span></div></form></div>" +
                         goalReadoutHtml() +
-                        "</details></section>"
+                        "</div></details></section>"
                     );
                 }
                 function setGoalStatus(text, cls) {
@@ -9722,15 +9905,15 @@
                             ? "your baseline burn calibrated from your weight trend"
                             : "your resting burn from Mifflin-St Jeor") +
                         ", plus your watch’s active calories).</p>" +
-                        '<form id="body-form" class="body-form" novalidate><div class="form-grid">' +
+                        '<form id="body-form" class="body-form" novalidate><div class="box-cols"><div class="box-main"><p class="box-sub">You</p><div class="form-grid">' +
                         '<div class="field"><label for="b-height">Height</label><span class="pair"><input class="input" id="b-height" type="number" inputmode="decimal" step="0.1" min="20" max="272" /><select class="input" id="b-unit" aria-label="Height unit"><option value="cm">cm</option><option value="in">in</option></select></span></div>' +
                         '<label class="field" for="b-birth">Birth date<input class="input" id="b-birth" type="date" /></label>' +
-                        '<label class="field wide" for="b-sex">Sex<select class="input" id="b-sex"><option value="">—</option><option value="male">Male</option><option value="female">Female</option></select></label></div>' +
-                        '<label class="field wide" for="b-resting">Baseline burn<select class="input" id="b-resting"><option value="formula">Formula (BMR)</option><option value="calibrated">Calibrated from my data</option></select></label>' +
-                        '<div class="form-grid"><label class="field" for="b-k">Energy per gram of weight change (kcal/g)<input class="input" id="b-k" type="number" inputmode="decimal" step="0.1" min="3" max="9" placeholder="' +
+                        '<label class="field wide" for="b-sex">Sex<select class="input" id="b-sex"><option value="">—</option><option value="male">Male</option><option value="female">Female</option></select></label></div></div><div class="box-aside"><p class="box-sub">Burn model</p>' +
+                        '<div class="form-grid"><label class="field wide" for="b-resting">Baseline burn<select class="input" id="b-resting"><option value="formula">Formula (BMR)</option><option value="calibrated">Calibrated from my data</option></select></label>' +
+                        '<label class="field" for="b-k">Kcal per gram<input class="input" id="b-k" type="number" inputmode="decimal" step="0.1" min="3" max="9" placeholder="' +
                         data.modelSettings.default_kcal_per_gram +
                         '" /></label>' +
-                        '<label class="field" for="b-win">Weight trend lookback (days)<input class="input" id="b-win" type="number" inputmode="numeric" step="1" min="' +
+                        '<label class="field" for="b-win">Lookback (days)<input class="input" id="b-win" type="number" inputmode="numeric" step="1" min="' +
                         data.modelSettings.min_window_days +
                         '" max="' +
                         data.modelSettings.max_window_days +
@@ -9773,6 +9956,7 @@
                                   ) +
                                   ") if you choose calibrated burn.</p>"
                                 : "") +
+                        "</div></div>" +
                         '<div class="form-foot"><button type="submit" class="btn primary" id="b-save">Save</button><span class="b-status ' +
                         bodyStatus.cls +
                         '" id="b-status" role="status">' +
