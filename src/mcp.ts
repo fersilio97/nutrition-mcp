@@ -650,6 +650,97 @@ async function effectiveGoals(
     );
 }
 
+/** effectiveGoals for many days at once: one dashboard payload for the whole
+ *  window instead of one per day. Used by every multi-day reader
+ *  (get_nutrition_summary, get_trends) so their goals are the same figures
+ *  get_goal_progress and the dashboard show — a derived goal (burn / rate /
+ *  date) has no stored calorie number, so reading the stored row there showed
+ *  no calorie goal and stale macros (audit 2026-11-16, vault bug 003). Days the
+ *  payload cannot answer (future dates, a read failure) fall back exactly as
+ *  effectiveGoals does. */
+async function effectiveGoalsByDate(
+    userId: string,
+    profile: Profile | null,
+    stored: NutritionGoals | null,
+    dates: string[],
+    activeByDate: Map<string, number>,
+): Promise<Map<string, ActivityAdjustment>> {
+    const out = new Map<string, ActivityAdjustment>();
+    if (dates.length === 0) return out;
+    const mode = resolveGoalMode(stored);
+    try {
+        const today = todayInTz(timezoneFromProfile(profile) ?? "UTC");
+        const earliest = [...dates].sort()[0]!;
+        const back = Math.round(
+            (Date.parse(`${today}T00:00:00Z`) -
+                Date.parse(`${earliest}T00:00:00Z`)) /
+                86_400_000,
+        );
+        const span = Math.min(365, Math.max(1, back + 1));
+        const payload = buildDashboardPayload(
+            await loadDashboardInputs(userId, span),
+        );
+        const rows = new Map(payload.daily.map((d) => [d.date, d]));
+        for (const date of dates) {
+            const row = rows.get(date);
+            if (row?.goal_calories != null)
+                out.set(
+                    date,
+                    derivedAdjustment(
+                        stored,
+                        { ...row, goal_calories: row.goal_calories },
+                        mode !== "fixed",
+                    ),
+                );
+        }
+    } catch (err) {
+        console.error(`[goal-plan] goals from payload failed: ${err}`);
+    }
+    const missing = dates.filter((d) => !out.has(d));
+    if (missing.length > 0) {
+        const fallback = await goalsWithBurnDefault(
+            userId,
+            profile,
+            stored,
+            missing[missing.length - 1]!,
+        );
+        for (const date of missing)
+            out.set(
+                date,
+                adjustGoalsForActivity(fallback, activeByDate.get(date)),
+            );
+    }
+    return out;
+}
+
+/** The mean of several days' goals, for readers that compare a window's
+ *  AVERAGE intake against one goal set (computeTrends). A field is null when
+ *  any day lacks it, so a partly-unset goal never averages into a fake one. */
+function meanGoals(
+    adjs: ActivityAdjustment[],
+    stored: NutritionGoals | null,
+): NutritionGoals | null {
+    const sets = adjs.map((a) => a.goals);
+    if (sets.length === 0 || sets.some((g) => g == null)) return stored;
+    const goals = sets as NutritionGoals[];
+    const mean = (k: keyof NutritionGoals) => {
+        const vals = goals.map((g) => g[k]);
+        if (vals.some((v) => v == null)) return null;
+        const sum = (vals as number[]).reduce((s, v) => s + Number(v), 0);
+        return Math.round((sum / vals.length) * 10) / 10;
+    };
+    return {
+        ...goals[goals.length - 1]!,
+        daily_calories:
+            mean("daily_calories") == null
+                ? null
+                : Math.round(mean("daily_calories")!),
+        daily_protein_g: mean("daily_protein_g"),
+        daily_carbs_g: mean("daily_carbs_g"),
+        daily_fat_g: mean("daily_fat_g"),
+    };
+}
+
 /** Stored goals, with the estimated burn standing in for an unset calorie goal
  *  (break-even until the user picks a target): the fallback behind
  *  effectiveGoals. A stored goal always wins; without height/birth date/sex/
@@ -2524,8 +2615,9 @@ export function registerTools(
                         1,
                         dateDiffDays(start_date, end_date) + 1,
                     );
-                    const tz = await getUserTimezone(userId);
-                    const locale = await getUserLocale(userId);
+                    const profile = await getProfile(userId);
+                    const tz = timezoneFromProfile(profile) ?? "UTC";
+                    const locale = localeFromProfile(profile) ?? "en";
                     const [meals, water, goals, activityRows] =
                         await Promise.all([
                             getMealsInRange(userId, start_date, end_date, tz),
@@ -2534,8 +2626,23 @@ export function registerTools(
                             activityRangeOrEmpty(userId, start_date, end_date),
                         ]);
                     const activeByDate = activityByDate(activityRows);
-
-                    const goalsPayload = goalsPayloadOf(goals, alcohol);
+                    // Every day's goal in effect (derived modes included), so
+                    // this reader agrees with get_goal_progress — vault bug 003.
+                    const rangeDates = Array.from(
+                        { length: daysInRange },
+                        (_, i) => shiftLocalDate(start_date, i),
+                    );
+                    const dayGoals = await effectiveGoalsByDate(
+                        userId,
+                        profile,
+                        goals,
+                        rangeDates,
+                        activeByDate,
+                    );
+                    const goalsPayload = goalsPayloadOf(
+                        dayGoals.get(end_date)?.goals ?? goals,
+                        alcohol,
+                    );
 
                     if (meals.length === 0 && water.length === 0) {
                         return {
@@ -2612,10 +2719,12 @@ export function registerTools(
                         // the range average down towards zero.
                         const present = nutrientPresence(dateMeals);
                         const header = `## ${date} (${dateMeals.length} meal${dateMeals.length === 1 ? "" : "s"})`;
-                        const dayAdj = adjustGoalsForActivity(
-                            goals,
-                            activeByDate.get(date),
-                        );
+                        const dayAdj =
+                            dayGoals.get(date) ??
+                            adjustGoalsForActivity(
+                                goals,
+                                activeByDate.get(date),
+                            );
                         sections.push(
                             `${header}${activityLine(dayAdj)}\n${formatProgress(totals, dayAdj.goals, alcohol, present)}`,
                         );
@@ -3015,15 +3124,51 @@ export function registerTools(
             return withAnalytics(
                 "get_nutrition_goals",
                 async () => {
-                    const [goals, unit] = await Promise.all([
+                    const [goals, profile] = await Promise.all([
                         getNutritionGoals(userId),
-                        getPreferredWeightUnit(userId),
+                        getProfile(userId),
                     ]);
+                    const unit = profile?.preferred_weight_unit ?? null;
+                    // The stored row alone hides the number a derived goal
+                    // (burn / rate / date) resolves to today, which is what
+                    // every progress reader shows — say both (vault bug 003).
+                    const today = todayInTz(
+                        timezoneFromProfile(profile) ?? "UTC",
+                    );
+                    const adj = await effectiveGoals(
+                        userId,
+                        profile,
+                        goals,
+                        today,
+                        null,
+                    ).catch(() => null);
+                    const g = adj?.goals;
+                    const todayLine =
+                        g?.daily_calories != null
+                            ? `\n\nIn effect today (${today}): ${Math.round(g.daily_calories)} kcal` +
+                              [
+                                  ["protein", g.daily_protein_g],
+                                  ["carbs", g.daily_carbs_g],
+                                  ["fat", g.daily_fat_g],
+                              ]
+                                  .filter(([, v]) => v != null)
+                                  .map(
+                                      ([k, v]) =>
+                                          ` · ${Math.round(Number(v))} g ${k}`,
+                                  )
+                                  .join("") +
+                              (adj?.base
+                                  ? ` — ${describeCalorieGoal(adj)}`
+                                  : "") +
+                              ". This is the figure get_goal_progress and the dashboard use."
+                            : "";
                     return {
                         content: [
                             {
                                 type: "text",
-                                text: formatGoals(goals, unit ?? "kg", alcohol),
+                                text:
+                                    formatGoals(goals, unit ?? "kg", alcohol) +
+                                    todayLine,
                             },
                         ],
                     };
@@ -4527,20 +4672,35 @@ export function registerTools(
                     const textBuckets = allBuckets.slice(-windowDays);
                     const seriesBuckets = allBuckets.slice(-30);
                     // computeTrends compares window AVERAGES against one goal
-                    // set. The adjusted goal is linear in active kcal
-                    // (base + a, macros × (1 + a/base)), so adjusting by the
-                    // window's mean active kcal gives exactly the mean of the
-                    // per-day adjusted goals — over the same days computeTrends
-                    // averages over.
+                    // set, so the text uses the mean of the per-day goals in
+                    // effect (effectiveGoalsByDate: the same figures
+                    // get_goal_progress and the dashboard show, derived modes
+                    // included). The widget draws one goal line: the end
+                    // date's, which is today's get_goal_progress goal.
                     const activeByDate = activityByDate(activityRows);
-                    const meanActive =
-                        textBuckets.reduce(
-                            (sum, b) => sum + (activeByDate.get(b.date) ?? 0),
-                            0,
-                        ) / Math.max(1, textBuckets.length);
-                    const trendAdj = adjustGoalsForActivity(goals, meanActive);
-
-                    const goalsPayload = goalsPayloadOf(goals, alcohol);
+                    const dayGoals = await effectiveGoalsByDate(
+                        userId,
+                        profile,
+                        goals,
+                        allBuckets.map((b) => b.date),
+                        activeByDate,
+                    );
+                    const textAdjs = textBuckets.map((b) =>
+                        dayGoals.get(b.date)!,
+                    );
+                    const meanActive = Math.round(
+                        textAdjs.reduce((s, a) => s + (a.activeKcal ?? 0), 0) /
+                            Math.max(1, textAdjs.length),
+                    );
+                    const trendAdj = {
+                        goals: meanGoals(textAdjs, goals),
+                        activeKcal: meanActive > 0 ? meanActive : null,
+                    };
+                    const endAdj = dayGoals.get(endDate);
+                    const goalsPayload = goalsPayloadOf(
+                        endAdj?.goals ?? goals,
+                        alcohol,
+                    );
 
                     return {
                         content: [
@@ -4552,7 +4712,7 @@ export function registerTools(
                                         trendAdj.goals,
                                     ) +
                                     (trendAdj.activeKcal
-                                        ? `\n\n(Targets include an average of ${trendAdj.activeKcal} active kcal/day recorded in this window, added to the ${goals?.daily_calories} kcal baseline.)`
+                                        ? `\n\n(Targets are the goals in effect each day, averaged over the window; they include an average of ${trendAdj.activeKcal} active kcal/day.)`
                                         : ""),
                             },
                         ],

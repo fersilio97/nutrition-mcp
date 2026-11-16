@@ -3091,6 +3091,81 @@ describe("get_nutrition_summary discloses its logged-day denominator", () => {
 // The same covered-days rule as fiber and sugar, but with no opt-in above it
 // and with the "never recorded" case as the norm rather than the exception —
 // so the summary is where a fabricated "0 mg average" would be most visible.
+// Vault bug 003 (UX audit 2026-11-16): under a derived goal (burn / rate /
+// date) there is no stored calorie number, and get_trends / get_nutrition_summary
+// read the stored row — so they showed no calorie goal and stale macros while
+// get_goal_progress showed the real one. Every reader must report the same
+// goal for the same day.
+describe("every goal reader agrees on today's derived goal", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    function stageBurnUser(): void {
+        db.profile = {
+            ...PROFILE_BASE,
+            height_cm: 170,
+            birth_date: "1997-06-27",
+            sex: "male",
+        } as actualSupabase.Profile;
+        db.goals = goals({
+            daily_calories: null,
+            calorie_goal_mode: "burn",
+            daily_carbs_g: 185,
+            daily_fat_g: 65,
+        });
+        db.weights = [
+            {
+                id: "w1",
+                user_id: "u1",
+                weight_g: 81_200,
+                logged_at: `${today}T08:00:00.000Z`,
+                notes: null,
+                created_at: `${today}T08:00:00.000Z`,
+                idempotency_key: null,
+            },
+        ];
+        db.meals = [
+            meal({
+                id: "m1",
+                logged_at: `${today}T09:00:00.000Z`,
+                calories: 250,
+            }),
+        ];
+    }
+
+    test("get_trends and get_nutrition_summary carry get_goal_progress's goals", async () => {
+        stageBurnUser();
+        await withTools(null, async (call) => {
+            const progress = (await call("get_goal_progress", {}))
+                .structuredContent as { goals: Record<string, number | null> };
+            const trends = (await call("get_trends", { days: 7 }))
+                .structuredContent as { goals: Record<string, number | null> };
+            const summary = (
+                await call("get_nutrition_summary", {
+                    start_date: today,
+                    end_date: today,
+                })
+            ).structuredContent as { goals: Record<string, number | null> };
+
+            expect(progress.goals.calories).toBeGreaterThan(0);
+            for (const k of ["calories", "protein_g", "carbs_g", "fat_g"]) {
+                expect(trends.goals[k]).toBe(progress.goals[k]!);
+                expect(summary.goals[k]).toBe(progress.goals[k]!);
+            }
+        });
+    });
+
+    test("get_nutrition_goals names the figure in effect today", async () => {
+        stageBurnUser();
+        await withTools(null, async (call) => {
+            const progress = (await call("get_goal_progress", {}))
+                .structuredContent as { goals: { calories: number } };
+            const text = textOf(await call("get_nutrition_goals", {}));
+            expect(text).toContain(
+                `In effect today (${today}): ${Math.round(progress.goals.calories)} kcal`,
+            );
+        });
+    });
+});
+
 describe("get_nutrition_summary reports caffeine over its covered days only", () => {
     const START = "2026-07-20";
     const END = "2026-07-24"; // 5 calendar days inclusive
