@@ -1163,6 +1163,11 @@
                 flex: none;
                 font-variant-numeric: tabular-nums;
             }
+            .limit-list li small {
+                display: block;
+                font-weight: 400;
+                color: var(--ink-2);
+            }
             .limit-list li.bind {
                 color: var(--ink);
                 font-weight: 600;
@@ -5050,35 +5055,84 @@
                 }
                 // The Today label's rows: Goal, Left or Over, Est. burn and
                 // Est. change, each with its explanation indented under it.
-                // What the Goal row says under its figure: the plan behind a
-                // derived goal, or the typed baseline plus active kcal.
+                // What the Goal row says under its figure, per Calorie goal
+                // mode, with every part as a number so the line adds up to
+                // the goal on screen. Active is the goal active (goal-plan.ts
+                // goalActiveKcal): the lookback average from the morning, or
+                // today's figure once the watch passes it. Digestion is the
+                // remainder — it is taken on the goal intake itself, which is
+                // what the ÷ (1 − share) gross-up means — so rounding can
+                // never break the sum.
+                function goalActivePart(p) {
+                    const a = p.goal_active_kcal || 0;
+                    const avg = p.active_avg_kcal;
+                    const label =
+                        avg == null || a > avg
+                            ? "active today"
+                            : "active (" + p.window_days + "-day avg)";
+                    return { kcal: a, text: fmt(a) + " " + label };
+                }
                 function goalSubText(t, goal) {
                     const p = data.goalPlan;
-                    if (p.mode === "rate" || p.mode === "date") {
-                        const w = round2(
-                            toUnit(p.rate_g_per_day * 7, data.weightUnit),
-                        );
-                        return (
-                            (p.reached
-                                ? "target reached: break-even"
-                                : "plan " +
-                                  sgn(w) +
-                                  " " +
-                                  data.weightUnit +
-                                  "/week") +
-                            " · resting + active ÷ (1 − " +
-                            (p.tef_share * 100).toFixed(0) +
-                            "% digestion)"
-                        );
-                    }
+                    const act = goalActivePart(p);
                     if (goalCustom())
-                        return t.active_kcal
-                            ? fmt(goal - t.active_kcal) +
-                                  " base + " +
-                                  fmt(t.active_kcal) +
-                                  " active"
+                        return act.kcal
+                            ? fmt(goal - act.kcal) + " base + " + act.text
                             : "";
-                    return "estimated burn: resting + active + digestion";
+                    if (p.resting_kcal == null) return "";
+                    const delta =
+                        p.mode === "rate" || p.mode === "date"
+                            ? Math.round(p.rate_g_per_day * p.kcal_per_gram)
+                            : 0;
+                    const digestion = goal - p.resting_kcal - act.kcal - delta;
+                    // No watch at all: leave active out rather than "+ 0".
+                    const burn =
+                        fmt(p.resting_kcal) +
+                        " resting (" +
+                        (p.resting_basis === "calibrated"
+                            ? "calibrated"
+                            : "BMR") +
+                        ") + " +
+                        (act.kcal ? act.text + " + " : "") +
+                        fmt(digestion) +
+                        " digestion";
+                    if (p.mode !== "rate" && p.mode !== "date")
+                        return "estimated burn: " + burn;
+                    if (p.reached)
+                        return (
+                            "Target reached · eating at break-even<br>" + burn
+                        );
+                    const u = data.weightUnit;
+                    const w = round2(toUnit(p.rate_g_per_day * 7, u));
+                    const target =
+                        p.mode === "date" &&
+                        p.target_weight_g != null &&
+                        p.target_date
+                            ? " · " +
+                              Math.round(toUnit(p.target_weight_g, u) * 10) /
+                                  10 +
+                              " " +
+                              u +
+                              " by " +
+                              shortDay(p.target_date)
+                            : "";
+                    return (
+                        "Plan " +
+                        sgn(w) +
+                        " " +
+                        u +
+                        "/week" +
+                        target +
+                        "<br>" +
+                        burn +
+                        (delta
+                            ? " " +
+                              (delta < 0 ? "−" : "+") +
+                              " " +
+                              fmt(Math.abs(delta)) +
+                              " for your plan"
+                            : "")
+                    );
                 }
                 // A red chip beside the goal when a plan breaks a rule of
                 // thumb. Advisory only: the goal itself is never changed.
@@ -5156,13 +5210,21 @@
                               factsRow(
                                   "Est. burn",
                                   fmt(t.burn_kcal) + kcal,
-                                  // The model's split, so the figure
-                                  // explains itself: resting + active + digestion.
+                                  // The model's split with real figures, so
+                                  // it reads beside the Goal line: same
+                                  // resting, but today's actual active and
+                                  // the digestion of what was eaten so far.
                                   t.bmr_kcal != null
                                       ? fmt(t.bmr_kcal) +
                                             " resting + " +
                                             fmt(t.active_kcal || 0) +
-                                            " active + digestion · est."
+                                            " active today + " +
+                                            fmt(
+                                                t.burn_kcal -
+                                                    t.bmr_kcal -
+                                                    (t.active_kcal || 0),
+                                            ) +
+                                            " digestion · so far"
                                       : "full day · estimate",
                               )
                             : factsRow("Est. burn", "—", ADD_BODY, {
@@ -5406,10 +5468,10 @@
                         return saved && goalCustom()
                             ? "Your goal is " +
                                   fmt(goalCustom()) +
-                                  " kcal plus each day’s active calories."
-                            : "Type a daily figure. Each day’s active calories are added on top.";
+                                  " kcal plus your usual active calories, more on a day your watch records more."
+                            : "Type a daily figure. Your usual active calories are added on top from the morning, and more on a day your watch records more.";
                     if (mode === "burn")
-                        return "Eat at break-even: your estimated burn (resting + active + digestion).";
+                        return "Eat at break-even: your estimated burn (resting + your usual active + digestion), rising on a day your watch records more.";
                     if (mode === "rate")
                         return "Choose how fast your weight should change. Your calories are worked out every day from your estimated burn and the energy in a gram of weight change.";
                     return "Choose a weight and a date. The rate that gets you there is recalculated every day from your smoothed weight trend, so the calories adapt as you get closer or fall behind.";
@@ -5520,52 +5582,80 @@
                     const c = data.calibration;
                     if (!c || c.status === "ok") return "";
                     const w = c.window || {};
-                    const plural = (n, s) => n + " " + s + (n === 1 ? "" : "s");
-                    const need = [];
+                    const rows = [];
+                    const add = (label, have, want, hint) =>
+                        rows.push({ label, have, want, hint });
                     if (c.status === "missing_bmr") {
-                        need.push("height, birth date and sex in Body details");
+                        rows.push({
+                            label: "Height, birth date and sex in Body details",
+                            text: "missing",
+                        });
                     } else {
-                        const weighIns = w.weighin_days || 0;
-                        if (weighIns < 8)
-                            need.push(
-                                plural(8 - weighIns, "more weigh-in day") +
-                                    " (" +
-                                    weighIns +
-                                    " of 8)",
-                            );
                         const span = w.span_days || 0;
-                        if (span < 21)
-                            need.push(
-                                plural(21 - span, "more day") +
-                                    " between your first and last weigh-in (" +
-                                    span +
-                                    " of 21)",
-                            );
-                        const counted = c.counted_days || 0;
-                        const wantCounted = Math.ceil(Math.max(span, 21) * 0.7);
-                        if (counted < wantCounted)
-                            need.push(
-                                plural(
-                                    wantCounted - counted,
-                                    "more counted day",
-                                ) +
-                                    " (" +
-                                    counted +
-                                    " of " +
-                                    wantCounted +
-                                    "; 2+ meals or at least half a typical day)",
-                            );
-                        if (!need.length && c.status === "too_noisy")
-                            need.push(
-                                "steadier weigh-ins (±" +
+                        add("Weigh-in days", w.weighin_days || 0, 8, "");
+                        const range =
+                            w.first_date && w.last_date
+                                ? shortDay(w.first_date) +
+                                  " to " +
+                                  shortDay(w.last_date)
+                                : "";
+                        add(
+                            "Time between your first and last weigh-in" +
+                                (range ? " (" + range + ")" : ""),
+                            span,
+                            21,
+                            "Counted in days. The span ends at your latest weigh-in, not today.",
+                        );
+                        const wantSpan = Math.max(span, 21);
+                        add(
+                            "Days with a full food log" +
+                                (range ? ", " + range : ""),
+                            c.counted_days || 0,
+                            Math.ceil(wantSpan * 0.7),
+                            "Out of the " +
+                                wantSpan +
+                                " days in that period, 70% need a full log. A day is full with 2+ meals and at least half your typical day’s calories. Marking a day on or off in the Meals tab changes this count straight away; a day with no meals can’t count.",
+                        );
+                        if (c.status === "too_noisy")
+                            rows.push({
+                                label:
+                                    "Steadier weigh-ins (same time of day), now ±" +
                                     fmt(w.uncertainty_kcal) +
-                                    " kcal/day of scatter; weigh in at the same time of day)",
-                            );
+                                    " kcal/day",
+                                text: "too scattered",
+                            });
                     }
+                    const items = rows
+                        .map((r) => {
+                            const met = r.want != null && r.have >= r.want;
+                            const text =
+                                r.text ||
+                                (met
+                                    ? "✓ " + r.have + " of " + r.want
+                                    : r.have +
+                                      " of " +
+                                      r.want +
+                                      " needed · " +
+                                      (r.want - r.have) +
+                                      " to go");
+                            return (
+                                '<li class="' +
+                                (met ? "" : "bind") +
+                                '"><span>' +
+                                esc(r.label) +
+                                (r.hint && !met
+                                    ? "<br><small>" + esc(r.hint) + "</small>"
+                                    : "") +
+                                "</span><span>" +
+                                esc(text) +
+                                "</span></li>"
+                            );
+                        })
+                        .join("");
                     return (
-                        "Using your BMR for now: not enough data yet for “Calibrated from my data”, so both choices give the same number. Still needed: " +
-                        (need.length ? need.join("; ") : "a little more data") +
-                        "."
+                        '<details class="limit-how"><summary>Why it is using your BMR for now</summary><div><p class="note">There is not enough data yet for “Calibrated from my data”, so both choices give the same number. Calibration switches on when all of these are met:</p><ul class="limit-list">' +
+                        items +
+                        "</ul></div></details>"
                     );
                 }
                 // The working behind today's derived goal, so the number
@@ -5588,7 +5678,7 @@
                             " (" +
                             p.resting_basis +
                             ") + " +
-                            fmt((t && t.active_kcal) || 0) +
+                            fmt(p.goal_active_kcal || 0) +
                             " active" +
                             (delta ? " " + sgn(delta) + " for your plan" : "") +
                             ") ÷ (1 − " +
@@ -5596,9 +5686,7 @@
                             "% digestion).</p>" +
                             (p.resting_basis !== "calibrated" &&
                             calibrationNeedHtml()
-                                ? '<p class="note">' +
-                                  esc(calibrationNeedHtml()) +
-                                  "</p>"
+                                ? calibrationNeedHtml()
                                 : "");
                     } else {
                         h +=
@@ -6188,8 +6276,8 @@
                             ? ""
                             : "No calorie goal yet — add your body details for an estimated-burn default, or set one in Body. ") +
                         (data.calibration && data.calibration.applied
-                            ? "Goals adjust for your watch’s active calories. Est. burn = resting (calibrated from your weight trend) + active + 10% of what you eat for digestion — estimates, not measurements."
-                            : "Goals adjust for your watch’s active calories. Est. burn = resting (Mifflin-St Jeor) + active + 10% of what you eat for digestion — estimates, not measurements.") +
+                            ? "Each goal starts from your usual active calories and rises when your watch records more. Est. burn = resting (calibrated from your weight trend) + active + 10% of what you eat for digestion — estimates, not measurements."
+                            : "Each goal starts from your usual active calories and rises when your watch records more. Est. burn = resting (Mifflin-St Jeor) + active + 10% of what you eat for digestion — estimates, not measurements.") +
                         "</p></section></div>" +
                         '<div class="col">' +
                         '<section class="rv" aria-labelledby="h-strip">' +
@@ -9209,9 +9297,7 @@
                               ")</p>"
                             : data.calibration &&
                                 data.calibration.status !== "ok"
-                              ? '<p class="note">' +
-                                esc(calibrationNeedHtml()) +
-                                "</p>"
+                              ? calibrationNeedHtml()
                               : data.calibration &&
                                   data.calibration.status === "ok"
                                 ? '<p class="note">Your data suggests baseline burn of ' +

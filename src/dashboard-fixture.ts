@@ -24,6 +24,8 @@ import {
     foodTef,
     type BodyDetails,
 } from "./body.js";
+import { DEFAULT_PARAMS } from "./calibration.js";
+import { activeAverage, goalActiveKcal } from "./goal-plan.js";
 import {
     dateInTz,
     shiftLocalDate,
@@ -300,6 +302,26 @@ export function buildScenario(name: ScenarioName, today: string): FixtureData {
     return { ...fx };
 }
 
+interface FixtureDay {
+    date: string;
+    active: number | null;
+    logged: boolean;
+}
+
+/** activeAverage over the fixture's own days: synced, logged days in the
+ *  default lookback before `date` (what the calibration counts here). */
+function usualActive(history: FixtureDay[], date: string): number | null {
+    return activeAverage(
+        history.map((d) => ({
+            date: d.date,
+            counted: d.logged,
+            active_kcal: d.active,
+        })),
+        date,
+        DEFAULT_PARAMS.windowDays,
+    );
+}
+
 function generateScenario(name: ScenarioName, today: string): FixtureData {
     const tz = scenarioTz(name);
     const profile = profileFor(name);
@@ -329,6 +351,7 @@ function generateScenario(name: ScenarioName, today: string): FixtureData {
     const weight: WeightEntry[] = [];
     const activity: ActivityDay[] = [];
 
+    const history: FixtureDay[] = [];
     let nextWeigh = 0;
     for (let k = span - 1; k >= 0; k--) {
         const date = shiftLocalDate(today, -k);
@@ -343,7 +366,10 @@ function generateScenario(name: ScenarioName, today: string): FixtureData {
                 source: "garmin",
                 updated_at: STAMP,
             });
-        const goal = 1800 + (active ?? 0);
+        // The page's own rule (goal-plan.ts): the usual active from the
+        // morning, rising when the watch records more — so over-goal's
+        // "300 over" is measured against the goal the page will show.
+        const goal = 1800 + goalActiveKcal(usualActive(history, date), active);
 
         // Weigh-ins every 1–4 days, −0.15 kg/week from 84 kg, ±0.3 kg noise.
         if (nextWeigh <= 0 || isToday) {
@@ -376,7 +402,11 @@ function generateScenario(name: ScenarioName, today: string): FixtureData {
             // ~10% unlogged days — never inside over-goal's forced week, so
             // its "5 of the last 7 over" does not depend on the PRNG stream.
             const forcedWeek = name === "over-goal" && k <= 6;
-            if (rnd() < 0.1 && !forcedWeek) continue;
+            if (rnd() < 0.1 && !forcedWeek) {
+                history.push({ date, active, logged: false });
+                continue;
+            }
+            history.push({ date, active, logged: true });
             // over-goal: 4 of the 6 days before today are over (5 of 7 with
             // today). Elsewhere ~20% of days run over.
             const roll = rnd();

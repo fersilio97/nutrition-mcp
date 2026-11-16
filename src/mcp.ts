@@ -609,12 +609,12 @@ function activityLine(adj: ActivityAdjustment): string {
     return `\nCalorie goal: ${describeCalorieGoal(adj)} — protein, carbs and fat scaled ×${adj.factor.toFixed(2)}.`;
 }
 
-/** The goals in effect on `date`, active kcal included. A typed calorie goal
- *  goes through adjustGoalsForActivity as it always has. Every other mode —
- *  the estimated burn, a weight rate, a target date — is read from the
- *  dashboard's own payload (goal-plan.ts), so the assistant's progress line
- *  and the page are the same number by construction. If that cannot be built
- *  (no body details, a read failure) it falls back to the older estimate. */
+/** The goals in effect on `date`, active kcal included. Every mode — a typed
+ *  goal, the estimated burn, a weight rate, a target date — is read from the
+ *  dashboard's own payload (goal-plan.ts: the usual active kcal from the
+ *  morning, rising when the watch records more), so the assistant's progress
+ *  line and the page are the same number by construction. If that cannot be
+ *  built (a read failure) it falls back to adding the day's own active kcal. */
 async function effectiveGoals(
     userId: string,
     profile: Profile | null,
@@ -622,27 +622,27 @@ async function effectiveGoals(
     date: string,
     activeKcal: number | null | undefined,
 ): Promise<ActivityAdjustment> {
-    if (resolveGoalMode(stored) !== "fixed") {
-        try {
-            const today = todayInTz(timezoneFromProfile(profile) ?? "UTC");
-            const back = Math.round(
-                (Date.parse(`${today}T00:00:00Z`) -
-                    Date.parse(`${date}T00:00:00Z`)) /
-                    86_400_000,
+    const mode = resolveGoalMode(stored);
+    try {
+        const today = todayInTz(timezoneFromProfile(profile) ?? "UTC");
+        const back = Math.round(
+            (Date.parse(`${today}T00:00:00Z`) -
+                Date.parse(`${date}T00:00:00Z`)) /
+                86_400_000,
+        );
+        const span = Math.min(365, Math.max(1, back + 1));
+        const payload = buildDashboardPayload(
+            await loadDashboardInputs(userId, span),
+        );
+        const row = payload.daily.find((d) => d.date === date);
+        if (row?.goal_calories != null)
+            return derivedAdjustment(
+                stored,
+                { ...row, goal_calories: row.goal_calories },
+                mode !== "fixed",
             );
-            const span = Math.min(365, Math.max(1, back + 1));
-            const payload = buildDashboardPayload(
-                await loadDashboardInputs(userId, span),
-            );
-            const row = payload.daily.find((d) => d.date === date);
-            if (row?.goal_calories != null)
-                return derivedAdjustment(stored, {
-                    ...row,
-                    goal_calories: row.goal_calories,
-                });
-        } catch (err) {
-            console.error(`[goal-plan] derived goal failed: ${err}`);
-        }
+    } catch (err) {
+        console.error(`[goal-plan] goal from payload failed: ${err}`);
     }
     return adjustGoalsForActivity(
         await goalsWithBurnDefault(userId, profile, stored, date),
@@ -3253,7 +3253,15 @@ export function registerTools(
                         upsertActivity(userId, target, checked.value, "manual"),
                         getNutritionGoals(userId),
                     ]);
-                    const adj = adjustGoalsForActivity(goals, checked.value);
+                    // The same goal the page shows: the usual active from the
+                    // morning, rising when the day's figure passes it.
+                    const adj = await effectiveGoals(
+                        userId,
+                        profile,
+                        goals,
+                        target,
+                        checked.value,
+                    );
                     const goalText = describeCalorieGoal(adj);
                     const tail = goalText
                         ? ` Calorie goal for ${target}: ${goalText}.`
