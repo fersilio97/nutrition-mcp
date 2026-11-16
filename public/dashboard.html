@@ -5609,10 +5609,10 @@
                         return saved && goalCustom()
                             ? "Your goal is " +
                                   fmt(goalCustom()) +
-                                  " kcal plus your usual active calories, more on a day your watch records more."
-                            : "Type a daily figure. Your usual active calories are added on top from the morning, and more on a day your watch records more.";
+                                  " kcal plus your usual active calories until your watch syncs today's, then today's own figure."
+                            : "Type a daily figure. Your usual active calories are added on top until your watch syncs today's, then today's own figure.";
                     if (mode === "burn")
-                        return "Eat at break-even: your estimated burn (resting + your usual active + digestion), rising on a day your watch records more.";
+                        return "Eat at break-even: your estimated burn (resting + active + digestion), using your usual active until your watch syncs today's.";
                     if (mode === "rate")
                         return "Choose how fast your weight should change. Your calories are worked out every day from your estimated burn and the energy in a gram of weight change.";
                     return "Choose a weight and a date. The rate that gets you there is recalculated every day from your smoothed weight trend, so the calories adapt as you get closer or fall behind.";
@@ -5808,23 +5808,14 @@
                     const u = data.weightUnit;
                     let h = '<div class="plan-readout">';
                     if (p.goal_kcal != null) {
-                        const delta = Math.round(
-                            p.rate_g_per_day * p.kcal_per_gram,
-                        );
+                        // The same lines as the Today card's Goal, so the
+                        // two tabs never word one figure two ways.
                         h +=
-                            '<p class="note"><b>Today: ' +
+                            '<p class="note"><b>Goal ' +
                             fmt(p.goal_kcal) +
-                            " kcal</b> = (resting " +
-                            fmt(p.resting_kcal) +
-                            " (" +
-                            p.resting_basis +
-                            ") + " +
-                            fmt(p.goal_active_kcal || 0) +
-                            " active" +
-                            (delta ? " " + sgn(delta) + " for your plan" : "") +
-                            ") ÷ (1 − " +
-                            (p.tef_share * 100).toFixed(1) +
-                            "% digestion).</p>" +
+                            " kcal</b><br>" +
+                            goalSubText(t, p.goal_kcal) +
+                            "</p>" +
                             (p.resting_basis !== "calibrated" &&
                             calibrationNeedHtml()
                                 ? calibrationNeedHtml()
@@ -6417,10 +6408,10 @@
                             ? ""
                             : "No calorie goal yet — add your body details for an estimated-burn default, or set one in Body. ") +
                         (data.calibration && data.calibration.applied
-                            ? "Each goal starts from your usual active calories and rises when your watch records more. Est. burn = resting (calibrated from your weight trend) + active + digestion (" +
+                            ? "Each goal uses your usual active calories until your watch syncs that day's, then the day's own figure. Est. burn = resting (calibrated from your weight trend) + active + digestion (" +
                               digestionRule() +
                               ") — estimates, not measurements."
-                            : "Each goal starts from your usual active calories and rises when your watch records more. Est. burn = resting (Mifflin-St Jeor) + active + digestion (" +
+                            : "Each goal uses your usual active calories until your watch syncs that day's, then the day's own figure. Est. burn = resting (Mifflin-St Jeor) + active + digestion (" +
                               digestionRule() +
                               ") — estimates, not measurements.") +
                         "</p></section></div>" +
