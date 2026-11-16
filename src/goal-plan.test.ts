@@ -182,6 +182,50 @@ describe("trendWeightToday", () => {
         expect(trendWeightToday([], iso(30), 42)).toBeNull();
     });
 
+    // A real first week: one heavy first morning, then flat around 81.2–81.7.
+    // A line through it ends at 80.98, below every reading; with one week of
+    // span the line is not used and the last seven days are averaged instead.
+    const firstWeek = [
+        82_700, 81_700, 81_400, 81_200, 81_500, 81_300, 81_200, 81_200,
+    ];
+
+    test("one week of weigh-ins is averaged, not fitted", () => {
+        const w = firstWeek.map((g, i) => ({ date: iso(i), weight_g: g }));
+        const t = trendWeightToday(w, iso(7), 42)!;
+        expect(t.source).toBe("recent_mean");
+        // Nov 10–16 only: the heavy first morning is eight days back.
+        expect(t.weight_g).toBe(81_357);
+        expect(t.weighin_days).toBe(7);
+    });
+
+    test("a line tilted by an early spike is held within the last week", () => {
+        // Same shape over a fortnight: 84 kg on day 0, then 81.2–81.5.
+        const w = [{ date: iso(0), weight_g: 84_000 }];
+        for (let i = 1; i <= 14; i++)
+            w.push({ date: iso(i), weight_g: i % 2 ? 81_500 : 81_200 });
+        const t = trendWeightToday(w, iso(14), 42)!;
+        expect(t.source).toBe("trend");
+        expect(t.clamped).toBe(true);
+        expect(t.weight_g).toBe(81_200);
+    });
+
+    test("a steady loss is not clamped and still extrapolates", () => {
+        const w = line(20, 20, 80_000, -50);
+        const t = trendWeightToday(w, iso(23), 42)!;
+        expect(t.clamped).toBe(false);
+        expect(t.weight_g).toBe(80_000 - 50 * 19 - 50 * 3);
+    });
+
+    test("same-day readings count once in the recent average", () => {
+        const w = [
+            { date: iso(5), weight_g: 80_000 },
+            { date: iso(6), weight_g: 82_000 },
+            { date: iso(6), weight_g: 82_000 },
+            { date: iso(6), weight_g: 82_000 },
+        ];
+        expect(trendWeightToday(w, iso(6), 42)!.weight_g).toBe(81_000);
+    });
+
     test("the lookback window is a parameter", () => {
         // 60 days: flat for 40, then falling. A 21-day window sees only the fall.
         const flat = line(39, 40, 90_000, 0);
@@ -199,6 +243,7 @@ describe("planRate", () => {
         source: "trend",
         window_days: 42,
         weighin_days: 20,
+        clamped: false,
     });
     const date = (target: number, on: string) => ({
         mode: "date" as const,
@@ -294,6 +339,7 @@ describe("goalFlags", () => {
             source: "trend",
             window_days: 42,
             weighin_days: 20,
+            clamped: false,
         },
         restingKcal: 1700,
         bmrKcal: 1700,
@@ -791,6 +837,7 @@ describe("recommendedRates", () => {
                 source: "trend",
                 window_days: 42,
                 weighin_days: 20,
+                clamped: false,
             },
             restingKcal: 1700,
             bmrKcal: 1700,

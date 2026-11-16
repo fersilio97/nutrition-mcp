@@ -44,9 +44,14 @@ export const REACHED_TOLERANCE_G = 500;
 /** The newest weigh-in may be this many days old before the trend stops
  *  being extrapolated to today. */
 const MAX_EXTRAPOLATE_DAYS = 7;
-/** Fewest weigh-in days (and days of span) for a fitted trend to be used. */
+/** Fewest weigh-in days, and days of span, for a fitted trend to be used.
+ *  Daily scale noise (±0.5–1 kg) over one week is enough to tilt a line by a
+ *  kilo a week, so a line needs two weeks before it beats a plain average. */
 const MIN_TREND_DAYS = 3;
-const MIN_TREND_SPAN = 7;
+export const MIN_TREND_SPAN = 14;
+/** Days of weigh-ins the recent average uses, and the band of readings the
+ *  fitted line must stay inside (see trendWeightToday). */
+export const RECENT_DAYS = 7;
 /** Fewest counted days before the user's own digestion share is trusted. */
 const MIN_TEF_DAYS = 7;
 
@@ -112,10 +117,27 @@ export interface TrendWeight {
     window_days: number;
     /** Weigh-in days the figure rests on. */
     weighin_days: number;
+    /** True when the fitted line ran outside the last week's readings and
+     *  was pulled back to the nearest of them before extrapolating. */
+    clamped: boolean;
+}
+
+function addDays(date: string, n: number): string {
+    const d = new Date(`${date}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
 }
 
 /** The smoothed weight today. `weighIns` sorted ascending. Null with no
- *  weigh-in at all. */
+ *  weigh-in at all.
+ *
+ *  A least-squares line is least certain at its ends, so one high reading at
+ *  the start of the window can tilt it until today's end sits below every
+ *  real reading ("trend 81.0" for someone who never weighed under 81.2).
+ *  Two guards: the line is used only once the weigh-ins span MIN_TREND_SPAN
+ *  days, and its value on the newest weigh-in day is held within the range
+ *  of the RECENT_DAYS of readings ending there. Extrapolation to today runs
+ *  from that held point, so a genuine ongoing loss still carries forward. */
 export function trendWeightToday(
     weighIns: WeighIn[],
     today: string,
@@ -123,9 +145,7 @@ export function trendWeightToday(
 ): TrendWeight | null {
     const usable = weighIns.filter((w) => w.date <= today);
     if (!usable.length) return null;
-    const from = new Date(`${today}T00:00:00Z`);
-    from.setUTCDate(from.getUTCDate() - windowDays);
-    const fromIso = from.toISOString().slice(0, 10);
+    const fromIso = addDays(today, -windowDays);
     const inWindow = usable.filter((w) => w.date >= fromIso);
     const slope = weightSlope(inWindow);
     if (
@@ -134,28 +154,48 @@ export function trendWeightToday(
         slope.span_days >= MIN_TREND_SPAN
     ) {
         const last = slope.points.at(-1)!;
+        // Same-day readings are already averaged in `points`.
+        const bandFrom = addDays(last.date, -(RECENT_DAYS - 1));
+        const band = slope.points
+            .filter((p) => p.date >= bandFrom)
+            .map((p) => p.weight_g);
+        const anchor = Math.min(
+            Math.max(...band),
+            Math.max(Math.min(...band), last.fit_g),
+        );
         const ahead = Math.min(
             MAX_EXTRAPOLATE_DAYS,
             Math.max(0, daysBetween(last.date, today)),
         );
         return {
-            weight_g: Math.round(last.fit_g + slope.g_per_day * ahead),
+            weight_g: Math.round(anchor + slope.g_per_day * ahead),
             source: "trend",
             window_days: windowDays,
             weighin_days: slope.days,
+            clamped: anchor !== last.fit_g,
         };
     }
-    const weekAgo = new Date(`${today}T00:00:00Z`);
-    weekAgo.setUTCDate(weekAgo.getUTCDate() - 7);
-    const weekIso = weekAgo.toISOString().slice(0, 10);
-    const recent = usable.filter((w) => w.date >= weekIso);
+    // The RECENT_DAYS ending today, inclusive; a day with several readings
+    // counts once, as it does in the fitted line.
+    const recentFrom = addDays(today, -(RECENT_DAYS - 1));
+    const recent = usable.filter((w) => w.date >= recentFrom);
     if (recent.length >= 2) {
-        const mean = recent.reduce((s, w) => s + w.weight_g, 0) / recent.length;
+        const byDay = new Map<string, number[]>();
+        for (const w of recent) {
+            const list = byDay.get(w.date) ?? [];
+            list.push(w.weight_g);
+            byDay.set(w.date, list);
+        }
+        const means = [...byDay.values()].map(
+            (v) => v.reduce((a, b) => a + b, 0) / v.length,
+        );
+        const mean = means.reduce((a, b) => a + b, 0) / means.length;
         return {
             weight_g: Math.round(mean),
             source: "recent_mean",
-            window_days: 7,
-            weighin_days: new Set(recent.map((w) => w.date)).size,
+            window_days: RECENT_DAYS,
+            weighin_days: byDay.size,
+            clamped: false,
         };
     }
     return {
@@ -163,6 +203,7 @@ export function trendWeightToday(
         source: "latest",
         window_days: 0,
         weighin_days: 1,
+        clamped: false,
     };
 }
 
