@@ -40,6 +40,13 @@ import {
     getMealById,
     timezoneFromProfile,
     preferredWeightUnitFromProfile,
+    waterTrackingEnabledFromProfile,
+    sodiumTrackingEnabledFromProfile,
+    insertWater,
+    deleteWater,
+    getIngestTokenStatus,
+    listRecipes,
+    getRecipe,
     type ActivityDay,
     type Meal,
     type MealInput,
@@ -49,6 +56,13 @@ import {
     type WeightEntry,
 } from "./supabase.js";
 import { buildDailyBuckets } from "./insights.js";
+import { setupChecklist } from "./onboarding.js";
+import {
+    checkLoggedServings,
+    recipeMealDescription,
+    scaleRecipe,
+    type Recipe,
+} from "./recipes.js";
 import {
     buildCalibration,
     calibratedBaseline,
@@ -254,6 +268,9 @@ export interface DashboardInputs {
     days: number;
     /** The user's local today, YYYY-MM-DD. */
     today: string;
+    /** Whether an activity-sync token exists (setup checklist). Optional:
+     *  absent falls back to "any activity row in the window". */
+    activityConnected?: boolean;
 }
 
 /**
@@ -290,11 +307,12 @@ export async function loadDashboardInputs(
             getActivityInRange(userId, fetchStart, endDate).catch(() => []),
         ]);
 
-    const dayOverrides = await getCalibrationDayOverrides(
-        userId,
-        fetchStart,
-        endDate,
-    ).catch(() => ({}));
+    const [dayOverrides, sync] = await Promise.all([
+        getCalibrationDayOverrides(userId, fetchStart, endDate).catch(
+            () => ({}),
+        ),
+        getIngestTokenStatus(userId).catch(() => null),
+    ]);
 
     return {
         profile,
@@ -307,6 +325,7 @@ export async function loadDashboardInputs(
         dayOverrides,
         days,
         today,
+        activityConnected: sync != null,
     };
 }
 
@@ -327,6 +346,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         dayOverrides = {},
         days,
         today,
+        activityConnected,
     } = inputs;
     const model = inputs.model ?? modelFromProfile(profile);
     const tz = timezoneFromProfile(profile) ?? "UTC";
@@ -521,13 +541,46 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
                   fat_g: goals.daily_fat_g,
                   fiber_g: goals.daily_fiber_g,
                   sugar_g: goals.daily_sugar_g,
-                  water_ml: goals.daily_water_ml,
+                  // Opt-in (vault 004): no water goal on the page when off.
+                  water_ml: waterTrackingEnabledFromProfile(profile)
+                      ? goals.daily_water_ml
+                      : null,
+                  sodium_mg: sodiumTrackingEnabledFromProfile(profile)
+                      ? (goals.daily_sodium_mg ?? null)
+                      : null,
                   target_weight_g: goals.target_weight_g,
                   mode: resolveGoalMode(goals),
                   weight_rate_g_per_day: goals.weight_rate_g_per_day,
                   target_date: goals.target_date,
               }
             : null,
+        // Opt-in trackers and the first-run checklist (src/onboarding.ts,
+        // the same list get_profile reads to the assistant).
+        tracking: {
+            water: waterTrackingEnabledFromProfile(profile),
+            sodium: sodiumTrackingEnabledFromProfile(profile),
+        },
+        setup: setupChecklist(
+            profile,
+            goals,
+            activityConnected ?? activityRows.length > 0,
+        ),
+        // Today's water for the one-tap strip; newest first, so the page can
+        // offer "Undo" on the last one.
+        waterToday: (() => {
+            const entries = water
+                .filter((w) => dateInTz(w.logged_at, tz) === endDate)
+                .sort((a, b) => b.logged_at.localeCompare(a.logged_at))
+                .map((w) => ({
+                    id: w.id,
+                    amount_ml: w.amount_ml,
+                    logged_at: w.logged_at,
+                }));
+            return {
+                ml: entries.reduce((sum, w) => sum + w.amount_ml, 0),
+                entries,
+            };
+        })(),
         // The plan behind today's derived goal: rate, trend weight, basis,
         // digestion share and the advisory flags (goal-plan.ts).
         goalPlan,
@@ -596,6 +649,8 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
                 fat_g: m.fat_g,
                 fiber_g: m.fiber_g,
                 sugar_g: m.sugar_g,
+                sodium_mg: m.sodium_mg ?? null,
+                source: m.source ?? null,
             })),
     };
 }
@@ -1551,6 +1606,227 @@ export async function deleteMealFromDashboard(
         : { status: 404, json: { error: "not_found" } };
 }
 
+// ---------- water, tracking and recipes (UX audit batch 1) ----------
+
+/** One tap of water. 1–5000 ml, same ceiling as log_water. Pure. */
+export function checkWaterEntry(
+    input: Record<string, unknown>,
+): Checked<{ amount_ml: number; key: string | undefined }> {
+    for (const k of Object.keys(input))
+        if (!["amount_ml", "client_key"].includes(k))
+            return { ok: false, error: `Unknown field: ${k}.` };
+    const ml = Number(input.amount_ml);
+    if (!Number.isInteger(ml) || ml < 1 || ml > 5000)
+        return {
+            ok: false,
+            error: "amount_ml must be a whole number from 1 to 5000.",
+        };
+    const key = checkClientKey(input.client_key);
+    if (!key.ok) return key;
+    return { ok: true, value: { amount_ml: ml, key: key.value } };
+}
+
+export async function logWaterFromDashboard(
+    userId: string,
+    input: Record<string, unknown>,
+): Promise<Reply> {
+    const checked = checkWaterEntry(input);
+    if (!checked.ok) return invalid(checked.error);
+    const { entry, deduplicated } = await insertWater(userId, {
+        amount_ml: checked.value.amount_ml,
+        ...(checked.value.key ? { idempotency_key: checked.value.key } : {}),
+    });
+    return {
+        status: 200,
+        json: {
+            ok: true,
+            deduplicated,
+            entry: {
+                id: entry.id,
+                amount_ml: entry.amount_ml,
+                logged_at: entry.logged_at,
+            },
+        },
+    };
+}
+
+export async function deleteWaterFromDashboard(
+    userId: string,
+    id: string,
+): Promise<Reply> {
+    if (!UUID_RE.test(id)) return { status: 404, json: { error: "not_found" } };
+    return (await deleteWater(userId, id))
+        ? { status: 200, json: { ok: true } }
+        : { status: 404, json: { error: "not_found" } };
+}
+
+/** Which opt-in trackers to flip. Pure. */
+export function checkTrackingPatch(
+    input: Record<string, unknown>,
+): Checked<{ water?: boolean; sodium?: boolean }> {
+    const out: { water?: boolean; sodium?: boolean } = {};
+    for (const [k, v] of Object.entries(input)) {
+        if (k !== "water" && k !== "sodium")
+            return { ok: false, error: `Unknown field: ${k}.` };
+        if (typeof v !== "boolean")
+            return { ok: false, error: `${k} must be true or false.` };
+        out[k] = v;
+    }
+    if (out.water === undefined && out.sodium === undefined)
+        return { ok: false, error: "Send water and/or sodium." };
+    return { ok: true, value: out };
+}
+
+/** The common daily sodium guideline (WHO/FDA ~2,300 mg). Applied once when
+ *  sodium is turned on without a limit, because a limit is what makes sodium
+ *  appear at all (the widgets' and text's gate) — turning tracking on and
+ *  then seeing nothing would read as broken. The user can change it. */
+export const DEFAULT_SODIUM_LIMIT_MG = 2300;
+
+/** Shared by set_tracking (src/mcp.ts) and POST /api/dashboard/tracking, so
+ *  both surfaces flip the same flags and seed the same sodium limit. */
+export async function applyTrackingPatch(
+    userId: string,
+    patch: { water?: boolean; sodium?: boolean },
+): Promise<{ profile: Profile; sodiumLimitSeeded: boolean }> {
+    const profile = await upsertProfile(userId, {
+        ...(patch.water !== undefined
+            ? { water_tracking_enabled: patch.water }
+            : {}),
+        ...(patch.sodium !== undefined
+            ? { sodium_tracking_enabled: patch.sodium }
+            : {}),
+    });
+    let sodiumLimitSeeded = false;
+    if (patch.sodium === true) {
+        const goals = await getNutritionGoals(userId);
+        if (goals?.daily_sodium_mg == null) {
+            // upsertNutritionGoals replaces the whole row: carry every field.
+            const {
+                user_id: _u,
+                updated_at: _t,
+                ...rest
+            } = goals ?? ({} as Partial<NutritionGoals>);
+            await upsertNutritionGoals(userId, {
+                ...rest,
+                daily_sodium_mg: DEFAULT_SODIUM_LIMIT_MG,
+            });
+            sodiumLimitSeeded = true;
+        }
+    }
+    return { profile, sodiumLimitSeeded };
+}
+
+/** The page's recipe list: what the chips need. */
+export function recipeChip(r: Recipe) {
+    return {
+        id: r.id,
+        name: r.name,
+        servings: r.servings,
+        calories: r.calories,
+        protein_g: r.protein_g,
+        carbs_g: r.carbs_g,
+        fat_g: r.fat_g,
+    };
+}
+
+/** Validate a one-tap recipe log: servings (default 1), client_key and an
+ *  optional meal_type. Pure, shared with the dev preview. */
+export function checkRecipeLog(
+    input: Record<string, unknown>,
+): Checked<{ servings: number; key: string | undefined; meal_type?: string }> {
+    for (const k of Object.keys(input))
+        if (!["servings", "client_key", "meal_type"].includes(k))
+            return { ok: false, error: `Unknown field: ${k}.` };
+    const servings = checkLoggedServings(input.servings);
+    if (!servings.ok) return servings;
+    const key = checkClientKey(input.client_key);
+    if (!key.ok) return key;
+    if (
+        input.meal_type !== undefined &&
+        (typeof input.meal_type !== "string" ||
+            !MEAL_TYPES.includes(input.meal_type))
+    )
+        return {
+            ok: false,
+            error: `meal_type must be one of: ${MEAL_TYPES.join(", ")}.`,
+        };
+    return {
+        ok: true,
+        value: {
+            servings: servings.value,
+            key: key.value,
+            ...(input.meal_type
+                ? { meal_type: input.meal_type as string }
+                : {}),
+        },
+    };
+}
+
+/** The meal a recipe log writes: scaled figures, self-describing name,
+ *  source "recipe". Blank nutrients stay omitted, never 0. Pure. */
+/** The page's defaultMealType, by local hour, for a log that names none. */
+export function mealTypeForHour(h: number): MealInput["meal_type"] {
+    return h < 11
+        ? "breakfast"
+        : h < 15
+          ? "lunch"
+          : h < 18
+            ? "snack"
+            : h < 22
+              ? "dinner"
+              : "snack";
+}
+
+export function recipeMealInput(
+    recipe: Recipe,
+    opts: { servings: number; key?: string; meal_type?: string },
+    localHour: number,
+): MealInput {
+    const scaled = scaleRecipe(recipe, opts.servings);
+    const nutrients = Object.fromEntries(
+        Object.entries(scaled).filter(([, v]) => v != null),
+    );
+    return {
+        description: recipeMealDescription(recipe.name, opts.servings),
+        meal_type:
+            (opts.meal_type as MealInput["meal_type"] | undefined) ??
+            mealTypeForHour(localHour),
+        source: "recipe" as const,
+        ...nutrients,
+        ...(opts.key ? { idempotency_key: opts.key } : {}),
+    };
+}
+
+export async function logRecipeFromDashboard(
+    userId: string,
+    id: string,
+    input: Record<string, unknown>,
+): Promise<Reply> {
+    const checked = checkRecipeLog(input);
+    if (!checked.ok) return invalid(checked.error);
+    const [recipe, profile] = await Promise.all([
+        getRecipe(userId, id),
+        getProfile(userId),
+    ]);
+    if (!recipe) return { status: 404, json: { error: "not_found" } };
+    const hour = Number(
+        new Intl.DateTimeFormat("en-GB", {
+            hour: "2-digit",
+            hourCycle: "h23",
+            timeZone: timezoneFromProfile(profile) ?? "UTC",
+        }).format(new Date()),
+    );
+    const { meal, deduplicated } = await insertMeal(
+        userId,
+        recipeMealInput(recipe, checked.value, hour),
+    );
+    return {
+        status: 200,
+        json: { ok: true, deduplicated, meal: mealSummary(meal) },
+    };
+}
+
 async function readObject(c: {
     req: { json: () => Promise<unknown> };
 }): Promise<Record<string, unknown> | null> {
@@ -1844,6 +2120,69 @@ export function createDashboardRouter(): Hono {
         );
         return c.json(res.json, res.status);
     });
+
+    // One tap of water, and its "Undo".
+    dash.post("/api/dashboard/water", authenticateBearer, async (c) => {
+        const body = await readObject(c);
+        if (!body) return c.json({ error: "invalid_request" }, 400);
+        const res = await logWaterFromDashboard(
+            c.get("userId") as string,
+            body,
+        );
+        return c.json(res.json, res.status);
+    });
+    dash.delete("/api/dashboard/water/:id", authenticateBearer, async (c) => {
+        const res = await deleteWaterFromDashboard(
+            c.get("userId") as string,
+            c.req.param("id") ?? "",
+        );
+        return c.json(res.json, res.status);
+    });
+
+    // The opt-in trackers (water, sodium) from the setup card.
+    dash.post("/api/dashboard/tracking", authenticateBearer, async (c) => {
+        const body = await readObject(c);
+        if (!body) return c.json({ error: "invalid_request" }, 400);
+        const checked = checkTrackingPatch(body);
+        if (!checked.ok) {
+            const r = invalid(checked.error);
+            return c.json(r.json, r.status);
+        }
+        const { profile, sodiumLimitSeeded } = await applyTrackingPatch(
+            c.get("userId") as string,
+            checked.value,
+        );
+        return c.json({
+            ok: true,
+            tracking: {
+                water: waterTrackingEnabledFromProfile(profile),
+                sodium: sodiumTrackingEnabledFromProfile(profile),
+            },
+            sodium_limit_seeded: sodiumLimitSeeded,
+        });
+    });
+
+    // Saved recipes: the chips, and one tap to log N servings.
+    dash.get("/api/dashboard/recipes", authenticateBearer, async (c) => {
+        const recipes = await listRecipes(c.get("userId") as string).catch(
+            () => [],
+        );
+        return c.json({ recipes: recipes.map(recipeChip) });
+    });
+    dash.post(
+        "/api/dashboard/recipes/:id/log",
+        authenticateBearer,
+        async (c) => {
+            const body = await readObject(c);
+            if (!body) return c.json({ error: "invalid_request" }, 400);
+            const res = await logRecipeFromDashboard(
+                c.get("userId") as string,
+                c.req.param("id") ?? "",
+                body,
+            );
+            return c.json(res.json, res.status);
+        },
+    );
 
     return dash;
 }

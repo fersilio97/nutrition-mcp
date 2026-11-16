@@ -1,3 +1,4 @@
+import { findRecipe, type Recipe, type RecipeDraft } from "./recipes.js";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { zonedDayStartUtc, zonedNextDayStartUtc } from "./tz.js";
 import { decodeEscapeSequences } from "./normalize.js";
@@ -1602,6 +1603,18 @@ export async function deleteAllUserData(userId: string): Promise<void> {
     if (waterErr)
         throw new Error(`Failed to delete water log: ${waterErr.message}`);
 
+    const { error: recipesErr } = await sb
+        .from("recipes")
+        .delete()
+        .eq("user_id", userId);
+    // A missing table (migration not applied yet) is not a reason to refuse an
+    // account deletion: there is nothing in it to delete.
+    if (
+        recipesErr &&
+        !/relation .*recipes.* does not exist/i.test(recipesErr.message)
+    )
+        throw new Error(`Failed to delete recipes: ${recipesErr.message}`);
+
     const { error: weightErr } = await sb
         .from("weight_log")
         .delete()
@@ -2119,4 +2132,92 @@ export function registerClient(
                 );
             }
         });
+}
+
+// ---------- Saved recipes (src/recipes.ts holds the logic) ----------
+
+export async function listRecipes(userId: string): Promise<Recipe[]> {
+    const { data, error } = await getSupabase()
+        .from("recipes")
+        .select("*")
+        .eq("user_id", userId)
+        .order("name", { ascending: true });
+    if (error) throw new Error(`Failed to list recipes: ${error.message}`);
+    return (data ?? []).map(recipeOf);
+}
+
+export async function getRecipe(
+    userId: string,
+    id: string,
+): Promise<Recipe | null> {
+    if (!UUID_RE.test(id)) return null;
+    const { data, error } = await getSupabase()
+        .from("recipes")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("id", id)
+        .maybeSingle();
+    if (error) throw new Error(`Failed to read recipe: ${error.message}`);
+    return data ? recipeOf(data) : null;
+}
+
+/** Insert, or update the recipe of the same name (case-insensitive) — saving
+ *  "Overnight oats" again replaces it rather than failing on the unique name.
+ *  `updated` says which happened. */
+export async function saveRecipe(
+    userId: string,
+    draft: RecipeDraft,
+): Promise<{ recipe: Recipe; updated: boolean }> {
+    const sb = getSupabase();
+    const existing = findRecipe(await listRecipes(userId), draft.name);
+    const row = { ...draft, updated_at: new Date().toISOString() };
+    const q = existing
+        ? sb
+              .from("recipes")
+              .update(row)
+              .eq("user_id", userId)
+              .eq("id", existing.id)
+        : sb.from("recipes").insert({ ...row, user_id: userId });
+    const { data, error } = await q.select().single();
+    if (error) throw new Error(`Failed to save recipe: ${error.message}`);
+    return { recipe: recipeOf(data), updated: existing != null };
+}
+
+export async function deleteRecipe(
+    userId: string,
+    id: string,
+): Promise<boolean> {
+    if (!UUID_RE.test(id)) return false;
+    const { data, error } = await getSupabase()
+        .from("recipes")
+        .delete()
+        .eq("user_id", userId)
+        .eq("id", id)
+        .select("id");
+    if (error) throw new Error(`Failed to delete recipe: ${error.message}`);
+    return (data ?? []).length > 0;
+}
+
+/** numeric columns come back from PostgREST as strings; coerce once here. */
+function recipeOf(r: Record<string, unknown>): Recipe {
+    const n = (v: unknown) => (v == null ? null : Number(v));
+    return {
+        id: String(r.id),
+        user_id: String(r.user_id),
+        name: String(r.name),
+        servings: Number(r.servings),
+        ingredients: Array.isArray(r.ingredients)
+            ? (r.ingredients as unknown[]).map(String)
+            : [],
+        calories: n(r.calories),
+        protein_g: n(r.protein_g),
+        carbs_g: n(r.carbs_g),
+        fat_g: n(r.fat_g),
+        fiber_g: n(r.fiber_g),
+        sugar_g: n(r.sugar_g),
+        sodium_mg: n(r.sodium_mg),
+        caffeine_mg: n(r.caffeine_mg),
+        created_at: String(r.created_at ?? ""),
+        updated_at: String(r.updated_at ?? ""),
+    };
 }

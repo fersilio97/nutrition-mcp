@@ -1,3 +1,9 @@
+import {
+    checkLoggedServings,
+    checkRecipe,
+    findRecipe,
+    formatRecipe,
+} from "./recipes.js";
 import { setupChecklist, setupLine } from "./onboarding.js";
 import {
     createMcpHandler,
@@ -57,6 +63,9 @@ import {
     type Profile,
     type WaterEntry,
     type WeightEntry,
+    listRecipes,
+    saveRecipe,
+    deleteRecipe,
 } from "./supabase.js";
 import {
     DELETED_ACCOUNT_ANALYTICS_ID,
@@ -126,6 +135,9 @@ import {
     buildDashboardPayload,
     checkGoalPlan,
     loadDashboardInputs,
+    applyTrackingPatch,
+    DEFAULT_SODIUM_LIMIT_MG,
+    recipeMealInput,
     type GoalPlanPatch,
 } from "./dashboard.js";
 import { gramsPerDayToRate, resolveGoalMode } from "./goal-plan.js";
@@ -4738,6 +4750,163 @@ export function registerTools(
     );
 
     server.registerTool(
+        "manage_recipes",
+        {
+            title: "Manage Saved Recipes",
+            description:
+                "Save, list, delete or log the user's saved recipes: dishes they make repeatedly, stored PER SERVING so logging is one step instead of re-estimating the same dish every time. " +
+                "action 'save': name + servings the recipe makes + nutrients, either per serving (per: 'serving', the default) or for the whole batch (per: 'batch', divided by servings for you); saving an existing name replaces it. Offer to save when the user logs the same home dish a second time. " +
+                "action 'list': all recipes with per-serving figures — check it before estimating a homemade dish. " +
+                "action 'delete': by recipe id. " +
+                "action 'log': log `servings` of a recipe (by exact name or id) as a meal now, or at logged_at; the meal is described as 'Name (N servings)' and marked source 'recipe'. Use it whenever the user names a saved recipe instead of calling log_meal.",
+            annotations: {
+                readOnlyHint: false,
+                destructiveHint: true,
+                idempotentHint: false,
+                openWorldHint: false,
+            },
+            inputSchema: z.object({
+                action: z.enum(["save", "list", "delete", "log"]),
+                name: z
+                    .string()
+                    .optional()
+                    .describe(
+                        "save: the recipe's name. log: its exact name (or pass recipe_id).",
+                    ),
+                recipe_id: z
+                    .string()
+                    .optional()
+                    .describe("delete / log: the recipe's id, from list."),
+                servings: z.coerce
+                    .number()
+                    .optional()
+                    .describe(
+                        "save: how many servings the recipe makes (default 1). log: how many servings were eaten (default 1, e.g. 1.5).",
+                    ),
+                per: z
+                    .enum(["serving", "batch"])
+                    .optional()
+                    .describe(
+                        "save: whether the nutrient figures are per serving (default) or for the whole batch.",
+                    ),
+                calories: z.coerce.number().optional(),
+                protein_g: z.coerce.number().optional(),
+                carbs_g: z.coerce.number().optional(),
+                fat_g: z.coerce.number().optional(),
+                fiber_g: z.coerce.number().optional(),
+                sugar_g: z.coerce.number().optional(),
+                sodium_mg: z.coerce.number().optional(),
+                caffeine_mg: z.coerce.number().optional(),
+                ingredients: z
+                    .array(z.string())
+                    .optional()
+                    .describe(
+                        "save: ingredient lines with amounts, e.g. 'rolled oats 50 g'.",
+                    ),
+                meal_type: z
+                    .enum(MEAL_TYPE_VALUES)
+                    .optional()
+                    .describe(
+                        "log: breakfast, lunch, dinner, snack or treat (defaults by the local time).",
+                    ),
+                logged_at: z
+                    .string()
+                    .optional()
+                    .describe(
+                        "log: when it was eaten, if not now (same formats as log_meal).",
+                    ),
+            }),
+        },
+        async (args) => {
+            return withAnalytics(
+                "manage_recipes",
+                async () => {
+                    const text = (t: string) => ({
+                        content: [{ type: "text" as const, text: t }],
+                    });
+                    if (args.action === "list") {
+                        const list = await listRecipes(userId);
+                        return text(
+                            list.length
+                                ? `Saved recipes (${list.length}):\n${list.map(formatRecipe).join("\n")}`
+                                : "No saved recipes yet. Offer to save a dish the user makes often (action 'save').",
+                        );
+                    }
+                    if (args.action === "save") {
+                        const checked = checkRecipe(args);
+                        if (!checked.ok)
+                            return text(`Recipe not saved: ${checked.error}.`);
+                        const { recipe, updated } = await saveRecipe(
+                            userId,
+                            checked.value,
+                        );
+                        return text(
+                            `${updated ? "Recipe updated" : "Recipe saved"}:\n${formatRecipe(recipe)}\nLog it any time with action 'log' and a number of servings.`,
+                        );
+                    }
+                    const list = await listRecipes(userId);
+                    const recipe = findRecipe(
+                        list,
+                        args.recipe_id ?? args.name ?? "",
+                    );
+                    if (!recipe)
+                        return text(
+                            `No saved recipe matches "${args.recipe_id ?? args.name ?? ""}" (exact name or id). ${list.length ? `Saved: ${list.map((r) => r.name).join(", ")}.` : "There are no saved recipes."}`,
+                        );
+                    if (args.action === "delete") {
+                        const ok = await deleteRecipe(userId, recipe.id);
+                        return text(
+                            ok
+                                ? `Deleted recipe "${recipe.name}". Meals already logged from it are kept.`
+                                : `Recipe "${recipe.name}" was already gone.`,
+                        );
+                    }
+                    // log
+                    const servings = checkLoggedServings(args.servings);
+                    if (!servings.ok)
+                        return text(`Not logged: ${servings.error}.`);
+                    const profile = await getProfile(userId);
+                    const tz = timezoneFromProfile(profile) ?? "UTC";
+                    const { iso, note } = await resolveWriteTimestamp(
+                        userId,
+                        args.logged_at,
+                    );
+                    const hour = Number(
+                        new Intl.DateTimeFormat("en-GB", {
+                            hour: "2-digit",
+                            hourCycle: "h23",
+                            timeZone: tz,
+                        }).format(new Date(iso ?? Date.now())),
+                    );
+                    const { meal, deduplicated } = await insertMeal(userId, {
+                        ...recipeMealInput(
+                            recipe,
+                            {
+                                servings: servings.value,
+                                ...(args.meal_type
+                                    ? { meal_type: args.meal_type }
+                                    : {}),
+                            },
+                            hour,
+                        ),
+                        logged_at: iso,
+                    });
+                    const { progressSection } = await buildMealProgress(
+                        userId,
+                        meal,
+                        "logged",
+                        alcohol,
+                    );
+                    return text(
+                        `${deduplicated ? "Meal already logged (idempotent retry):" : "Meal logged from recipe:"}\n${formatMeal(meal, alcohol)}${progressSection}${note}`,
+                    );
+                },
+                analytics,
+            );
+        },
+    );
+
+    server.registerTool(
         "set_tracking",
         {
             title: "Set Tracking Options",
@@ -4773,14 +4942,8 @@ export function registerTools(
                                 },
                             ],
                         };
-                    const profile = await upsertProfile(userId, {
-                        ...(water !== undefined
-                            ? { water_tracking_enabled: water }
-                            : {}),
-                        ...(sodium !== undefined
-                            ? { sodium_tracking_enabled: sodium }
-                            : {}),
-                    });
+                    const { profile, sodiumLimitSeeded } =
+                        await applyTrackingPatch(userId, { water, sodium });
                     const parts = [
                         water === undefined
                             ? null
@@ -4790,7 +4953,7 @@ export function registerTools(
                         sodium === undefined
                             ? null
                             : sodiumTrackingEnabledFromProfile(profile)
-                              ? "Sodium tracking on: include sodium_mg on every meal from now on, and offer a daily limit (set_nutrition_goals sodium_mg; 2,300 mg is the common guideline)."
+                              ? `Sodium tracking on: include sodium_mg on every meal from now on.${sodiumLimitSeeded ? ` A daily limit of ${DEFAULT_SODIUM_LIMIT_MG.toLocaleString("en-US")} mg (the common guideline) was set so sodium shows up; change it with set_nutrition_goals sodium_mg.` : ""}`
                               : "Sodium tracking off: sodium is hidden; stored figures are kept.",
                     ].filter((p): p is string => p !== null);
                     return {

@@ -1,3 +1,4 @@
+import type { Recipe, RecipeDraft } from "./recipes.js";
 import { test, expect, describe, mock, beforeEach, afterAll } from "bun:test";
 import { z } from "zod";
 import {
@@ -1492,6 +1493,7 @@ const db = {
         day: string;
         counted: boolean;
     }>,
+    recipes: [] as Recipe[],
 };
 
 mock.module("./supabase.js", () => ({
@@ -1641,6 +1643,29 @@ mock.module("./supabase.js", () => ({
         db.goals = { ...goals(), ...patch } as NutritionGoals;
         return db.goals;
     },
+    listRecipes: async () => db.recipes,
+    getRecipe: async (_u: string, id: string) =>
+        db.recipes.find((r) => r.id === id) ?? null,
+    saveRecipe: async (userId: string, draft: RecipeDraft) => {
+        const i = db.recipes.findIndex(
+            (r) => r.name.toLowerCase() === draft.name.toLowerCase(),
+        );
+        const recipe: Recipe = {
+            id: i >= 0 ? db.recipes[i]!.id : `r-${db.recipes.length + 1}`,
+            user_id: userId,
+            created_at: "",
+            updated_at: "",
+            ...draft,
+        };
+        if (i >= 0) db.recipes[i] = recipe;
+        else db.recipes.push(recipe);
+        return { recipe, updated: i >= 0 };
+    },
+    deleteRecipe: async (_u: string, id: string) => {
+        const before = db.recipes.length;
+        db.recipes = db.recipes.filter((r) => r.id !== id);
+        return db.recipes.length < before;
+    },
     upsertActivity: async (
         userId: string,
         date: string,
@@ -1735,6 +1760,7 @@ beforeEach(() => {
     db.activityThrows = false;
     db.weights = [];
     db.calibrationDays = [];
+    db.recipes = [];
 });
 
 interface ToolResult {
@@ -5218,6 +5244,17 @@ describe("dashboard API", () => {
         // Populate every array so element shapes are compared too.
         const now = new Date().toISOString();
         db.meals = [meal({ logged_at: now })];
+        db.water = [
+            {
+                id: "h0",
+                user_id: "u1",
+                amount_ml: 250,
+                logged_at: now,
+                notes: null,
+                created_at: now,
+                idempotency_key: null,
+            },
+        ];
         db.weights = [
             {
                 ...db.weights[0]!,
@@ -5631,6 +5668,210 @@ describe("weight-rate calorie goals through the tools", () => {
                 400,
             );
             expect(burn.goals.calories - sc.goals.calories).toBeLessThan(520);
+        });
+    });
+});
+
+// ---------- UX audit batch 1: water/sodium opt-ins, recipes, setup ----------
+
+describe("water is an opt-in", () => {
+    test("off: no water goal in the payload and no water line in the text", async () => {
+        db.profile = { ...PROFILE_BASE, water_tracking_enabled: false };
+        db.goals = goals();
+        await withTools(null, async (call) => {
+            const r = await call("get_goal_progress", {});
+            const sc = r.structuredContent as {
+                goals: { water_ml: number | null; calories: number | null };
+            };
+            expect(sc.goals.water_ml).toBeNull();
+            expect(sc.goals.calories).toBe(2000);
+            expect(textOf(r)).not.toContain("Water");
+        });
+    });
+
+    test("on: the stored water goal is shown", async () => {
+        db.profile = { ...PROFILE_BASE, water_tracking_enabled: true };
+        db.goals = goals();
+        await withTools(null, async (call) => {
+            const r = await call("get_goal_progress", {});
+            const sc = r.structuredContent as { goals: { water_ml: number } };
+            expect(sc.goals.water_ml).toBe(2500);
+            expect(textOf(r)).toContain("Water: 0 / 2500 ml");
+        });
+    });
+
+    test("no profile row means off (a brand-new account)", async () => {
+        db.profile = null;
+        db.goals = goals();
+        await withTools(null, async (call) => {
+            const sc = (await call("get_goal_progress", {}))
+                .structuredContent as { goals: { water_ml: number | null } };
+            expect(sc.goals.water_ml).toBeNull();
+        });
+    });
+
+    test("set_nutrition_goals keeps a hidden water target in the stored row", async () => {
+        db.profile = { ...PROFILE_BASE, water_tracking_enabled: false };
+        db.goals = goals();
+        await withTools(null, async (call) => {
+            await call("set_nutrition_goals", { daily_calories: 1900 });
+            expect(db.goals!.daily_water_ml).toBe(2500);
+        });
+    });
+});
+
+describe("set_tracking", () => {
+    test("flips the flags and seeds a sodium limit only when none exists", async () => {
+        db.goals = goals({ daily_sodium_mg: null });
+        await withTools(null, async (call) => {
+            const text = textOf(
+                await call("set_tracking", { water: true, sodium: true }),
+            );
+            expect(db.profilePatches.at(-1)).toMatchObject({
+                water_tracking_enabled: true,
+                sodium_tracking_enabled: true,
+            });
+            expect(db.goals!.daily_sodium_mg).toBe(2300);
+            // the seed carried the rest of the row
+            expect(db.goals!.daily_calories).toBe(2000);
+            expect(text).toContain("2,300 mg");
+        });
+        db.goals = goals({ daily_sodium_mg: 1500 });
+        await withTools(null, async (call) => {
+            await call("set_tracking", { sodium: true });
+            expect(db.goals!.daily_sodium_mg).toBe(1500);
+        });
+    });
+
+    test("nothing to change says so", async () => {
+        await withTools(null, async (call) => {
+            expect(textOf(await call("set_tracking", {}))).toContain(
+                "Nothing changed",
+            );
+            expect(db.profilePatches).toHaveLength(0);
+        });
+    });
+});
+
+describe("manage_recipes", () => {
+    test("save per batch, list, log 1.5 servings, delete", async () => {
+        db.goals = goals();
+        await withTools(null, async (call) => {
+            const saved = textOf(
+                await call("manage_recipes", {
+                    action: "save",
+                    name: "Lentil stew",
+                    servings: 4,
+                    per: "batch",
+                    calories: 1800,
+                    protein_g: 110,
+                    ingredients: ["lentils 300 g", "carrot 2"],
+                }),
+            );
+            expect(saved).toContain("Recipe saved");
+            expect(db.recipes[0]!.calories).toBe(450);
+
+            expect(
+                textOf(await call("manage_recipes", { action: "list" })),
+            ).toContain("Lentil stew (makes 4 servings; per serving: 450 kcal");
+
+            const logged = textOf(
+                await call("manage_recipes", {
+                    action: "log",
+                    name: "lentil STEW",
+                    servings: 1.5,
+                    meal_type: "dinner",
+                }),
+            );
+            expect(logged).toContain("Meal logged from recipe");
+            const row = db.inserted.at(-1)!;
+            expect(row.description).toBe("Lentil stew (1.5 servings)");
+            expect(row.calories).toBe(675);
+            expect(row.protein_g).toBe(41.3);
+            expect(row.source).toBe("recipe");
+            expect(row.meal_type).toBe("dinner");
+            // unknown nutrients are omitted, never written as 0
+            expect(row.fat_g).toBeUndefined();
+
+            expect(
+                textOf(
+                    await call("manage_recipes", {
+                        action: "delete",
+                        recipe_id: db.recipes[0]!.id,
+                    }),
+                ),
+            ).toContain("Deleted recipe");
+            expect(db.recipes).toHaveLength(0);
+        });
+    });
+
+    test("never logs a substring match", async () => {
+        db.recipes = [
+            {
+                id: "r-1",
+                user_id: "u1",
+                name: "Overnight oats with peanut butter",
+                servings: 1,
+                ingredients: [],
+                calories: 500,
+                protein_g: null,
+                carbs_g: null,
+                fat_g: null,
+                fiber_g: null,
+                sugar_g: null,
+                sodium_mg: null,
+                caffeine_mg: null,
+                created_at: "",
+                updated_at: "",
+            },
+        ];
+        await withTools(null, async (call) => {
+            const t = textOf(
+                await call("manage_recipes", { action: "log", name: "oats" }),
+            );
+            expect(t).toContain("No saved recipe matches");
+            expect(db.inserted).toHaveLength(0);
+        });
+    });
+
+    test("an implausible recipe is refused with the reason", async () => {
+        await withTools(null, async (call) => {
+            const t = textOf(
+                await call("manage_recipes", {
+                    action: "save",
+                    name: "Oops",
+                    calories: 90000,
+                }),
+            );
+            expect(t).toContain("Recipe not saved");
+            expect(db.recipes).toHaveLength(0);
+        });
+    });
+});
+
+describe("get_profile reports unfinished setup", () => {
+    test("lists what is missing, then goes quiet once done", async () => {
+        db.profile = { ...PROFILE_BASE, timezone: null };
+        await withTools(null, async (call) => {
+            const t = textOf(await call("get_profile", {}));
+            expect(t).toContain("Setup not finished");
+            expect(t).toContain("timezone");
+            expect(t).toContain("Water tracking:");
+        });
+        db.profile = {
+            ...PROFILE_BASE,
+            timezone: "Europe/Madrid",
+            locale: "es",
+            preferred_weight_unit: "kg",
+            height_cm: 170,
+            birth_date: "1997-06-27",
+            sex: "male",
+        } as typeof PROFILE_BASE;
+        db.goals = goals();
+        db.ingestToken = "tok";
+        await withTools(null, async (call) => {
+            const t = textOf(await call("get_profile", {}));
+            expect(t).not.toContain("Setup not finished");
         });
     });
 });

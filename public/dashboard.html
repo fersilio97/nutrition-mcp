@@ -5202,11 +5202,20 @@
                 // rows logged before the field existed: no badge, not "estimate".
                 const SOURCE_LABEL = {
                     label: ["Label", "From the package label"],
-                    chain: ["Restaurant", "From the restaurant's published nutrition"],
-                    barcode: ["Barcode", "From a barcode lookup (Open Food Facts)"],
+                    chain: [
+                        "Restaurant",
+                        "From the restaurant's published nutrition",
+                    ],
+                    barcode: [
+                        "Barcode",
+                        "From a barcode lookup (Open Food Facts)",
+                    ],
                     recipe: ["Recipe", "From one of your saved recipes"],
                     import: ["Imported", "Imported from another app's export"],
-                    estimate: ["Estimate", "Estimated by the assistant — treat as approximate"],
+                    estimate: [
+                        "Estimate",
+                        "Estimated by the assistant — treat as approximate",
+                    ],
                 };
                 function sourceBadge(src) {
                     const l = SOURCE_LABEL[src];
@@ -11529,7 +11538,9 @@
                             .map(function (r) {
                                 const kcal =
                                     r.calories != null
-                                        ? Math.round(r.calories * recipeServings)
+                                        ? Math.round(
+                                              r.calories * recipeServings,
+                                          )
                                         : null;
                                 return (
                                     '<button type="button" class="qa" data-recipe-log="' +
@@ -11544,7 +11555,9 @@
                                     ) +
                                     "</span>" +
                                     (kcal != null
-                                        ? "<small>" + fmt(kcal) + " kcal</small>"
+                                        ? "<small>" +
+                                          fmt(kcal) +
+                                          " kcal</small>"
                                         : "") +
                                     "</button>"
                                 );
@@ -11564,7 +11577,11 @@
                         "/api/dashboard/recipes/" +
                             encodeURIComponent(id) +
                             "/log",
-                        { servings: recipeServings, client_key: uuid() },
+                        {
+                            servings: recipeServings,
+                            client_key: uuid(),
+                            meal_type: defaultMealType(),
+                        },
                     )
                         .then(function (res) {
                             lmBusy = false;
