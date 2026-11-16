@@ -271,7 +271,7 @@ describe("dashboard payload", () => {
             p.calibration.implied_kcal_per_day,
         );
         expect(p.metabolism.at(-1)!.data_kcal).toBe(p.calibration.resting_kcal);
-        expect(p.metabolism).toHaveLength(30);
+        expect(p.metabolism).toHaveLength(31); // 30 complete days + today
         expect(p.metabolism.every((m) => m.data_kcal != null)).toBe(true);
     });
 
@@ -280,7 +280,7 @@ describe("dashboard payload", () => {
         const b = at(90);
         expect(a.calibration).toEqual(b.calibration);
         expect(a.estimateVsScale).toEqual(b.estimateVsScale);
-        expect(a.metabolism).toEqual(b.metabolism.slice(-7));
+        expect(a.metabolism).toEqual(b.metabolism.slice(-8));
     });
 
     test("a manual choice moves a day in or out of the calibration", () => {
@@ -319,11 +319,22 @@ describe("dashboard payload", () => {
 describe("dashboardWindow", () => {
     test("fetches the 56 days the what-if lab can look back before the range's first day", () => {
         const w = dashboardWindow("2026-11-11", 7);
-        expect(w.startDate).toBe("2026-11-05");
-        expect(w.fetchStart).toBe("2026-09-10");
+        expect(w.startDate).toBe("2026-11-04");
+        expect(w.fetchStart).toBe("2026-09-09");
         expect(dashboardWindow("2026-11-11", 365).weightFetchStart).toBe(
-            "2025-09-17",
+            "2025-09-16",
         );
+    });
+
+    test("N complete days plus today, so 7 days is the Today tab's last7 week", () => {
+        // last7 covers [today − 7, today − 1] as complete days; the Trends
+        // range must hold exactly those days, plus today as the running one.
+        const w = dashboardWindow("2026-11-11", 7);
+        expect(w.startDate).toBe("2026-11-04");
+        expect(w.endDate).toBe("2026-11-11");
+        // The weight tracker still reaches the range's first day on a year.
+        const y = dashboardWindow("2026-11-11", 365);
+        expect(y.weightStart <= y.startDate).toBe(true);
     });
 });
 

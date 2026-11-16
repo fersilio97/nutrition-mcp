@@ -39,7 +39,8 @@ describe("preview fixture windows", () => {
                 () => {
                     const tz = scenarioTz(name);
                     const d = payloadAt(name, days);
-                    expect(d.daily).toHaveLength(days);
+                    // N complete days plus today (dashboardWindow).
+                    expect(d.daily).toHaveLength(days + 1);
                     expect(d.daily.at(-1)!.in_progress).toBe(true);
                     expect(d.daily.at(-1)!.date).toBe(TODAY);
                     expect(
@@ -62,7 +63,7 @@ describe("preview fixture windows", () => {
 
     test("dashboard ranges return their daily, weekly and monthly buckets", () => {
         for (const [days, granularity, count] of [
-            [7, "day", 7],
+            [7, "day", 8], // 7 complete days + today
             [30, "week", 4],
             [365, "month", 12],
         ] as const) {
@@ -77,7 +78,7 @@ describe("preview fixture windows", () => {
         () => {
             for (const name of SCENARIOS) {
                 const d = previewPayload(name, 30);
-                expect(d.daily).toHaveLength(30);
+                expect(d.daily).toHaveLength(31);
                 expect(d.daily.at(-1)!.in_progress).toBe(true);
             }
         },
@@ -108,8 +109,9 @@ describe("preview scenarios say what they claim", () => {
         expect(d.meals.some((m) => m.meal_type === "treat")).toBe(true);
     });
 
-    test("trend buckets per range: 7 daily, 4 weekly, 12 monthly", () => {
-        expect(payloadAt("full", 7).trendBuckets).toHaveLength(7);
+    test("trend buckets per range: 7 complete days + today, 4 weekly, 12 monthly", () => {
+        // 7 complete days + today's running bar.
+        expect(payloadAt("full", 7).trendBuckets).toHaveLength(8);
         const w = payloadAt("full", 30);
         expect(w.granularity).toBe("week");
         expect(w.trendBuckets).toHaveLength(4);

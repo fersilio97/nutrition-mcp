@@ -7806,7 +7806,23 @@
                 }
                 function tilesHtml(rows, s) {
                     const g = data.goals;
-                    const evs = data.estimateVsScale;
+                    // The scale over this range, first to last weigh-in in
+                    // it — like the Today tab's last7. Not estimateVsScale:
+                    // that is the 6-week calibration window, which put a
+                    // 6-week scale change next to a 6-day estimate.
+                    const inRange = (data.weights || [])
+                        .filter(
+                            (w) =>
+                                w.date >= data.startDate &&
+                                w.date <= data.endDate,
+                        )
+                        .sort((a, b) => a.logged_at.localeCompare(b.logged_at));
+                    const wFirst = inRange[0],
+                        wLast = inRange[inRange.length - 1];
+                    const scaleG =
+                        wFirst && wLast && wFirst.date < wLast.date
+                            ? wLast.weight_g - wFirst.weight_g
+                            : null;
                     let html = "";
                     html += s.logged.length
                         ? stat(
@@ -7868,12 +7884,9 @@
                                 "over " +
                                     plural(s.done.length, "complete day") +
                                     " · estimate" +
-                                    (evs && evs.actual_g != null
+                                    (scaleG != null
                                         ? ' · <span style="white-space:nowrap">scale: ' +
-                                          wDelta(
-                                              evs.actual_g,
-                                              data.weightUnit,
-                                          ) +
+                                          wDelta(scaleG, data.weightUnit) +
                                           "</span>"
                                         : ""),
                             )
