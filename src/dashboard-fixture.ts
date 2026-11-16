@@ -3,12 +3,14 @@
 // Pure and deterministic: a seeded PRNG generates every row relative to the
 // `today` it is given, so the same day always renders the same page and no
 // Supabase call is ever made. It lives in src/ rather than scripts/ so it is
-// typechecked and the drift guard in src/mcp.test.ts can import it.
+// typechecked and the drift guard in src/mcp.test.ts can
+// import it.
 //
 // The rows go through buildDashboardPayload — the exact function production
 // runs after its fetch — so the preview cannot show a shape the real API does
 // not produce.
 
+import type { Recipe } from "./recipes.js";
 import {
     bodyOf,
     buildDashboardPayload,
@@ -50,6 +52,11 @@ export const SCENARIOS = [
     "lb",
     "calibrate",
     "offset",
+    // UX audit batch 1 (vault 004-009): water opted in, a half-set-up
+    // account, and sodium tracked with a limit.
+    "water-on",
+    "onboarding",
+    "sodium",
 ] as const;
 export type ScenarioName = (typeof SCENARIOS)[number];
 
@@ -174,12 +181,68 @@ function makeMeal(
         sugar_g: Math.round(2 + rnd() * 16),
         alcohol_g: null,
         caffeine_mg: null,
-        sodium_mg: null,
-        source: null,
+        // ~0.9 mg sodium per kcal is a typical mixed diet.
+        sodium_mg: Math.round(kcal * 0.9),
+        source: SOURCES[hashOf(id) % SOURCES.length]!,
         notes: null,
         idempotency_key: null,
     };
 }
+
+// Mostly estimates, as real chat logging is; derived from the id, not the
+// PRNG, so adding the field did not reshuffle any scenario's numbers.
+const SOURCES = [
+    "estimate",
+    "estimate",
+    "estimate",
+    "label",
+    "chain",
+    "barcode",
+    "recipe",
+] as const;
+function hashOf(s: string): number {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return h;
+}
+
+/** Saved recipes the preview serves (GET /api/dashboard/recipes). */
+export const PREVIEW_RECIPES: Recipe[] = [
+    {
+        id: "0e4f3d1a-1b2c-4d5e-8f90-a1b2c3d4e5f6",
+        user_id: USER,
+        name: "Overnight oats",
+        servings: 1,
+        ingredients: ["rolled oats 50 g", "milk 200 ml", "raspberries 10"],
+        calories: 420,
+        protein_g: 18,
+        carbs_g: 58,
+        fat_g: 11,
+        fiber_g: 8,
+        sugar_g: 14,
+        sodium_mg: 120,
+        caffeine_mg: null,
+        created_at: STAMP,
+        updated_at: STAMP,
+    },
+    {
+        id: "1f5a4e2b-2c3d-4e6f-9a01-b2c3d4e5f607",
+        user_id: USER,
+        name: "Lentil stew",
+        servings: 4,
+        ingredients: ["lentils 300 g", "carrots 2", "chorizo 80 g"],
+        calories: 450,
+        protein_g: 27.5,
+        carbs_g: 52,
+        fat_g: 13,
+        fiber_g: 14,
+        sugar_g: 6,
+        sodium_mg: 780,
+        caffeine_mg: null,
+        created_at: STAMP,
+        updated_at: STAMP,
+    },
+];
 
 const SLOTS: Array<[string, number, number, number]> = [
     // type, hour, minute, share of the day
@@ -245,15 +308,21 @@ const BODY: BodyDetails = {
 };
 
 function profileFor(name: ScenarioName): Profile {
-    const withBody = name !== "no-body" && name !== "empty";
+    const fresh = name === "onboarding";
+    const withBody = name !== "no-body" && name !== "empty" && !fresh;
     return {
         user_id: USER,
         timezone: scenarioTz(name),
-        preferred_weight_unit: name === "lb" ? "lb" : "kg",
+        // The onboarding scenario leaves the basics unset so the setup card
+        // shows; every other scenario is fully set up, so it stays out of
+        // the way of what that scenario is for.
+        preferred_weight_unit: fresh ? null : name === "lb" ? "lb" : "kg",
         widgets_enabled: true,
         alcohol_tracking_enabled: false,
+        water_tracking_enabled: name === "water-on",
+        sodium_tracking_enabled: name === "sodium",
         preferred_drink_unit: null,
-        locale: null,
+        locale: fresh ? null : "en",
         energy_kcal_per_gram: null,
         trend_window_days: null,
         height_cm: withBody ? BODY.height_cm : null,
@@ -348,7 +417,12 @@ function generateScenario(name: ScenarioName, today: string): FixtureData {
 
     const rnd = prng(0xc0ffee);
     const span = 120;
-    const goals = name === "no-goals" ? null : FULL_GOALS;
+    const goals =
+        name === "no-goals" || name === "onboarding"
+            ? null
+            : name === "sodium"
+              ? { ...FULL_GOALS, daily_sodium_mg: 2300 }
+              : FULL_GOALS;
     const meals: Meal[] = [];
     const water: WaterEntry[] = [];
     const weight: WeightEntry[] = [];
@@ -584,6 +658,11 @@ export function previewInputs(
 
 /** What the dev preview has "written" this session, held in its memory. */
 export interface PreviewEdits {
+    /** Opt-in tracker flips from the setup card. */
+    tracking?: { water?: boolean; sodium?: boolean };
+    /** One-tap water added from the page, and ids removed by "Undo". */
+    addedWater?: WaterEntry[];
+    deletedWaterIds?: string[];
     body?: BodyDetails;
     /** Last 7 days chart mode saved from the page. */
     weekChartMode?: "surplus" | "goal";
@@ -686,6 +765,31 @@ export function scenarioWithEdits(
             target_weight_g: plan.target_weight_g ?? base.target_weight_g,
         };
     }
+    if (edits.tracking) {
+        if (edits.tracking.water !== undefined)
+            fx.profile = {
+                ...fx.profile,
+                water_tracking_enabled: edits.tracking.water,
+            };
+        if (edits.tracking.sodium !== undefined) {
+            fx.profile = {
+                ...fx.profile,
+                sodium_tracking_enabled: edits.tracking.sodium,
+            };
+            // What applyTrackingPatch does in production.
+            if (edits.tracking.sodium && fx.goals?.daily_sodium_mg == null)
+                fx.goals = {
+                    ...(fx.goals ?? emptyGoals()),
+                    daily_sodium_mg: 2300,
+                };
+        }
+    }
+    {
+        const wGone = new Set(edits.deletedWaterIds ?? []);
+        fx.water = [...fx.water, ...(edits.addedWater ?? [])].filter(
+            (w) => !wGone.has(w.id),
+        );
+    }
     const patches = edits.mealPatches ?? {};
     const gone = new Set(edits.deletedMealIds ?? []);
     fx.meals = [...fx.meals, ...(edits.addedMeals ?? [])]
@@ -707,6 +811,7 @@ export function previewInputsFor(
     return {
         ...previewInputs(fx, days, today),
         dayOverrides: edits.dayOverrides,
+        activityConnected: name !== "onboarding" && name !== "empty",
     };
 }
 

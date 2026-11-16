@@ -1916,6 +1916,11 @@
             .track i.s-fiber {
                 background: var(--fiber);
             }
+            /* sodium is a limit with no palette slot of its own: neutral ink,
+               so only the "over" chip carries colour */
+            .track i.s-sodium {
+                background: var(--ink-3);
+            }
             .facts-nut li:nth-child(3) .track i {
                 transition-delay: 40ms;
             }
@@ -2672,6 +2677,10 @@
             }
             .wq {
                 margin: 0 0 var(--gap-block);
+            }
+            /* a quick-log strip, sized like "Log a meal", not a facts card */
+            .wq .facts-title h3 {
+                font-size: 1.25rem;
             }
             .wq-fig {
                 font-family: var(--font-display);
@@ -7008,6 +7017,20 @@
                             g && g.fiber_g,
                             "g",
                         ) +
+                        // Opt-in (vault 008): only for users tracking sodium,
+                        // summed from today's meals (a limit, mg).
+                        (data.tracking && data.tracking.sodium
+                            ? nutrientRow(
+                                  "Sodium",
+                                  "s-sodium",
+                                  meals.reduce(
+                                      (sum, m) => sum + (m.sodium_mg || 0),
+                                      0,
+                                  ),
+                                  g && g.sodium_mg,
+                                  "mg",
+                              )
+                            : "") +
                         '</ul><p class="facts-foot">' +
                         (t.goal_calories
                             ? ""
@@ -12403,6 +12426,7 @@
                                             esc(mealTypeLabel(m.meal_type)) +
                                             '</td><td class="d">' +
                                             esc(m.description) +
+                                            sourceBadge(m.source) +
                                             '</td><td class="n k">' +
                                             nz(m.calories) +
                                             "</td>" +
