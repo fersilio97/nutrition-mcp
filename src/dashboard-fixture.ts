@@ -584,6 +584,8 @@ export interface PreviewEdits {
     body?: BodyDetails;
     /** Last 7 days chart mode saved from the page. */
     weekChartMode?: "surplus" | "goal";
+    /** Today's watch active kcal, overriding the scenario's (?active=). */
+    todayActive?: number;
     restingBasis?: "formula" | "calibrated";
     /** Calibration day choices: true = count, false = exclude. */
     dayOverrides?: Record<string, boolean>;
@@ -652,6 +654,17 @@ export function scenarioWithEdits(
     if (edits.model) fx.profile = { ...fx.profile, ...edits.model };
     if (edits.weekChartMode)
         fx.profile = { ...fx.profile, week_chart_mode: edits.weekChartMode };
+    if (edits.todayActive != null)
+        fx.activity = [
+            ...fx.activity.filter((a) => a.date !== today),
+            {
+                user_id: USER,
+                date: today,
+                active_kcal: edits.todayActive,
+                source: "garmin",
+                updated_at: STAMP,
+            },
+        ];
     if (edits.goalCalories !== undefined)
         fx.goals = {
             ...(fx.goals ?? emptyGoals()),

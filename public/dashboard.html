@@ -5228,7 +5228,9 @@
                         ") + " +
                         (act.kcal ? act.text + " + " : "") +
                         fmt(digestion) +
-                        " digestion";
+                        // Digestion of eating the goal itself, not of what
+                        // was eaten so far (that one is in Est. burn).
+                        " digestion of the goal";
                     if (p.mode !== "rate" && p.mode !== "date")
                         return "estimated burn: " + burn;
                     if (p.reached)

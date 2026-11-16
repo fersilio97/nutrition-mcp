@@ -97,7 +97,13 @@ function pageHeaders(): HeadersInit {
 
 function applyQuery(url: URL) {
     const q = url.searchParams;
-    if (!q.has("scenario") && !q.has("delay") && !q.has("fail")) return;
+    if (
+        !q.has("scenario") &&
+        !q.has("delay") &&
+        !q.has("fail") &&
+        !q.has("active")
+    )
+        return;
     const s = q.get("scenario") ?? "full";
     state.scenario = isScenario(s) ? s : "full";
     const delay = Number(q.get("delay") ?? 0);
@@ -109,6 +115,10 @@ function applyQuery(url: URL) {
     // In-memory writes are forgotten too, so ?scenario=no-body always shows
     // the missing-details state it advertises.
     state.edits = {};
+    // ?active=2000 → today's watch active kcal (e.g. a long ride today).
+    const active = Number(q.get("active"));
+    if (q.has("active") && Number.isFinite(active) && active >= 0)
+        edits().todayActive = Math.round(active);
     console.log(
         `[preview] scenario=${state.scenario} delay=${state.delay} fail=${state.fail || "none"}`,
     );
