@@ -611,8 +611,8 @@ function activityLine(adj: ActivityAdjustment): string {
 
 /** The goals in effect on `date`, active kcal included. Every mode — a typed
  *  goal, the estimated burn, a weight rate, a target date — is read from the
- *  dashboard's own payload (goal-plan.ts: the usual active kcal from the
- *  morning, rising when the watch records more), so the assistant's progress
+ *  dashboard's own payload (goal-plan.ts: the usual active kcal until the
+ *  day has an active figure, then that figure), so the assistant's progress
  *  line and the page are the same number by construction. If that cannot be
  *  built (a read failure) it falls back to adding the day's own active kcal. */
 async function effectiveGoals(
@@ -3253,8 +3253,8 @@ export function registerTools(
                         upsertActivity(userId, target, checked.value, "manual"),
                         getNutritionGoals(userId),
                     ]);
-                    // The same goal the page shows: the usual active from the
-                    // morning, rising when the day's figure passes it.
+                    // The same goal the page shows: the usual active until
+                    // the day has an active figure, then that figure.
                     const adj = await effectiveGoals(
                         userId,
                         profile,

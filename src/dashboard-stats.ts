@@ -46,8 +46,8 @@ export interface DashboardDay {
      *  days of the lookback before this one (goal-plan.ts activeAverage), or
      *  null with too few. Set by applyDerivedGoals. */
     active_avg_kcal?: number | null;
-    /** The active kcal the goal is built on: the average, rising when the
-     *  watch records more (goalActiveKcal). Set by applyDerivedGoals. */
+    /** The active kcal the goal is built on: the average until the day has
+     *  an active figure, then that figure (goalActiveKcal). Set by applyDerivedGoals. */
     goal_active_kcal?: number | null;
     /** The day's effective calorie goal (baseline + active), or null. */
     goal_calories: number | null;

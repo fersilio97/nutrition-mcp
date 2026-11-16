@@ -181,11 +181,6 @@ export function goalKcal(
     );
 }
 
-/** Share of today's active kcal ABOVE the usual that is added to the goal.
- *  1 = all of it (the user's choice, 2026-11-15: a long ride should be fully
- *  eatable). The nutritionist suggested 0.5, since wrist watches overcount
- *  hard sessions; this is the one knob to turn if the trend says so. */
-export const ACTIVE_CREDIT = 1;
 /** Counted days with a watch figure needed before the average is trusted;
  *  with fewer, the goal falls back to the day's own (live) active kcal. */
 export const MIN_ACTIVE_DAYS = 7;
@@ -215,17 +210,18 @@ export function activeAverage(
     return days.reduce((s, d) => s + (d.active_kcal ?? 0), 0) / days.length;
 }
 
-/** The active kcal a day's goal is built on: the usual (the average) from
- *  the morning, rising by ACTIVE_CREDIT of whatever the watch records above
- *  it, never falling below it. Without a trusted average, the day's own. */
+/** The active kcal a day's goal is built on: the usual (the average) until
+ *  the day has an active figure, then that figure, above or below the
+ *  average (the user's rule, 2026-11-15: active syncs after a workout or at
+ *  22:00, and the goal must be final by bedtime, so a light day lowers it).
+ *  A 0 counts as "not synced yet" — a failed sync, almost never a day without
+ *  moving. Without a trusted average, the day's own. */
 export function goalActiveKcal(
     average: number | null,
     today: number | null,
 ): number {
-    if (average == null) return today ?? 0;
-    return Math.round(
-        average + ACTIVE_CREDIT * Math.max(0, (today ?? 0) - average),
-    );
+    if (today != null && today > 0) return Math.round(today);
+    return Math.round(average ?? 0);
 }
 
 export interface GoalSettings {
@@ -591,6 +587,8 @@ export interface GoalPlanView extends RatePlan {
     active_avg_kcal: number | null;
     /** The active kcal today's goal is built on (goalActiveKcal). */
     goal_active_kcal: number | null;
+    /** Whether goal_active_kcal is today's own figure or the average. */
+    goal_active_source: "today" | "average";
     flags: GoalFlag[];
 }
 
@@ -614,8 +612,8 @@ function shift(date: string, n: number): string {
 
 /**
  * Sets every row's goal from that day's resting burn and its goal active kcal
- * (goalActiveKcal: the usual active from the morning, rising when the watch
- * records more), and returns the plan for the page. A typed (fixed) goal is
+ * (goalActiveKcal: the usual active until the day has an active figure,
+ * then that figure), and returns the plan for the page. A typed (fixed) goal is
  * that figure plus the same goal active, macros scaled as
  * adjustGoalsForActivity always has. The rate is today's, applied to every
  * row, so a date goal re-derives daily and history follows it. Each past row
@@ -743,6 +741,10 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
                 ? null
                 : Math.round(row.active_avg_kcal),
         goal_active_kcal: row?.goal_active_kcal ?? null,
+        goal_active_source:
+            row?.active_avg_kcal == null || (row?.active_kcal ?? 0) > 0
+                ? "today"
+                : "average",
         flags: goalFlags({
             plan,
             trend,

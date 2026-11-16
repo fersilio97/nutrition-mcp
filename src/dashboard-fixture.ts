@@ -366,8 +366,8 @@ function generateScenario(name: ScenarioName, today: string): FixtureData {
                 source: "garmin",
                 updated_at: STAMP,
             });
-        // The page's own rule (goal-plan.ts): the usual active from the
-        // morning, rising when the watch records more — so over-goal's
+        // The page's own rule (goal-plan.ts): the usual active until the
+        // day has an active figure, then that figure — so over-goal's
         // "300 over" is measured against the goal the page will show.
         const goal = 1800 + goalActiveKcal(usualActive(history, date), active);
 

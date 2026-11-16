@@ -3,9 +3,9 @@
 //
 // The stored calorie goal is the no-exercise baseline and active kcal are added
 // on top of it. WHICH active figure is goal-plan.ts's call (goalActiveKcal):
-// since 2026-11-15 the usual (lookback average) from the morning, rising when
-// the watch records more, rather than the day's running total — the old
-// MyFitnessPal-style rule left the goal near the baseline every morning. Protein, carbs
+// since 2026-11-15 the usual (lookback average) until the day has an active
+// figure, then that figure — the old MyFitnessPal-style rule (the running
+// total from midnight) left the goal near the baseline every morning. Protein, carbs
 // and fat scale by the same ratio (1800 + 300 → ×2100/1800), so the macro
 // split the user chose survives a bigger day. Fiber, sugar, alcohol, caffeine
 // and water are not energy targets and stay exactly as set.
