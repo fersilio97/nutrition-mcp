@@ -3104,6 +3104,9 @@
                 text-transform: uppercase;
                 color: var(--ink-2);
             }
+            .box-aside > .form-grid + .note {
+                margin-top: var(--s3);
+            }
             /* Stacked on a phone, the second group's label needs air so it
                does not read as a caption for the box above it. */
             @media (max-width: 1023.98px) {
@@ -9886,11 +9889,11 @@
                         '<div class="field"><label for="b-height">Height</label><span class="pair"><input class="input" id="b-height" type="number" inputmode="decimal" step="0.1" min="20" max="272" /><select class="input" id="b-unit" aria-label="Height unit"><option value="cm">cm</option><option value="in">in</option></select></span></div>' +
                         '<label class="field" for="b-birth">Birth date<input class="input" id="b-birth" type="date" /></label>' +
                         '<label class="field wide" for="b-sex">Sex<select class="input" id="b-sex"><option value="">—</option><option value="male">Male</option><option value="female">Female</option></select></label></div></div><div class="box-aside"><p class="box-sub">Burn model</p>' +
-                        '<label class="field wide" for="b-resting">Baseline burn<select class="input" id="b-resting"><option value="formula">Formula (BMR)</option><option value="calibrated">Calibrated from my data</option></select></label>' +
-                        '<div class="form-grid"><label class="field" for="b-k">Energy per gram of weight change (kcal/g)<input class="input" id="b-k" type="number" inputmode="decimal" step="0.1" min="3" max="9" placeholder="' +
+                        '<div class="form-grid"><label class="field wide" for="b-resting">Baseline burn<select class="input" id="b-resting"><option value="formula">Formula (BMR)</option><option value="calibrated">Calibrated from my data</option></select></label>' +
+                        '<label class="field" for="b-k">Kcal per gram<input class="input" id="b-k" type="number" inputmode="decimal" step="0.1" min="3" max="9" placeholder="' +
                         data.modelSettings.default_kcal_per_gram +
                         '" /></label>' +
-                        '<label class="field" for="b-win">Weight trend lookback (days)<input class="input" id="b-win" type="number" inputmode="numeric" step="1" min="' +
+                        '<label class="field" for="b-win">Lookback (days)<input class="input" id="b-win" type="number" inputmode="numeric" step="1" min="' +
                         data.modelSettings.min_window_days +
                         '" max="' +
                         data.modelSettings.max_window_days +
