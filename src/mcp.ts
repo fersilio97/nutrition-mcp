@@ -211,7 +211,7 @@ Send sodium_mg only when get_profile says sodium tracking is enabled. Use a labe
 // question is resolved") is repeated in log_meal's own description. Keep both
 // in sync. Note this is guidance only: the client model decides whether to
 // follow it, so the loop cannot be strictly enforced from here.
-const SERVER_INSTRUCTIONS = `Nutrition tracking: meals, water, weight, goals, and trends, per-user with timezone support.
+export const SERVER_INSTRUCTIONS = `Nutrition tracking: meals, water, weight, goals, and trends, per-user with timezone support.
 
 All nutrition figures are estimates and this server does not provide medical or dietary advice.
 
@@ -223,6 +223,10 @@ Knowing what time it is — some hosts put the current date and time in your con
 Recording a complete meal — this applies to every write path (log_meal, update_meal, a barcode lookup you then log, a meal you copied from search_meals), not just to photos.
 ${NUTRIENT_COVERAGE}
 When you notice after the fact that a meal went in without its fiber or sugar, do not leave it: fill it in with update_meal rather than mentioning it in prose.
+
+Saved recipes — dishes the user makes again and again are stored per serving with manage_recipes.
+- Before estimating a homemade dish, call manage_recipes with action 'list': if the dish is there, log it with action 'log' and the servings eaten instead of estimating it again.
+- When the user logs the same home dish a second time (search_meals shows an earlier one), offer once to save it as a recipe so next time is one step.
 
 Photo-based meal logging — when the user sends a photo of food, follow these steps in order:
 1. Pick the flow. A packaged product with a visible barcode: transcribe the digits printed under the barcode and call lookup_barcode. A plate, bowl, or prepared meal: continue below.
@@ -1824,7 +1828,7 @@ export function registerTools(
                 // NUTRIENT_COVERAGE rather than restated, because
                 // SERVER_INSTRUCTIONS carries the same paragraph and many hosts
                 // surface only one of the two.
-                "Log a meal entry with nutritional information. If the user doesn't specify the quantity or portion size, ask how much they ate before estimating calories and macros. When the user gives a barcode — typed, or read from a photo of the package (transcribe the digits printed under the barcode) — call lookup_barcode first to get the product's label data, then scale it to the amount eaten. Fall back to web search or estimation only when no product is found. Use web search for branded products when no barcode is available. When logging from a photo of a plated or prepared meal (no package/barcode): first identify each dish, then establish whether it is a restaurant/takeout meal or homemade before anything else. If it is from a restaurant, ask which restaurant and where, then search the web for its menu — chains publish per-item nutrition worth using directly, independent places usually publish ingredient lists that reveal the butter, cream, and oil the photo hides; if you cannot find the menu or cannot tell which dish it is, say so and put your assumption to the user as a question rather than presenting a guess as menu data. Either way, estimate portions in household measures the user can eyeball (a glass of, a handful of, a tablespoon of — NOT grams; for restaurant servings ask how much of it they actually ate), call search_meals to see how similar meals were logged before and to surface ingredients that may be invisible in the photo, then interview the user across multiple turns — one question per message, covering which variation each dish is, how much they ate, and photo-invisible ingredients (oil, sugar, sauce, what a drink was made with) — until nothing is left open. Do NOT call this tool after a single question-and-answer round; a lone confirmation is not enough. Only call it once every open question is resolved and the user has approved a full summary of the meal (or has told you to stop asking and just log it). Write the confirmed household-measure portions into the description itself (e.g. 'Oatmeal (1 glass raw oats, 2 glasses milk) with banana') so future searches are self-describing, and for a restaurant meal name the venue and city too (e.g. 'Pad thai with chicken (1 plate, finished) at Thai Basil, Podil, Kyiv').\n\n" +
+                "Log a meal entry with nutritional information. If the user names one of their saved recipes (manage_recipes action 'list'), log it with manage_recipes action 'log' instead — the figures are already known. If the user doesn't specify the quantity or portion size, ask how much they ate before estimating calories and macros. When the user gives a barcode — typed, or read from a photo of the package (transcribe the digits printed under the barcode) — call lookup_barcode first to get the product's label data, then scale it to the amount eaten. Fall back to web search or estimation only when no product is found. Use web search for branded products when no barcode is available. When logging from a photo of a plated or prepared meal (no package/barcode): first identify each dish, then establish whether it is a restaurant/takeout meal or homemade before anything else. If it is from a restaurant, ask which restaurant and where, then search the web for its menu — chains publish per-item nutrition worth using directly, independent places usually publish ingredient lists that reveal the butter, cream, and oil the photo hides; if you cannot find the menu or cannot tell which dish it is, say so and put your assumption to the user as a question rather than presenting a guess as menu data. Either way, estimate portions in household measures the user can eyeball (a glass of, a handful of, a tablespoon of — NOT grams; for restaurant servings ask how much of it they actually ate), call search_meals to see how similar meals were logged before and to surface ingredients that may be invisible in the photo, then interview the user across multiple turns — one question per message, covering which variation each dish is, how much they ate, and photo-invisible ingredients (oil, sugar, sauce, what a drink was made with) — until nothing is left open. Do NOT call this tool after a single question-and-answer round; a lone confirmation is not enough. Only call it once every open question is resolved and the user has approved a full summary of the meal (or has told you to stop asking and just log it). Write the confirmed household-measure portions into the description itself (e.g. 'Oatmeal (1 glass raw oats, 2 glasses milk) with banana') so future searches are self-describing, and for a restaurant meal name the venue and city too (e.g. 'Pad thai with chicken (1 plate, finished) at Thai Basil, Podil, Kyiv').\n\n" +
                 NUTRIENT_COVERAGE +
                 "\nPutting '180 mg caffeine' or '6 g fiber' in notes or in the description instead of in the field leaves it out of every total, goal and chart.",
             annotations: {
@@ -5677,7 +5681,7 @@ function newMcpServer(baseUrl: string): McpServer {
     return new McpServer(
         {
             name: "nutrition-mcp",
-            version: "1.31.0",
+            version: "1.32.0",
             icons: [
                 {
                     src: `${baseUrl}/favicon.ico`,

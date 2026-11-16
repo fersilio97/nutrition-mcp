@@ -47,6 +47,7 @@ import {
     getIngestTokenStatus,
     listRecipes,
     getRecipe,
+    saveRecipe,
     type ActivityDay,
     type Meal,
     type MealInput,
@@ -59,6 +60,7 @@ import { buildDailyBuckets } from "./insights.js";
 import { setupChecklist } from "./onboarding.js";
 import {
     checkLoggedServings,
+    checkRecipe,
     recipeMealDescription,
     scaleRecipe,
     type Recipe,
@@ -1828,6 +1830,51 @@ export async function logRecipeFromDashboard(
     };
 }
 
+/** A meal's figures as a one-serving recipe (vault 020: "Save as recipe" on
+ *  a dashboard meal). The name defaults to the description with its trailing
+ *  "(…)" amount dropped, so "Overnight oats (1 serving)" saves as
+ *  "Overnight oats". Pure. */
+export function recipeFromMeal(
+    m: Meal,
+    name?: unknown,
+): ReturnType<typeof checkRecipe> {
+    const fallback = m.description.replace(/\s*\([^()]*\)\s*$/, "").trim();
+    return checkRecipe({
+        name:
+            typeof name === "string" && name.trim()
+                ? name
+                : fallback.slice(0, 120) || m.description.slice(0, 120),
+        servings: 1,
+        calories: m.calories,
+        protein_g: m.protein_g,
+        carbs_g: m.carbs_g,
+        fat_g: m.fat_g,
+        fiber_g: m.fiber_g,
+        sugar_g: m.sugar_g,
+        sodium_mg: m.sodium_mg ?? null,
+        caffeine_mg: m.caffeine_mg,
+    });
+}
+
+export async function saveRecipeFromMeal(
+    userId: string,
+    id: string,
+    input: Record<string, unknown>,
+): Promise<Reply> {
+    for (const k of Object.keys(input))
+        if (k !== "name") return invalid(`Unknown field: ${k}.`);
+    if (!UUID_RE.test(id)) return { status: 404, json: { error: "not_found" } };
+    const meal = await getMealById(userId, id);
+    if (!meal) return { status: 404, json: { error: "not_found" } };
+    const checked = recipeFromMeal(meal, input.name);
+    if (!checked.ok) return invalid(checked.error);
+    const { recipe, updated } = await saveRecipe(userId, checked.value);
+    return {
+        status: 200,
+        json: { ok: true, updated, recipe: recipeChip(recipe) },
+    };
+}
+
 async function readObject(c: {
     req: { json: () => Promise<unknown> };
 }): Promise<Record<string, unknown> | null> {
@@ -2168,6 +2215,22 @@ export function createDashboardRouter(): Hono {
             sodium_limit_seeded: sodiumLimitSeeded,
         });
     });
+
+    // "Save as recipe" from a logged meal.
+    dash.post(
+        "/api/dashboard/meals/:id/recipe",
+        authenticateBearer,
+        async (c) => {
+            const body = await readObject(c);
+            if (!body) return c.json({ error: "invalid_request" }, 400);
+            const res = await saveRecipeFromMeal(
+                c.get("userId") as string,
+                c.req.param("id") ?? "",
+                body,
+            );
+            return c.json(res.json, res.status);
+        },
+    );
 
     // Saved recipes: the chips, and one tap to log N servings.
     dash.get("/api/dashboard/recipes", authenticateBearer, async (c) => {

@@ -2632,6 +2632,45 @@
             .setup {
                 margin: 0 0 var(--gap-block);
             }
+            .setup-more {
+                display: none;
+            }
+            /* phones: one line until opened (vault 018) */
+            @media (max-width: 600px) {
+                .setup .facts-title h3 {
+                    font-size: 1.25rem;
+                }
+                .setup-more {
+                    display: inline-flex;
+                    margin-top: var(--s2);
+                }
+                .setup:not(.open) .facts-serving,
+                .setup:not(.open) .setup-list,
+                .setup:not(.open) .setup-opts {
+                    display: none;
+                }
+            }
+            /* phones: each quick-log row scrolls sideways instead of
+               stacking a screenful of full-width pills (vault 019) */
+            @media (max-width: 600px) {
+                .lm .quick {
+                    flex-wrap: nowrap;
+                    overflow-x: auto;
+                    scroll-snap-type: x proximity;
+                    -webkit-overflow-scrolling: touch;
+                    scrollbar-width: none;
+                    margin-right: calc(-1 * var(--s4));
+                    padding-right: var(--s4);
+                    padding-bottom: 2px;
+                }
+                .lm .quick::-webkit-scrollbar {
+                    display: none;
+                }
+                .lm .qa {
+                    flex: none;
+                    scroll-snap-align: start;
+                }
+            }
             .setup-list {
                 list-style: none;
                 margin: var(--s3) 0 0;
@@ -5454,7 +5493,11 @@
                         nz(m.fiber_g) +
                         "</b></span><span>Sug <b>" +
                         nz(m.sugar_g) +
-                        "</b></span></p></li>"
+                        "</b></span>" +
+                        (data.tracking && data.tracking.sodium
+                            ? "<span>Na <b>" + nz(m.sodium_mg) + "</b></span>"
+                            : "") +
+                        "</p></li>"
                     );
                 }
                 // Calorie bars against each day's goal: --kcal up to the
@@ -6975,6 +7018,10 @@
                         return false;
                     }
                 }
+                // On a phone the full checklist would fill the first screen
+                // (audit 2, vault 018): it starts as one line there and
+                // opens on tap. Desktop always shows it whole.
+                let setupOpen = false;
                 function setupCardHtml() {
                     const items = data.setup || [];
                     const left = items.filter((i) => !i.done);
@@ -6989,11 +7036,20 @@
                         label +
                         "</label>";
                     return (
-                        '<section class="facts rv setup" aria-labelledby="h-setup"><div class="facts-title"><h3 id="h-setup">Finish setting up</h3><span class="tag">' +
+                        '<section class="facts rv setup' +
+                        (setupOpen ? " open" : "") +
+                        '" aria-labelledby="h-setup"><div class="facts-title"><h3 id="h-setup">Finish setting up</h3><span class="tag">' +
                         (items.length - left.length) +
                         " of " +
                         items.length +
                         " done</span></div>" +
+                        '<button type="button" class="link-btn setup-more" data-setup-open aria-expanded="' +
+                        setupOpen +
+                        '">' +
+                        (setupOpen
+                            ? "Fewer details"
+                            : plural(left.length, "step") + " left · show") +
+                        "</button>" +
                         '<p class="facts-serving"><span>Each is one sentence to Claude — or use the Body tab.</span><button type="button" class="link-btn" data-setup-hide>Hide</button></p>' +
                         '<ul class="setup-list">' +
                         items
@@ -7143,6 +7199,12 @@
                     if (add) return addWater(Number(add.dataset.waterAdd));
                     const un = t.closest("[data-water-undo]");
                     if (un) return undoWater(un.dataset.waterUndo);
+                    if (t.closest("[data-setup-open]")) {
+                        setupOpen = !setupOpen;
+                        contentDirty.today = true;
+                        paint();
+                        return;
+                    }
                     if (t.closest("[data-setup-hide]")) {
                         try {
                             localStorage.setItem(SETUP_KEY, "1");
@@ -11349,7 +11411,7 @@
                             );
                         }).join("") +
                         "</div>" +
-                        '<div class="form-foot"><button type="submit" class="btn primary" id="me-save">Save changes</button><button type="button" class="btn" id="me-cancel">Cancel</button><span class="b-status" id="me-status" role="status"></span><button type="button" class="btn danger" id="me-delete">Delete meal</button></div>' +
+                        '<div class="form-foot"><button type="submit" class="btn primary" id="me-save">Save changes</button><button type="button" class="btn" id="me-cancel">Cancel</button><span class="b-status" id="me-status" role="status"></span><button type="button" class="btn" id="me-recipe" title="Save this meal\u2019s figures as a one-serving recipe you can log in one tap">Save as recipe</button><button type="button" class="btn danger" id="me-delete">Delete meal</button></div>' +
                         '<p class="form-hint">Times are in ' +
                         esc(data.timezone) +
                         ". Only the fields you change are saved.</p></form>"
@@ -12262,6 +12324,37 @@
                             lmFail(null, "Could not reach the server.");
                         });
                 }
+                // "Save as recipe" (vault 020): the meal's figures become a
+                // one-serving recipe; the recipe chips reload to show it.
+                function saveMealAsRecipe() {
+                    const b = $("me-recipe");
+                    const st = $("me-status");
+                    if (!b || !mealEditId) return;
+                    b.disabled = true;
+                    writeJson(
+                        "POST",
+                        "/api/dashboard/meals/" +
+                            encodeURIComponent(mealEditId) +
+                            "/recipe",
+                        {},
+                    )
+                        .then(function (res) {
+                            b.disabled = false;
+                            if (!st) return;
+                            st.textContent = res.ok
+                                ? (res.body.updated
+                                      ? "Recipe updated: "
+                                      : "Saved as recipe: ") +
+                                  res.body.recipe.name
+                                : (res.body && res.body.error_description) ||
+                                  "Could not save.";
+                            st.className = "b-status" + (res.ok ? "" : " err");
+                            if (res.ok) loadRecipes();
+                        })
+                        .catch(function () {
+                            b.disabled = false;
+                        });
+                }
                 // Permanent, so it takes two clicks: the first arms the button, the
                 // second deletes; it disarms itself after four seconds.
                 let meDelArmed = false;
@@ -12348,6 +12441,7 @@
                     if (un) return undoMeal(un.dataset.undo);
                     if (t.closest("[data-lm-open]")) return openLogMeal();
                     if (t.closest("#me-delete")) return deleteMealFromEdit();
+                    if (t.closest("#me-recipe")) return saveMealAsRecipe();
                     if (t.closest("#lm-cancel")) {
                         lmOpen = false;
                         lmDraft = null;
@@ -12565,6 +12659,11 @@
                         ["fiber_g", "Fib"],
                         ["sugar_g", "Sug"],
                     ];
+                    // Opt-in (vault 021): a sodium column only for users who
+                    // track it, so the table stays as it was for everyone else.
+                    const sod = !!(data.tracking && data.tracking.sodium);
+                    if (sod) MAC.push(["sodium_mg", "Na"]);
+                    const cols = 10 + (sod ? 1 : 0);
                     const body = groups
                         .map(function (g, gi) {
                             const dayRow = data.daily.find(
@@ -12594,7 +12693,9 @@
                                 " · Fib " +
                                 fmt(sum(g.meals, "fiber_g"));
                             return (
-                                '<tbody><tr class="day"><th colspan="10" scope="colgroup">' +
+                                '<tbody><tr class="day"><th colspan="' +
+                                cols +
+                                '" scope="colgroup">' +
                                 esc(day) +
                                 partial +
                                 calibrationToggle(dayRow) +
@@ -12661,13 +12762,17 @@
                                             (editing
                                                 ? '<tr class="edit-row' +
                                                   (last ? " last" : "") +
-                                                  '"><td colspan="10">' +
+                                                  '"><td colspan="' +
+                                                  cols +
+                                                  '">' +
                                                   mealEditForm(m) +
                                                   "</td></tr>"
                                                 : duping
                                                   ? '<tr class="edit-row' +
                                                     (last ? " last" : "") +
-                                                    '"><td colspan="10">' +
+                                                    '"><td colspan="' +
+                                                    cols +
+                                                    '">' +
                                                     mealDupForm(m) +
                                                     "</td></tr>"
                                                   : "")
@@ -12685,7 +12790,11 @@
                               esc(mealFlash) +
                               "</p>"
                             : "") +
-                        '<div class="meals-wrap rv"><table class="meals-table"><caption class="sr-only">Meals in this range, grouped by day, newest first</caption><thead><tr><th scope="col">Time</th><th scope="col">Meal</th><th scope="col">Description</th><th scope="col" class="n">kcal</th><th scope="col" class="n">P</th><th scope="col" class="n">C</th><th scope="col" class="n">F</th><th scope="col" class="n">Fib</th><th scope="col" class="n">Sug</th><th scope="col"><span class="sr-only">Duplicate or edit</span></th></tr></thead>' +
+                        '<div class="meals-wrap rv"><table class="meals-table"><caption class="sr-only">Meals in this range, grouped by day, newest first</caption><thead><tr><th scope="col">Time</th><th scope="col">Meal</th><th scope="col">Description</th><th scope="col" class="n">kcal</th><th scope="col" class="n">P</th><th scope="col" class="n">C</th><th scope="col" class="n">F</th><th scope="col" class="n">Fib</th><th scope="col" class="n">Sug</th>' +
+                        (sod
+                            ? '<th scope="col" class="n" title="Sodium, mg">Na</th>'
+                            : "") +
+                        '<th scope="col"><span class="sr-only">Duplicate or edit</span></th></tr></thead>' +
                         body +
                         '</table><p class="meals-foot">Showing the ' +
                         plural(

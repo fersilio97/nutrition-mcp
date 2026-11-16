@@ -53,6 +53,8 @@ import {
     deleteMealFromDashboard,
     saveBodyDetails,
     updateMealFromDashboard,
+    recipeFromMeal,
+    saveRecipeFromMeal,
 } from "./dashboard.js";
 import { previewPayload } from "./dashboard-fixture.js";
 import { McpServer, InMemoryTransport } from "@modelcontextprotocol/server";
@@ -5952,5 +5954,68 @@ describe("get_eating_review", () => {
             (row) => row.tool_name === "get_eating_review",
         );
         expect(rows.map((row) => row.success)).toEqual([true, false]);
+    });
+});
+
+// ---------- Audit 2 batch: recipes are discoverable (vault 020) ----------
+
+describe("saved recipes are discoverable", () => {
+    test("the model is told to check and offer recipes where it looks", async () => {
+        const { SERVER_INSTRUCTIONS } = await import("./mcp.js");
+        expect(SERVER_INSTRUCTIONS).toContain("manage_recipes");
+        expect(SERVER_INSTRUCTIONS).toContain(
+            "offer once to save it as a recipe",
+        );
+        const server = new McpServer(
+            { name: "t", version: "0" },
+            { capabilities: { tools: {}, resources: {} } },
+        );
+        registerTools(server, "u1", true, null);
+        const [ct, st] = InMemoryTransport.createLinkedPair();
+        const client = new Client({ name: "c", version: "0" });
+        await Promise.all([server.connect(st), client.connect(ct)]);
+        const { tools } = await client.listTools();
+        await client.close();
+        const logMeal = tools.find((t) => t.name === "log_meal")!;
+        expect(logMeal.description).toContain("manage_recipes");
+    });
+
+    test("recipeFromMeal drops the trailing amount and keeps unknowns unknown", () => {
+        const r = recipeFromMeal(
+            meal({
+                description: "Overnight oats (1 serving)",
+                calories: 420,
+                protein_g: 18,
+                fiber_g: null,
+                sugar_g: null,
+            }),
+        );
+        expect(r.ok && r.value.name).toBe("Overnight oats");
+        expect(r.ok && r.value.servings).toBe(1);
+        expect(r.ok && r.value.fiber_g).toBeNull();
+    });
+
+    test("Save as recipe stores the meal's figures and reports a re-save as an update", async () => {
+        const m = meal({
+            id: "00000000-0000-4000-8000-000000000abc",
+            description: "Lentil stew (1 bowl)",
+            calories: 450,
+            protein_g: 27.5,
+        });
+        db.meals = [m];
+        const first = await saveRecipeFromMeal("u1", m.id, {});
+        expect(first.status).toBe(200);
+        expect(db.recipes).toHaveLength(1);
+        expect(db.recipes[0]!.name).toBe("Lentil stew");
+        expect(db.recipes[0]!.calories).toBe(450);
+        const again = await saveRecipeFromMeal("u1", m.id, {});
+        expect((again.json as { updated: boolean }).updated).toBe(true);
+        expect(db.recipes).toHaveLength(1);
+        const missing = await saveRecipeFromMeal(
+            "u1",
+            "00000000-0000-4000-8000-00000000ffff",
+            {},
+        );
+        expect(missing.status).toBe(404);
     });
 });

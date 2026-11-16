@@ -121,6 +121,10 @@ export interface AdvisorOptions {
     weightKg: number | null;
     /** Alcohol is opt-in; without it the rule stays silent. */
     alcoholEnabled: boolean;
+    /** Water is opt-in too (vault 004): off means no hydration rule and no
+     *  hydration share of the score, even if a stored water goal exists.
+     *  Omitted = on, the behaviour before the opt-in. */
+    waterEnabled?: boolean;
 }
 
 // ---------- Helpers ----------
@@ -502,7 +506,8 @@ export function buildAdvisorReport(
     }
 
     // --- Hydration (needs a water goal) ---
-    const waterGoal = goals?.daily_water_ml ?? null;
+    const waterGoal =
+        opts.waterEnabled === false ? null : (goals?.daily_water_ml ?? null);
     if (waterGoal != null && waterGoal > 0) {
         const avg = mean(logged.map((b) => b.waterMl));
         const ratio = avg / waterGoal;

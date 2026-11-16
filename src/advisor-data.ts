@@ -6,6 +6,7 @@ import {
 import { buildDailyBuckets } from "./insights.js";
 import {
     alcoholTrackingEnabledFromProfile,
+    waterTrackingEnabledFromProfile,
     getLatestWeight,
     getMealsInRange,
     getNutritionGoals,
@@ -44,6 +45,7 @@ export async function loadAdvisorReport(
             tz,
             weightKg: latestWeight ? latestWeight.weight_g / 1000 : null,
             alcoholEnabled: alcoholTrackingEnabledFromProfile(profile),
+            waterEnabled: waterTrackingEnabledFromProfile(profile),
         },
     );
 }

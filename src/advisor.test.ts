@@ -432,6 +432,24 @@ describe("breakfast, hydration and logging", () => {
         expect(ids(r, "improve")).toContain("hydration");
     });
 
+    // Vault 004: water is opt-in, so a stored water goal must not score or
+    // nag a user who switched water tracking off.
+    test("water tracking off: no hydration rule and no hydration score", () => {
+        const buckets = week(
+            (d) => [meal(`${d}T12:00:00Z`)],
+            "UTC",
+            DAYS.map((d) => ({ logged_at: `${d}T10:00:00Z`, amount_ml: 800 })),
+        );
+        const r = buildAdvisorReport(buckets, goals({ daily_water_ml: 2000 }), {
+            ...OPTS,
+            waterEnabled: false,
+        });
+        expect(ids(r, "improve")).not.toContain("hydration");
+        expect(
+            r.components.find((c) => c.id === "hydration")!.score,
+        ).toBeNull();
+    });
+
     test("a fully logged week is credited, a patchy one is not", () => {
         const full = buildAdvisorReport(
             week((d) => [meal(`${d}T12:00:00Z`)]),
