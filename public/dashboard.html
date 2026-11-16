@@ -4793,6 +4793,13 @@
                     rows.some((r) => r.bmr_kcal != null && r.active_kcal);
                 // The stored calorie baseline, or null: with none, the server
                 // defaults the goal to the estimated burn.
+                // Whether the days carry a goal to draw. Every mode sets one
+                // per day (fixed: base + active; burn/rate/date: derived from
+                // that day's burn and plan), so the Energy chart draws the
+                // goal line whenever there is one, not only for fixed goals.
+                function hasDailyGoal() {
+                    return (data.daily || []).some((r) => r.goal_calories > 0);
+                }
                 function goalCustom() {
                     return data.goals && data.goals.calories > 0
                         ? data.goals.calories
@@ -6909,7 +6916,7 @@
                             "</div>",
                         note:
                             "What you ate each day against what you burned, split into baseline, digestion and workout (watch active kcal). Pink shows days you ate over your burn" +
-                            (data.goals && data.goals.calories > 0
+                            (hasDailyGoal()
                                 ? "; dots turn red over your goal; the dashed line is your goal."
                                 : ".") +
                             " Days that look partly logged are left out (see the Meals tab)." +
@@ -6922,7 +6929,7 @@
                             [swatch("cal2-legend-surplus"), "Surplus"],
                             // With no custom goal the goal IS the est. burn:
                             // one line, not two that differ by digestion.
-                            !(data.goals && data.goals.calories > 0)
+                            !hasDailyGoal()
                                 ? [
                                       svgLine("cal2-burn-top"),
                                       "Est. burn = your goal",
@@ -6940,7 +6947,7 @@
                     return (
                         head +
                         '<div class="plot" id="cal2-plot"></div>' +
-                        (!(data.goals && data.goals.calories > 0)
+                        (!hasDailyGoal()
                             ? '<p class="cal2-why">Your goal is your est. burn (set in Body), so the burn line is your goal.</p>'
                             : "") +
                         '<div class="strip four rv" id="cal2-stats"></div><p class="met-highlight" id="cal2-today"></p>'
@@ -8535,9 +8542,7 @@
                     );
                     svg.appendChild(
                         svgEl("path", {
-                            d: !(data.goals && data.goals.calories > 0)
-                                ? ""
-                                : line("goal"),
+                            d: !hasDailyGoal() ? "" : line("goal"),
                             class: "cal2-goal",
                         }),
                     );
@@ -8638,7 +8643,7 @@
                                     1,
                                 ],
                             ].concat(
-                                !(data.goals && data.goals.calories > 0)
+                                !hasDailyGoal()
                                     ? []
                                     : [
                                           [
