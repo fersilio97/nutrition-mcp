@@ -2986,11 +2986,16 @@
                     padding-top: 0;
                     border-top: 0;
                 }
-                /* The lab's table needs the full width, so its three
-                   controls sit side by side above it instead. */
+                /* The lab's table needs the full width, so its controls sit
+                   side by side above it instead: lookback and kcal/g share a
+                   row, and digestion (the widest switch) takes its own so no
+                   pill switch wraps onto two lines. */
                 .lab-controls {
-                    grid-template-columns: repeat(3, minmax(0, 1fr));
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
                     column-gap: clamp(1.5rem, 3vw, 2.5rem);
+                }
+                .lab-controls > .lab-row:nth-child(3) {
+                    grid-column: 1 / -1;
                 }
                 .lab-controls .lab-row {
                     grid-template-columns: 1fr;
