@@ -134,6 +134,7 @@ function hostPage(widget: string, params: URLSearchParams): string {
         sugar_g: 45,
         alcohol_g: 20,
         caffeine_mg: 400,
+        sodium_mg: 2300,
         water_ml: 2500,
     };
     const totals = {
@@ -147,6 +148,7 @@ function hostPage(widget: string, params: URLSearchParams): string {
         alcohol_g: 27.7,
         // Over its ceiling too, so the stat line flags it.
         caffeine_mg: 470,
+        sodium_mg: 2800,
         water_ml: 1500,
     };
     // Per-meal breakdown rows: what makes the panel's tiles tappable.
@@ -202,6 +204,7 @@ function hostPage(widget: string, params: URLSearchParams): string {
             sugar_g: 0,
             alcohol_g: 0,
             caffeine_mg: 470,
+            sodium_mg: 2800,
         },
     ];
     // Same rows with alcohol tracking OFF: null, not 0, everywhere.
@@ -253,6 +256,7 @@ function hostPage(widget: string, params: URLSearchParams): string {
             action: "logged",
             date: "2026-07-15",
             logged_meal: {
+                source: "label",
                 description: "Grilled chicken salad",
                 meal_type: "lunch",
                 calories: 520,

@@ -59,6 +59,7 @@ export interface WidgetStrings {
             sugar_g: string;
             alcohol_g: string;
             caffeine_mg: string;
+            sodium_mg: string;
             fiber_g: string;
             water_ml: string;
         };
@@ -202,6 +203,14 @@ export interface WidgetStrings {
         titleUpdated: string;
         /** Template. Placeholder: {kcal} (pre-formatted). */
         addedKcal: string;
+        sources: {
+            label: string;
+            chain: string;
+            barcode: string;
+            estimate: string;
+            import: string;
+            recipe: string;
+        };
     };
 
     /** templates/trends.html's own top matter (the toggle header and chart;
@@ -279,6 +288,7 @@ export interface WidgetStrings {
             sugar_g: string;
             alcohol_g: string;
             caffeine_mg: string;
+            sodium_mg: string;
             notes: string;
             time: string;
             deleted: string;
@@ -406,6 +416,7 @@ export const WIDGET_STRINGS_EN: WidgetStrings = {
             sugar_g: "Sugar",
             alcohol_g: "Alcohol",
             caffeine_mg: "Caffeine",
+            sodium_mg: "Sodium",
             fiber_g: "Fiber",
             water_ml: "Water",
         },
@@ -493,6 +504,14 @@ export const WIDGET_STRINGS_EN: WidgetStrings = {
         titleLogged: "Meal logged",
         titleUpdated: "Meal updated",
         addedKcal: "+{kcal} kcal",
+        sources: {
+            label: "From the label",
+            chain: "Restaurant figures",
+            barcode: "Barcode lookup",
+            estimate: "Estimate",
+            import: "Imported",
+            recipe: "Saved recipe",
+        },
     },
     trends: {
         title: "Trends",
@@ -538,6 +557,7 @@ export const WIDGET_STRINGS_EN: WidgetStrings = {
             sugar_g: "Sugar, total (g)",
             alcohol_g: "Alcohol (g)",
             caffeine_mg: "Caffeine (mg)",
+            sodium_mg: "Sodium (mg)",
             notes: "Notes",
             time: "Time (separate column)",
             deleted: "Deleted flag",

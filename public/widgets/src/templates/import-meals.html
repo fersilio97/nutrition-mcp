@@ -257,6 +257,8 @@
                 // always; it is the read side that stays quiet until there is
                 // caffeine to talk about.
                 { key: "caffeine_mg" },
+                // Sodium is also expressed in milligrams.
+                { key: "sodium_mg" },
                 { key: "notes" },
                 { key: "time" },
                 { key: "deleted" },
@@ -378,6 +380,13 @@
                     "caffeina_mg",
                     "cafeine",
                     "cafeine_mg",
+                ],
+                sodium_mg: [
+                    "sodium",
+                    "sodium_mg",
+                    "sodium (mg)",
+                    "natrium (mg)",
+                    "sodio (mg)",
                 ],
                 notes: ["note", "notes", "comment", "kommentar"],
                 deleted: ["deleted"],
@@ -777,6 +786,7 @@
                         // opt-in, so the only thing that keeps it out of a row
                         // is the file not having the column.
                         caffeine_mg: num(r, m.caffeine_mg),
+                        sodium_mg: num(r, m.sodium_mg),
                         notes: cell(r, m.notes),
                         // Passed through untouched. The server decides whether
                         // it names one of this user's meals; the widget must
