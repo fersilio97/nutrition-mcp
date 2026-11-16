@@ -204,15 +204,20 @@ export function dashboardWindow(
     fetchStart: string;
     weightFetchStart: string;
 } {
-    const startDate = shiftLocalDate(today, -(days - 1));
+    // N complete days plus today: "7 days" on Trends is the 7 finished days
+    // before today — the same days as the Today tab's `last7` — and today
+    // rides along as the running column the Today switch shows or hides.
+    // Starting at today − (N − 1) left a 7-day range one complete day short,
+    // so its Net est. change disagreed with the Today tab's for no reason.
+    const startDate = shiftLocalDate(today, -days);
     const last7Start = shiftLocalDate(today, -LAST7_DAYS);
     return {
         startDate,
         endDate: today,
-        weightStart: shiftLocalDate(
-            today,
-            -(Math.max(days, WEIGHT_WINDOW_DAYS) - 1),
-        ),
+        weightStart: [
+            startDate,
+            shiftLocalDate(today, -(WEIGHT_WINDOW_DAYS - 1)),
+        ].sort()[0]!,
         // Also the 28 calibration days before the range's first day: every
         // plotted day of the metabolism chart is calibrated from the 28 days
         // before it, and the latest of those windows is the Body tab's
@@ -224,7 +229,8 @@ export function dashboardWindow(
         ].sort()[0]!,
         // Weigh-ins for the same calibration windows, and the weight tracker.
         weightFetchStart: [
-            shiftLocalDate(today, -(Math.max(days, WEIGHT_WINDOW_DAYS) - 1)),
+            startDate,
+            shiftLocalDate(today, -(WEIGHT_WINDOW_DAYS - 1)),
             shiftLocalDate(startDate, -MAX_WINDOW_DAYS),
         ].sort()[0]!,
     };

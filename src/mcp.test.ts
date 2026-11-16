@@ -4932,13 +4932,13 @@ describe("dashboard API", () => {
         stage();
         const d = (await dashboardPayload("u1", 1)) as any;
         expect(d.days).toBe(1);
-        expect(d.daily).toHaveLength(1);
-        expect(d.daily[0].goal_calories).toBe(1805);
-        expect(d.daily[0].active_kcal).toBe(5);
-        expect(d.daily[0].burn_kcal).not.toBeNull();
+        expect(d.daily).toHaveLength(2);
+        expect(d.daily.at(-1).goal_calories).toBe(1805);
+        expect(d.daily.at(-1).active_kcal).toBe(5);
+        expect(d.daily.at(-1).burn_kcal).not.toBeNull();
         expect(d.goals.calories).toBe(1800);
         // The bucket's Set must not leak into the JSON.
-        expect(d.daily[0].mealTypes).toBeUndefined();
+        expect(d.daily.at(-1).mealTypes).toBeUndefined();
     });
 
     test("weigh-ins are dated in the profile's zone, and stats are filled", async () => {
@@ -4969,7 +4969,7 @@ describe("dashboard API", () => {
         // still load, against the baseline.
         db.activityThrows = true;
         const d = (await dashboardPayload("u1", 1)) as any;
-        expect(d.daily[0].goal_calories).toBe(1800);
+        expect(d.daily.at(-1).goal_calories).toBe(1800);
     });
 
     test("saveBodyDetails validates, then saves", async () => {
@@ -5085,7 +5085,7 @@ describe("dashboard API", () => {
         const a = (await dashboardPayload("u1", 1)) as any;
         const b = (await dashboardPayload("u1", 90)) as any;
         expect(a.last7).toEqual(b.last7);
-        expect(a.daily).toHaveLength(1);
+        expect(a.daily).toHaveLength(2);
     });
 
     describe("Log weight (POST /api/dashboard/weight)", () => {
@@ -5454,7 +5454,7 @@ describe("weight-rate calorie goals through the tools", () => {
                 active_kcal: number | null;
             };
             const d = (await dashboardPayload("u1", 1)) as any;
-            expect(sc.goals.calories).toBe(d.daily[0].goal_calories);
+            expect(sc.goals.calories).toBe(d.daily.at(-1).goal_calories);
             expect(sc.active_kcal).toBe(300);
             // With no rate the same call is the break-even figure: the rate
             // really moved it down, by about the grossed-up deficit.
