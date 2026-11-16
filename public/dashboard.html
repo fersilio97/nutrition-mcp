@@ -3104,6 +3104,13 @@
                 text-transform: uppercase;
                 color: var(--ink-2);
             }
+            /* Stacked on a phone, the second group's label needs air so it
+               does not read as a caption for the box above it. */
+            @media (max-width: 1023.98px) {
+                .box-aside > .box-sub:first-child {
+                    margin-top: var(--s6);
+                }
+            }
             .w-now .fig-hero b {
                 font-weight: 800;
             }
@@ -3243,7 +3250,8 @@
                 font-size: 0.8rem;
                 color: var(--ink-2);
             }
-            details.body-box > .note {
+            details.body-box > .note,
+            details.body-box .box-main > .note {
                 margin: var(--s3) 0 var(--s4);
             }
             .body-form .form-foot {
