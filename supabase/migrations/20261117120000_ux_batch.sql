@@ -29,7 +29,7 @@ comment on column public.meals.source is
     'Provenance of the nutrition figures; NULL means not recorded (pre-feature rows).';
 
 alter table public.nutrition_goals
-    add column if not exists sodium_mg numeric(8,1) check (sodium_mg > 0);
+    add column if not exists daily_sodium_mg numeric(8,1) check (daily_sodium_mg >= 0);
 
 -- Saved recipes: per-serving figures, logged by name with a servings count.
 create table if not exists public.recipes (

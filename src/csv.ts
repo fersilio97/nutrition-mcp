@@ -41,6 +41,13 @@ const CANDIDATE_DELIMITERS = [",", ";", "\t", "|"] as const;
 export type Delimiter = (typeof CANDIDATE_DELIMITERS)[number];
 export type DecimalSeparator = "." | ",";
 
+/** Nutrient headers recognized by server-side CSV consumers. `findColumn`
+ * normalizes case, spaces, parentheses and punctuation before comparing. */
+export const CSV_NUTRIENT_ALIASES = {
+    caffeine_mg: ["caffeine_mg", "caffeine"],
+    sodium_mg: ["sodium", "sodium_mg", "sodium (mg)"],
+} as const;
+
 export interface ParsedTable {
     /** Header labels by column index. May contain duplicates or empties. */
     headers: string[];

@@ -244,6 +244,14 @@
                     bits.push(esc(meal.description));
                     if (meal.meal_type)
                         bits.push(esc(mealTypeLabel(meal.meal_type)));
+                    // Where the figures came from (vault feature 007); absent on
+                    // rows logged before the field existed.
+                    const src =
+                        meal.source &&
+                        ((T.mealLogged.sources &&
+                            T.mealLogged.sources[meal.source]) ||
+                            null);
+                    if (src) bits.push(esc(src));
                 }
                 const sub = bits.join(" · ");
                 const added =

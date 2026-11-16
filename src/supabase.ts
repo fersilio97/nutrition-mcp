@@ -102,6 +102,16 @@ function deriveIdempotencyKey(
 
 // ---------- Meals ----------
 
+export const MEAL_SOURCES = [
+    "label",
+    "chain",
+    "barcode",
+    "estimate",
+    "import",
+    "recipe",
+] as const;
+export type MealSource = (typeof MEAL_SOURCES)[number];
+
 export interface Meal {
     id: string;
     user_id: string;
@@ -120,6 +130,8 @@ export interface Meal {
     // all stated in mg, so the unit rides in the name at every layer.
     // Contributes no energy: never feed this into a kcal derivation.
     caffeine_mg: number | null;
+    sodium_mg: number | null;
+    source: MealSource | null;
     notes: string | null;
     idempotency_key: string | null;
 }
@@ -138,6 +150,8 @@ export interface MealInput {
     alcohol_g?: number;
     // Milligrams — see Meal.caffeine_mg.
     caffeine_mg?: number;
+    sodium_mg?: number;
+    source?: MealSource;
     logged_at?: string;
     notes?: string;
     idempotency_key?: string;
@@ -160,7 +174,8 @@ export function mealIdempotencyKey(
     loggedAt: string,
 ): string {
     // DO NOT ADD FIELDS TO THIS ARRAY. It is deliberately incomplete:
-    // fiber_g, sugar_g, alcohol_g and caffeine_mg are EXCLUDED on purpose, and
+    // fiber_g, sugar_g, alcohol_g, caffeine_mg, sodium_mg and source are
+    // EXCLUDED on purpose, and
     // any future meal column must be too. The digest is positional over exactly
     // these values, so appending one changes the derived key of every future
     // write — a user re-logging or re-importing something they already have
@@ -283,6 +298,8 @@ export async function insertMeal(
             sugar_g: meal.sugar_g ?? null,
             alcohol_g: meal.alcohol_g ?? null,
             caffeine_mg: meal.caffeine_mg ?? null,
+            sodium_mg: meal.sodium_mg ?? null,
+            source: meal.source ?? null,
             logged_at: loggedAt,
             notes:
                 meal.notes != null ? decodeEscapeSequences(meal.notes) : null,
@@ -596,6 +613,8 @@ export async function updateMeal(
     if (fields.alcohol_g !== undefined) update.alcohol_g = fields.alcohol_g;
     if (fields.caffeine_mg !== undefined)
         update.caffeine_mg = fields.caffeine_mg;
+    if (fields.sodium_mg !== undefined) update.sodium_mg = fields.sodium_mg;
+    if (fields.source !== undefined) update.source = fields.source;
     if (fields.logged_at !== undefined) update.logged_at = fields.logged_at;
     if (fields.notes !== undefined)
         update.notes =
@@ -633,6 +652,11 @@ export interface Profile {
     preferred_weight_unit: WeightUnit | null;
     widgets_enabled: boolean;
     alcohol_tracking_enabled: boolean;
+    /** Water and sodium are opt-ins (migration 20261117120000). Optional
+     *  because rows read before the migration carry no such keys — read them
+     *  only through waterTrackingEnabledFromProfile / sodiumTrackingEnabledFromProfile. */
+    water_tracking_enabled?: boolean;
+    sodium_tracking_enabled?: boolean;
     preferred_drink_unit: DrinkUnit | null;
     // null means "never set with set_language" — same null-is-not-a-default
     // contract as timezone above. Always coalesce through localeFromProfile /
@@ -751,6 +775,24 @@ export function alcoholTrackingEnabledFromProfile(
     return profile?.alcohol_tracking_enabled ?? false;
 }
 
+// Water became an opt-in in the 2026-11 UX batch: off for new accounts, and
+// the migration turned it on for everyone who had ever logged water. A row
+// without the key predates the migration (a self-host that skipped it), so it
+// keeps the old always-on behaviour rather than silently hiding water.
+export function waterTrackingEnabledFromProfile(
+    profile: Profile | null | undefined,
+): boolean {
+    if (!profile) return false;
+    return profile.water_tracking_enabled ?? true;
+}
+
+// Sodium is opt-in like alcohol: off unless the user turned it on.
+export function sodiumTrackingEnabledFromProfile(
+    profile: Profile | null | undefined,
+): boolean {
+    return profile?.sodium_tracking_enabled ?? false;
+}
+
 export async function getAlcoholTrackingEnabled(
     userId: string,
 ): Promise<boolean> {
@@ -787,6 +829,8 @@ export async function upsertProfile(
         preferred_weight_unit?: WeightUnit | null;
         widgets_enabled?: boolean;
         alcohol_tracking_enabled?: boolean;
+        water_tracking_enabled?: boolean;
+        sodium_tracking_enabled?: boolean;
         preferred_drink_unit?: DrinkUnit | null;
         locale?: string;
         height_cm?: number | null;
@@ -810,6 +854,10 @@ export async function upsertProfile(
         payload.widgets_enabled = patch.widgets_enabled;
     if (patch.alcohol_tracking_enabled !== undefined)
         payload.alcohol_tracking_enabled = patch.alcohol_tracking_enabled;
+    if (patch.water_tracking_enabled !== undefined)
+        payload.water_tracking_enabled = patch.water_tracking_enabled;
+    if (patch.sodium_tracking_enabled !== undefined)
+        payload.sodium_tracking_enabled = patch.sodium_tracking_enabled;
     // null is meaningful here too (clears the preference).
     if (patch.preferred_drink_unit !== undefined)
         payload.preferred_drink_unit = patch.preferred_drink_unit;
@@ -853,6 +901,7 @@ export interface NutritionGoals {
     // Milligrams, and a ceiling too — 0 means "none". numeric(7,2) in the DB,
     // since mg targets run three orders larger than the gram ones above.
     daily_caffeine_mg: number | null;
+    daily_sodium_mg: number | null;
     daily_water_ml: number | null;
     target_weight_g: number | null;
     calorie_goal_mode: "fixed" | "burn" | "rate" | "date" | null;
@@ -870,6 +919,7 @@ export interface NutritionGoalsInput {
     daily_sugar_g?: number | null;
     daily_alcohol_g?: number | null;
     daily_caffeine_mg?: number | null;
+    daily_sodium_mg?: number | null;
     daily_water_ml?: number | null;
     target_weight_g?: number | null;
     calorie_goal_mode?: "fixed" | "burn" | "rate" | "date" | null;
@@ -901,6 +951,7 @@ export async function upsertNutritionGoals(
                 daily_sugar_g: input.daily_sugar_g ?? null,
                 daily_alcohol_g: input.daily_alcohol_g ?? null,
                 daily_caffeine_mg: input.daily_caffeine_mg ?? null,
+                daily_sodium_mg: input.daily_sodium_mg ?? null,
                 daily_water_ml:
                     input.daily_water_ml == null
                         ? null

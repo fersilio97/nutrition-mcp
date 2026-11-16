@@ -33,6 +33,8 @@ function meal(overrides: Partial<Meal> = {}): Meal {
         sugar_g: 12,
         alcohol_g: 3,
         caffeine_mg: 95,
+        sodium_mg: null,
+        source: null,
         notes: null,
         idempotency_key: null,
         ...overrides,
@@ -40,7 +42,7 @@ function meal(overrides: Partial<Meal> = {}): Meal {
 }
 
 const HEADER =
-    "id,logged_at,timezone,meal_type,description,calories,protein_g,carbs_g,fat_g,fiber_g,sugar_g,alcohol_g,caffeine_mg,notes";
+    "id,logged_at,timezone,meal_type,description,calories,protein_g,carbs_g,fat_g,fiber_g,sugar_g,alcohol_g,caffeine_mg,notes,sodium_mg,source";
 
 /**
  * Minimal RFC-4180 reader: splits a CSV document into rows of fields, honouring
@@ -119,6 +121,8 @@ test("header and data rows have identical field counts", () => {
                 sugar_g: null,
                 alcohol_g: null,
                 caffeine_mg: null,
+                sodium_mg: null,
+                source: null,
                 meal_type: null,
                 notes: null,
             }),
@@ -152,6 +156,8 @@ test("every value lands under its own header name", () => {
                     sugar_g: 12,
                     alcohol_g: 3,
                     caffeine_mg: 95,
+                    sodium_mg: 540,
+                    source: "label",
                     notes: "post-run",
                 }),
             ],
@@ -173,6 +179,8 @@ test("every value lands under its own header name", () => {
         alcohol_g: "3",
         caffeine_mg: "95",
         notes: "post-run",
+        sodium_mg: "540",
+        source: "label",
     });
 });
 
@@ -197,6 +205,8 @@ test("header column order is stable and importer-compatible", () => {
         // column bind to a milligram field.
         "caffeine_mg",
         "notes",
+        "sodium_mg",
+        "source",
     ]);
 });
 
@@ -244,6 +254,8 @@ test("leaves null macros and notes as empty fields", () => {
                     sugar_g: null,
                     alcohol_g: null,
                     caffeine_mg: null,
+                    sodium_mg: null,
+                    source: null,
                     notes: null,
                 }),
             ],
@@ -335,6 +347,7 @@ function goals(overrides: Partial<NutritionGoals> = {}): NutritionGoals {
         daily_sugar_g: 40,
         daily_alcohol_g: 14,
         daily_caffeine_mg: 400,
+        daily_sodium_mg: 2300,
         daily_water_ml: 2500,
         target_weight_g: 72000,
         calorie_goal_mode: "rate",
@@ -366,7 +379,7 @@ const WATER_HEADER = "id,logged_at,timezone,amount_ml,notes";
 const WEIGHT_HEADER =
     "id,logged_at,timezone,weight_g,weight_display,weight_unit,notes";
 const GOALS_HEADER =
-    "daily_calories,daily_protein_g,daily_carbs_g,daily_fat_g,daily_fiber_g,daily_sugar_g,daily_alcohol_g,daily_caffeine_mg,daily_water_ml,target_weight_g,updated_at,timezone,calorie_goal_mode,weight_rate_g_per_day,target_date";
+    "daily_calories,daily_protein_g,daily_carbs_g,daily_fat_g,daily_fiber_g,daily_sugar_g,daily_alcohol_g,daily_caffeine_mg,daily_water_ml,target_weight_g,updated_at,timezone,calorie_goal_mode,weight_rate_g_per_day,target_date,daily_sodium_mg";
 const PROFILE_HEADER =
     "timezone,preferred_weight_unit,preferred_drink_unit,alcohol_tracking_enabled,widgets_enabled,height_cm,birth_date,sex,created_at,updated_at";
 
@@ -539,6 +552,7 @@ test("every goal value lands under its own header name", () => {
         daily_alcohol_g: "14",
         // Milligrams next to nine gram/ml columns, spelled so in the header.
         daily_caffeine_mg: "400",
+        daily_sodium_mg: "2300",
         daily_water_ml: "2500",
         target_weight_g: "72000",
         updated_at: "2026-06-20 16:30:00",
@@ -571,6 +585,7 @@ test("goals.csv leaves unset targets as empty fields", () => {
             daily_sugar_g: null,
             daily_alcohol_g: null,
             daily_caffeine_mg: null,
+            daily_sodium_mg: null,
             daily_water_ml: null,
             target_weight_g: null,
             calorie_goal_mode: null,
@@ -694,6 +709,7 @@ test("the README spells out the mixed units", () => {
     const readme = buildExportReadme(README_OPTS);
     expect(readme).toContain("MILLIGRAMS");
     expect(readme).toContain("caffeine_mg");
+    expect(readme).toContain("sodium_mg and daily_sodium_mg are milligrams");
     expect(readme).toContain("amount_ml");
     expect(readme).toContain("ethanol");
     expect(readme).toContain("weight_g");

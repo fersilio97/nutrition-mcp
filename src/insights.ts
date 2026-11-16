@@ -19,6 +19,7 @@ export interface DailyBucket {
     sugar_g: number;
     alcohol_g: number;
     caffeine_mg: number;
+    sodium_mg: number;
     mealTypes: Set<string>;
 }
 
@@ -85,6 +86,7 @@ export function buildDailyBuckets(
             sugar_g: 0,
             alcohol_g: 0,
             caffeine_mg: 0,
+            sodium_mg: 0,
             mealTypes: new Set(),
         });
     }
@@ -102,6 +104,7 @@ export function buildDailyBuckets(
         b.sugar_g += m.sugar_g ?? 0;
         b.alcohol_g += m.alcohol_g ?? 0;
         b.caffeine_mg += m.caffeine_mg ?? 0;
+        b.sodium_mg += m.sodium_mg ?? 0;
         if (m.meal_type) b.mealTypes.add(m.meal_type);
     }
 
@@ -124,7 +127,7 @@ export function buildDailyBuckets(
  * under a sugar limit. Caffeine is the same story and then some: most meals will
  * legitimately never carry a value. */
 export type PartialNutrient =
-    "fiber_g" | "sugar_g" | "alcohol_g" | "caffeine_mg";
+    "fiber_g" | "sugar_g" | "alcohol_g" | "caffeine_mg" | "sodium_mg";
 
 /** THE RULE, shared with mcp.ts: a day carries a nutrient when at least one of
  * that day's meals has a non-null value for it. Only carrying days count toward

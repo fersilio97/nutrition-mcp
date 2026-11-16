@@ -30,6 +30,7 @@ import {
     MAX_GOAL_G,
     MAX_GOAL_MG,
     gateAlcohol,
+    gateGoals,
     handleMcp,
 } from "./mcp.js";
 import {
@@ -97,6 +98,8 @@ function meal(over: Partial<Meal> = {}): Meal {
         // fixture meal a milligram figure would hide the suppression this whole
         // feature turns on — the tests that want caffeine ask for it.
         caffeine_mg: null,
+        sodium_mg: null,
+        source: null,
         notes: null,
         idempotency_key: null,
         ...over,
@@ -115,6 +118,7 @@ function goals(over: Partial<NutritionGoals> = {}): NutritionGoals {
         daily_alcohol_g: 28,
         // Milligrams, and the EFSA/FDA figure the tool description offers.
         daily_caffeine_mg: 400,
+        daily_sodium_mg: null,
         daily_water_ml: 2500,
         target_weight_g: null,
         calorie_goal_mode: null,
@@ -274,6 +278,8 @@ describe("nutrientPresence", () => {
         sugar_g: null,
         alcohol_g: null,
         caffeine_mg: null,
+        sodium_mg: null,
+        source: null,
     };
 
     test("one non-null meal makes the day carry the nutrient", () => {
@@ -284,6 +290,7 @@ describe("nutrientPresence", () => {
             sugar_g: false,
             alcohol_g: false,
             caffeine_mg: false,
+            sodium_mg: false,
         });
     });
 
@@ -293,12 +300,14 @@ describe("nutrientPresence", () => {
             sugar_g: false,
             alcohol_g: false,
             caffeine_mg: false,
+            sodium_mg: false,
         });
         expect(nutrientPresence([])).toEqual({
             fiber_g: false,
             sugar_g: false,
             alcohol_g: false,
             caffeine_mg: false,
+            sodium_mg: false,
         });
     });
 
@@ -318,6 +327,7 @@ describe("nutrientPresence", () => {
             sugar_g: false,
             alcohol_g: false,
             caffeine_mg: true,
+            sodium_mg: false,
         });
         expect(
             nutrientPresence([meal({ ...blank, caffeine_mg: 0 })]).caffeine_mg,
@@ -337,6 +347,8 @@ describe("rangeAverages", () => {
         sugar_g: null,
         alcohol_g: null,
         caffeine_mg: null,
+        sodium_mg: null,
+        source: null,
     };
 
     // The measured regression: 30 g of fiber a day, but a window that reaches
@@ -442,6 +454,8 @@ describe("formatProgress suppresses unrecorded nutrients", () => {
         sugar_g: null,
         alcohol_g: null,
         caffeine_mg: null,
+        sodium_mg: null,
+        source: null,
     };
     const present = nutrientPresence([meal(blank)]);
     const totals = sumMeals([meal(blank)]);
@@ -453,6 +467,7 @@ describe("formatProgress suppresses unrecorded nutrients", () => {
                 daily_fiber_g: null,
                 daily_sugar_g: null,
                 daily_caffeine_mg: null,
+                daily_sodium_mg: null,
             }),
             null,
             present,
@@ -789,6 +804,7 @@ describe("gateAlcohol", () => {
         sugar_g: 12,
         alcohol_g: 14,
         caffeine_mg: 95,
+        sodium_mg: 0,
         mealTypes: new Set(["dinner"]),
     }));
 
@@ -1237,6 +1253,7 @@ describe("structuredContent literals satisfy their schemas", () => {
                     daily_sugar_g: null,
                     daily_alcohol_g: null,
                     daily_caffeine_mg: null,
+                    daily_sodium_mg: null,
                 }),
                 "us",
             ),
@@ -1305,6 +1322,7 @@ describe("trendsDayPayloadOf", () => {
         sugar_g: mealsForDay.reduce((s, m) => s + (m.sugar_g ?? 0), 0),
         alcohol_g: mealsForDay.reduce((s, m) => s + (m.alcohol_g ?? 0), 0),
         caffeine_mg: mealsForDay.reduce((s, m) => s + (m.caffeine_mg ?? 0), 0),
+        sodium_mg: mealsForDay.reduce((s, m) => s + (m.sodium_mg ?? 0), 0),
         mealTypes: new Set(["dinner"]),
     });
 
@@ -1315,6 +1333,8 @@ describe("trendsDayPayloadOf", () => {
                 sugar_g: null,
                 alcohol_g: null,
                 caffeine_mg: null,
+                sodium_mg: null,
+                source: null,
             }),
         ]);
         const payload = trendsDayPayloadOf(bucket, "us");
@@ -1432,6 +1452,8 @@ function storedMeal(input: Record<string, unknown>): Meal {
         sugar_g: null,
         alcohol_g: null,
         caffeine_mg: null,
+        sodium_mg: null,
+        source: null,
         ...defined,
     });
 }
@@ -2114,6 +2136,8 @@ describe("missingNutrientNote", () => {
         sugar_g: null,
         alcohol_g: null,
         caffeine_mg: null,
+        sodium_mg: null,
+        source: null,
         notes: null,
         idempotency_key: null,
     } satisfies Meal;
@@ -2149,6 +2173,8 @@ describe("missingNutrientNote", () => {
             fiber_g: 6,
             sugar_g: 4,
             caffeine_mg: null,
+            sodium_mg: null,
+            source: null,
         });
         expect(note).toBe("");
     });
@@ -2324,10 +2350,17 @@ describe("log_meal and update_meal round-trip caffeine_mg", () => {
             "auto:ce32507d8d98f40ce37b9dcd4161d18dfb5628f1c97316342dda1f0d02ce95c6";
         const at = "2026-07-20T12:00:00.000Z";
         await withTools(null, async (call) => {
-            await call("log_meal", { ...coffee, logged_at: at });
+            await call("log_meal", {
+                ...coffee,
+                sodium_mg: 850,
+                source: "label",
+                logged_at: at,
+            });
             await call("log_meal", {
                 ...coffee,
                 caffeine_mg: undefined,
+                sodium_mg: 1200,
+                source: "estimate",
                 logged_at: at,
             });
         });
@@ -2343,7 +2376,65 @@ describe("log_meal and update_meal round-trip caffeine_mg", () => {
     });
 });
 
+describe("sodium and meal source round-trip", () => {
+    test("log_meal stores sodium and source and returns both", async () => {
+        await withTools(null, async (call) => {
+            const r = await call("log_meal", {
+                description: "Soup",
+                meal_type: "lunch",
+                sodium_mg: "780",
+                source: "label",
+            });
+            expect(db.inserted[0]!.sodium_mg).toBe(780);
+            expect(db.inserted[0]!.source).toBe("label");
+            const sc = r.structuredContent as any;
+            expect(sc.logged_meal.sodium_mg).toBe(780);
+            expect(sc.logged_meal.source).toBe("label");
+            expect(sc.totals.sodium_mg).toBe(780);
+        });
+    });
+
+    test("update_meal can change source", async () => {
+        await withTools(null, async (call) => {
+            await call("update_meal", { id: "m1", source: "chain" });
+            expect(db.mealUpdates[0]!.source).toBe("chain");
+        });
+    });
+});
+
+test("formatProgress shows Sodium only when a limit is set", () => {
+    const noLimit = formatProgress(
+        sumMeals([meal({ sodium_mg: 500 })]),
+        goals({ daily_sodium_mg: null }),
+        null,
+        nutrientPresence([meal({ sodium_mg: 500 })]),
+    );
+    expect(noLimit).not.toContain("Sodium");
+    const withLimit = formatProgress(
+        sumMeals([meal({ sodium_mg: 500 })]),
+        goals({ daily_sodium_mg: 2300 }),
+        null,
+        nutrientPresence([meal({ sodium_mg: 500 })]),
+    );
+    expect(withLimit).toContain("Sodium: 500 / 2300 mg limit");
+});
+
+test("gateGoals hides sodium limit while sodium tracking is off", () => {
+    const result = gateGoals(goals({ daily_sodium_mg: 2300 }), {
+        sodium_tracking_enabled: false,
+    } as any);
+    expect(result?.daily_sodium_mg).toBeNull();
+});
+
 describe("set_nutrition_goals accepts a caffeine limit", () => {
+    test("stores a sodium limit and preserves it on a later calorie edit", async () => {
+        await withTools(null, async (call) => {
+            await call("set_nutrition_goals", { sodium_mg: 2300 });
+            expect(db.goals!.daily_sodium_mg).toBe(2300);
+            await call("set_nutrition_goals", { daily_calories: 2100 });
+            expect(db.goals!.daily_sodium_mg).toBe(2300);
+        });
+    });
     test("the limit is stored in milligrams and echoed back", async () => {
         await withTools(null, async (call) => {
             const r = await call("set_nutrition_goals", {

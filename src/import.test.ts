@@ -14,10 +14,12 @@ import {
     runImport,
     MAX_ROWS_PER_CALL,
     MAX_CAFFEINE_MG,
+    MAX_SODIUM_MG,
     type ImportRow,
     type ImportDeps,
 } from "./import.js";
 import { dateInTz } from "./tz.js";
+import { CSV_NUTRIENT_ALIASES, findColumn } from "./csv.js";
 
 const NOW = Date.parse("2026-07-25T12:00:00Z");
 const TZ = "Europe/Kyiv";
@@ -420,6 +422,39 @@ test("caffeine rides through in MILLIGRAMS and is never gated", async () => {
     );
     expect(result.summary.created).toBe(1);
     expect(inserted[0]!.caffeine_mg).toBe(95);
+});
+
+test("sodium validates, maps, and importer writes are stamped import", async () => {
+    expect(
+        findColumn(["Sodium (mg)"], [...CSV_NUTRIENT_ALIASES.sodium_mg]),
+    ).toBe(0);
+    const valid = validateRow(
+        row({ source_line: 3, sodium_mg: 1450 }),
+        0,
+        { tz: TZ, nowMs: NOW },
+        undefined,
+    );
+    expect(valid.ok).toBe(true);
+    if (!valid.ok) return;
+    expect(valid.resolved.input.sodium_mg).toBe(1450);
+    expect(valid.resolved.input.source).toBe("import");
+    const { deps, inserted } = makeStore();
+    const result = await runImport(
+        args([row({ source_line: 4, sodium_mg: 900 })]),
+        deps,
+    );
+    expect(result.summary.created).toBe(1);
+    expect(inserted[0]!.source).toBe("import");
+    expect(inserted[0]!.sodium_mg).toBe(900);
+    expect(MAX_SODIUM_MG).toBe(20_000);
+    const tooMuch = validateRow(
+        row({ source_line: 5, sodium_mg: MAX_SODIUM_MG + 1 }),
+        0,
+        { tz: TZ, nowMs: NOW },
+        undefined,
+    );
+    expect(tooMuch.ok).toBe(false);
+    if (!tooMuch.ok) expect(tooMuch.error.field).toBe("sodium_mg");
 });
 
 test("a meal with no caffeine column stays NULL, never 0", () => {

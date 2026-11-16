@@ -1,3 +1,4 @@
+import { setupChecklist, setupLine } from "./onboarding.js";
 import {
     createMcpHandler,
     McpServer,
@@ -34,6 +35,8 @@ import {
     getUserLocale,
     widgetsEnabledFromProfile,
     alcoholTrackingEnabledFromProfile,
+    waterTrackingEnabledFromProfile,
+    sodiumTrackingEnabledFromProfile,
     preferredDrinkUnitFromProfile,
     preferredWeightUnitFromProfile,
     timezoneFromProfile,
@@ -184,7 +187,9 @@ const IMPORT_MEALS_WIDGET_URI = "ui://widget/import-meals.html";
 // day from the user's fiber trend rather than making it slightly wrong.
 const NUTRIENT_COVERAGE = `Fiber, sugar and caffeine are tracked here alongside the headline macros, and they are only worth tracking if they are actually filled in.
 - fiber_g and sugar_g: send them on EVERY meal, exactly as you already send protein, carbs and fat. Not knowing the exact figure is not a reason to leave one out — you do not know the exact protein either. Work in this order: a nutrition label, a barcode lookup, or a chain's published per-item nutrition; then a web search for that product or dish; then your own estimate from the ingredients and the portion. A 0 is the right answer wherever 0 is true (a steak, eggs, oil, black coffee) — what is wrong is omitting the field, because a missing value is not a zero: it records "nobody measured this" and drops the whole day out of the user's fiber and sugar averages, goal lines and charts.
-- caffeine_mg: decide it deliberately on every entry instead of defaulting to silence, but only send a number when the item really is a caffeine source — coffee of any kind (decaf included, about 2-5 mg), tea, matcha, yerba mate, cola and many other soft drinks, energy drinks, pre-workout, chocolate and cocoa, coffee ice cream, caffeine tablets. If it is one, get the figure from the label or the chain's nutrition, or search the web for the branded drink, or fall back to the typical amounts in the field description. If the item is plainly not a caffeine source, OMIT the field rather than sending 0 — an explicit 0 means "measured, and it was none", which turns on a caffeine row for a user who never consumes any.`;
+- caffeine_mg: decide it deliberately on every entry instead of defaulting to silence, but only send a number when the item really is a caffeine source — coffee of any kind (decaf included, about 2-5 mg), tea, matcha, yerba mate, cola and many other soft drinks, energy drinks, pre-workout, chocolate and cocoa, coffee ice cream, caffeine tablets. If it is one, get the figure from the label or the chain's nutrition, or search the web for the branded drink, or fall back to the typical amounts in the field description. If the item is plainly not a caffeine source, OMIT the field rather than sending 0 — an explicit 0 means "measured, and it was none", which turns on a caffeine row for a user who never consumes any.
+
+Send sodium_mg only when get_profile says sodium tracking is enabled. Use a label or chain figure first, otherwise estimate; send source on every meal write as label, chain, barcode, recipe, or estimate.`;
 
 // Sent to clients in the initialize response (SDK ServerOptions.instructions).
 // Advisory — not every client surfaces it, so the enforcement rule ("interview
@@ -289,6 +294,7 @@ interface DailyTotals {
     // unit differs from its siblings. It carries no energy, so it never enters
     // a kcal derivation.
     caffeine_mg: number;
+    sodium_mg: number;
     water_ml: number;
 }
 
@@ -302,6 +308,7 @@ function emptyTotals(): DailyTotals {
         sugar_g: 0,
         alcohol_g: 0,
         caffeine_mg: 0,
+        sodium_mg: 0,
         water_ml: 0,
     };
 }
@@ -322,6 +329,7 @@ export function sumMeals(meals: Meal[]): DailyTotals {
         totals.sugar_g += m.sugar_g ?? 0;
         totals.alcohol_g += m.alcohol_g ?? 0;
         totals.caffeine_mg += m.caffeine_mg ?? 0;
+        totals.sodium_mg += m.sodium_mg ?? 0;
     }
     return totals;
 }
@@ -343,6 +351,7 @@ export interface NutrientPresence {
     sugar_g: boolean;
     alcohol_g: boolean;
     caffeine_mg: boolean;
+    sodium_mg: boolean;
 }
 
 export function nutrientPresence(meals: Meal[]): NutrientPresence {
@@ -351,6 +360,7 @@ export function nutrientPresence(meals: Meal[]): NutrientPresence {
         sugar_g: dayCarries(meals, "sugar_g"),
         alcohol_g: dayCarries(meals, "alcohol_g"),
         caffeine_mg: dayCarries(meals, "caffeine_mg"),
+        sodium_mg: dayCarries(meals, "sodium_mg"),
     };
 }
 
@@ -382,6 +392,7 @@ export function rangeAverages(
         sugar_g: number;
         alcohol_g: number;
         caffeine_mg: number;
+        sodium_mg: number;
     };
 } {
     const sum = emptyTotals();
@@ -397,6 +408,7 @@ export function rangeAverages(
     const sugar = coveredDailyAverage(mealsByDay, "sugar_g");
     const alcohol = coveredDailyAverage(mealsByDay, "alcohol_g");
     const caffeine = coveredDailyAverage(mealsByDay, "caffeine_mg");
+    const sodium = coveredDailyAverage(mealsByDay, "sodium_mg");
     const n = perDay.length || 1;
     return {
         averages: {
@@ -408,6 +420,7 @@ export function rangeAverages(
             sugar_g: sugar.avg ?? 0,
             alcohol_g: alcohol.avg ?? 0,
             caffeine_mg: caffeine.avg ?? 0,
+            sodium_mg: sodium.avg ?? 0,
             water_ml: Math.round(sum.water_ml / n),
         },
         recordedDays: {
@@ -415,6 +428,7 @@ export function rangeAverages(
             sugar_g: sugar.days,
             alcohol_g: alcohol.days,
             caffeine_mg: caffeine.days,
+            sodium_mg: sodium.days,
         },
     };
 }
@@ -479,6 +493,8 @@ export const MEAL_BREAKDOWN_ITEM = z.object({
     // simply has no caffeine figure. Most meals never will, so a 0 here would
     // claim the user measured a caffeine-free lunch. Milligrams.
     caffeine_mg: z.number().nullable(),
+    sodium_mg: z.number().nullable(),
+    source: z.string().nullable(),
 });
 
 export function mealBreakdown(
@@ -499,6 +515,8 @@ export function mealBreakdown(
         alcohol_g: alcohol ? Math.round((m.alcohol_g ?? 0) * 10) / 10 : null,
         caffeine_mg:
             m.caffeine_mg == null ? null : Math.round(m.caffeine_mg * 10) / 10,
+        sodium_mg: m.sodium_mg == null ? null : Math.round(m.sodium_mg),
+        source: m.source ?? null,
     }));
 }
 
@@ -517,6 +535,7 @@ export const GOALS_ITEM = z.object({
     // The stored daily_caffeine_mg, in milligrams. A ceiling like sugar and
     // alcohol, and 0 is a real one ("none at all") rather than "unset".
     caffeine_mg: z.number().nullable(),
+    sodium_mg: z.number().nullable(),
     water_ml: z.number().nullable(),
 });
 
@@ -535,6 +554,7 @@ export const TOTALS_ITEM = z.object({
     // means nothing on this day recorded caffeine; the widget then draws no
     // stat line at all. See totalsPayloadOf's caffeineRecorded argument.
     caffeine_mg: z.number().nullable(),
+    sodium_mg: z.number().nullable(),
     water_ml: z.number(),
 });
 
@@ -713,6 +733,14 @@ async function effectiveGoalsByDate(
     return out;
 }
 
+function gateAll(
+    m: Map<string, ActivityAdjustment>,
+    profile: Profile | null,
+): Map<string, ActivityAdjustment> {
+    for (const [k, v] of m) m.set(k, gateAdjustment(v, profile));
+    return m;
+}
+
 /** The mean of several days' goals, for readers that compare a window's
  *  AVERAGE intake against one goal set (computeTrends). A field is null when
  *  any day lacks it, so a partly-unset goal never averages into a fake one. */
@@ -796,6 +824,8 @@ const MEAL_PROGRESS_OUTPUT_SCHEMA = z.object({
         // Milligrams, and null whenever this meal carried no caffeine figure —
         // which is most meals, and is not the same as a measured zero.
         caffeine_mg: z.number().nullable(),
+        sodium_mg: z.number().nullable(),
+        source: z.string().nullable(),
     }),
     has_goals: z.boolean(),
     goals: GOALS_ITEM.nullable(),
@@ -809,6 +839,38 @@ const MEAL_PROGRESS_OUTPUT_SCHEMA = z.object({
 // totals literal is written: a .nullable() field is REQUIRED in the emitted JSON
 // Schema, so an omitted key is a validation error rather than a null, and one
 // builder per shape is what keeps every literal complete.
+/** Display gating for the opt-in nutrients (water; sodium once it has a goal
+ *  column). Read paths only: set_nutrition_goals and the export must see the
+ *  stored row untouched, or a calorie edit would wipe a hidden water target.
+ *  With the target nulled, every payload builder and formatProgress already
+ *  drop the line — no per-builder flag to thread. */
+export function gateGoals<G extends NutritionGoals | null>(
+    goals: G,
+    profile: Profile | null | undefined,
+): G {
+    if (!goals) return goals;
+    return {
+        ...goals,
+        daily_water_ml: waterTrackingEnabledFromProfile(profile)
+            ? goals.daily_water_ml
+            : null,
+        daily_sodium_mg: sodiumTrackingEnabledFromProfile(profile)
+            ? goals.daily_sodium_mg
+            : null,
+    };
+}
+
+export function gateAdjustment(
+    adj: ActivityAdjustment,
+    profile: Profile | null | undefined,
+): ActivityAdjustment {
+    return {
+        ...adj,
+        goals: gateGoals(adj.goals, profile),
+        base: gateGoals(adj.base, profile),
+    };
+}
+
 export function goalsPayloadOf(
     goals: NutritionGoals | null,
     alcohol: AlcoholDisplay,
@@ -826,6 +888,7 @@ export function goalsPayloadOf(
         // stored limit is always handed over and the widget decides on the data
         // (a stat line appears only once some value is recorded).
         caffeine_mg: goals.daily_caffeine_mg ?? null,
+        sodium_mg: goals.daily_sodium_mg ?? null,
         water_ml: goals.daily_water_ml ?? null,
     };
 }
@@ -853,6 +916,7 @@ export function totalsPayloadOf(
         caffeine_mg: caffeineRecorded
             ? Math.round(totals.caffeine_mg * 10) / 10
             : null,
+        sodium_mg: totals.sodium_mg > 0 ? Math.round(totals.sodium_mg) : null,
         water_ml: totals.water_ml,
     };
 }
@@ -882,6 +946,7 @@ export function trendsDayPayloadOf(
             sugar_g: bucket.sugar_g,
             alcohol_g: bucket.alcohol_g,
             caffeine_mg: bucket.caffeine_mg,
+            sodium_mg: bucket.sodium_mg,
             water_ml: bucket.waterMl,
         },
         alcohol,
@@ -966,6 +1031,10 @@ const IMPORT_ROW_SCHEMA = z.object({
         .describe(
             "Caffeine in MILLIGRAMS, not grams. Every export, label and guideline states caffeine in mg (a brewed coffee is about 95 mg, i.e. 0.095 g), so map an mg column straight across — and multiply by 1000 first if the source header says grams, or the whole history imports a thousand times too small. Omit when the source has no caffeine column.",
         ),
+    sodium_mg: z.coerce
+        .number()
+        .optional()
+        .describe("Sodium in milligrams (mg)."),
     notes: z
         .string()
         .optional()
@@ -1089,7 +1158,7 @@ async function buildMealProgress(
         storedGoals,
         mealDate,
         activity?.active_kcal,
-    );
+    ).then((a) => gateAdjustment(a, profile));
     const goals = adj.goals;
     const totals = sumMeals(meals);
     totals.water_ml = sumWater(waterEntries);
@@ -1117,6 +1186,8 @@ async function buildMealProgress(
             // Ungated, unlike alcohol_g directly above it: what was stored is
             // what is shown.
             caffeine_mg: meal.caffeine_mg ?? null,
+            sodium_mg: meal.sodium_mg ?? null,
+            source: meal.source ?? null,
         },
         has_goals: goals != null,
         goals: goalsPayloadOf(goals, alcohol),
@@ -1223,6 +1294,7 @@ const ALL_RECORDED: NutrientPresence = {
     sugar_g: true,
     alcohol_g: true,
     caffeine_mg: true,
+    sodium_mg: true,
 };
 
 // Caffeine is the one figure here rendered without decimals. A tenth of a
@@ -1311,14 +1383,29 @@ export function formatProgress(
             "ceiling",
         ),
     );
-    lines.push(
-        formatGoalLine(
-            "Water",
-            " ml",
-            totals.water_ml,
-            goals?.daily_water_ml ?? null,
-        ),
-    );
+    if (goals?.daily_sodium_mg != null)
+        lines.push(
+            formatGoalLine(
+                "Sodium",
+                " mg",
+                Math.round(totals.sodium_mg),
+                goals.daily_sodium_mg,
+                "ceiling",
+            ),
+        );
+    // Water is opt-in (gateGoals nulls the target when it is off), so the line
+    // appears only when there is a target or something was actually logged —
+    // "Water: 0 ml" every day for someone who never tracks it was the nag the
+    // 2026-11-16 audit called out.
+    if (goals?.daily_water_ml != null || totals.water_ml > 0)
+        lines.push(
+            formatGoalLine(
+                "Water",
+                " ml",
+                totals.water_ml,
+                goals?.daily_water_ml ?? null,
+            ),
+        );
     return lines.filter((l): l is string => l !== null).join("\n");
 }
 
@@ -1385,6 +1472,7 @@ export function formatGoals(
     // list of targets the user could set.
     parts.push(
         `- Caffeine (max): ${ceiling(goals.daily_caffeine_mg, formatMg)}`,
+        `- Sodium (max): ${ceiling(goals.daily_sodium_mg, formatMg)}`,
     );
     parts.push(`- Water: ${floor(goals.daily_water_ml, (n) => `${n} ml`)}`);
     parts.push(
@@ -1739,6 +1827,20 @@ export function registerTools(
                     .optional()
                     .describe(
                         "Caffeine in MILLIGRAMS (mg) — this field is the one that is not in grams, and a value under 1 almost certainly means grams were sent by mistake. Typical amounts: a 240 ml brewed coffee 95 mg, a single espresso 63 mg, instant coffee 62 mg, black tea 47 mg, green tea 28 mg, a 355 ml cola 34 mg, a 250 ml energy drink 80 mg, decaf 2 mg. Scale them to what was actually drunk (a double espresso is 126 mg), and for a branded drink prefer the figure on the label or the chain's published nutrition. Caffeine adds no calories, so it never changes the kcal figure. Unlike fiber_g and sugar_g, this field is conditional, so decide it on every entry rather than skipping it by default: if the item is a caffeine source at all — coffee including decaf, tea, matcha, yerba mate, cola and other soft drinks, energy drinks, pre-workout, chocolate and cocoa, coffee ice cream, caffeine tablets — send a figure, searching the web for a branded drink whose label you do not know and falling back to the amounts above. Omit the field for anything that is not a caffeine source rather than sending 0 — a 0 records 'measured, and it was none', and one on a sandwich puts a caffeine row on the dashboard of a user who never drinks any.",
+                    ),
+                sodium_mg: z.coerce
+                    .number()
+                    .min(0)
+                    .max(20_000)
+                    .optional()
+                    .describe(
+                        "Sodium in milligrams. Send only when get_profile says sodium tracking is enabled; label or chain figure first, else an estimate. 1 g salt ≈ 400 mg sodium.",
+                    ),
+                source: z
+                    .enum(["label", "chain", "barcode", "estimate", "recipe"])
+                    .optional()
+                    .describe(
+                        "Where the nutrition figures came from: 'label' (package label), 'chain' (restaurant's published nutrition), 'barcode' (lookup_barcode result), 'recipe' (a saved recipe), 'estimate' (your own estimate). Always send it.",
                     ),
                 logged_at: z
                     .string()
@@ -2150,7 +2252,7 @@ export function registerTools(
                         content: [
                             {
                                 type: "text",
-                                text: formatFoodResult(food, alcohol),
+                                text: `${formatFoodResult(food, alcohol)}\n\nWhen logging this product, pass source: 'barcode'.`,
                             },
                         ],
                     };
@@ -2632,15 +2734,19 @@ export function registerTools(
                         { length: daysInRange },
                         (_, i) => shiftLocalDate(start_date, i),
                     );
-                    const dayGoals = await effectiveGoalsByDate(
-                        userId,
+                    const dayGoals = gateAll(
+                        await effectiveGoalsByDate(
+                            userId,
+                            profile,
+                            goals,
+                            rangeDates,
+                            activeByDate,
+                        ),
                         profile,
-                        goals,
-                        rangeDates,
-                        activeByDate,
                     );
                     const goalsPayload = goalsPayloadOf(
-                        dayGoals.get(end_date)?.goals ?? goals,
+                        dayGoals.get(end_date)?.goals ??
+                            gateGoals(goals, profile),
                         alcohol,
                     );
 
@@ -2831,7 +2937,7 @@ export function registerTools(
         {
             title: "Set Nutrition Goals",
             description:
-                "Set the user's daily calorie and macro targets, and optionally a target body weight. Pass only the fields you want to update — omitted fields keep their previous value. Pass null explicitly to clear a target. Calories, protein, carbs, fat, fiber and water are targets to REACH; sugar, alcohol and caffeine are limits to STAY UNDER, and progress against them is worded accordingly. Every gram target is in grams and the caffeine limit is in MILLIGRAMS. For a limit, 0 is a real value meaning 'none at all' rather than 'unset'. Targets are the user's own choice; this server does not provide medical or dietary advice.",
+                "Set the user's daily calorie and macro targets, and optionally a target body weight. Pass only the fields you want to update — omitted fields keep their previous value. Pass null explicitly to clear a target. Calories, protein, carbs, fat, fiber and water are targets to REACH; sugar, alcohol, caffeine and sodium are limits to STAY UNDER, and progress against them is worded accordingly. Every gram target is in grams and the caffeine and sodium limits are in MILLIGRAMS. For a limit, 0 is a real value meaning 'none at all' rather than 'unset'. Targets are the user's own choice; this server does not provide medical or dietary advice.",
             annotations: {
                 readOnlyHint: false,
                 destructiveHint: false,
@@ -2905,6 +3011,15 @@ export function registerTools(
                     .optional()
                     .describe(
                         "Daily caffeine limit in MILLIGRAMS, treated as a maximum to stay under. Reference points to offer when the user has no figure in mind: the EFSA and FDA ceiling for healthy adults is 400 mg/day and 200 mg in pregnancy, and a 240 ml brewed coffee is about 95 mg — so 400 mg is roughly four cups. 0 is a real limit meaning none at all, not 'unset'. Null to clear.",
+                    ),
+                sodium_mg: z.coerce
+                    .number()
+                    .min(0)
+                    .max(MAX_GOAL_MG)
+                    .nullable()
+                    .optional()
+                    .describe(
+                        "Daily sodium limit in milligrams, treated as a maximum to stay under. Null to clear.",
                     ),
                 daily_water_ml: z.coerce
                     .number()
@@ -3077,6 +3192,10 @@ export function registerTools(
                             args.daily_caffeine_mg === undefined
                                 ? (existing?.daily_caffeine_mg ?? null)
                                 : args.daily_caffeine_mg,
+                        daily_sodium_mg:
+                            args.sodium_mg === undefined
+                                ? (existing?.daily_sodium_mg ?? null)
+                                : args.sodium_mg,
                         daily_water_ml:
                             args.daily_water_ml === undefined
                                 ? (existing?.daily_water_ml ?? null)
@@ -3097,7 +3216,7 @@ export function registerTools(
                         content: [
                             {
                                 type: "text",
-                                text: `Goals updated.\n\n${formatGoals(goals, displayUnit, alcohol)}${alcoholNote}`,
+                                text: `Goals updated.\n\n${formatGoals(gateGoals(goals, profile), displayUnit, alcohol)}${alcoholNote}`,
                             },
                         ],
                     };
@@ -3167,8 +3286,11 @@ export function registerTools(
                             {
                                 type: "text",
                                 text:
-                                    formatGoals(goals, unit ?? "kg", alcohol) +
-                                    todayLine,
+                                    formatGoals(
+                                        gateGoals(goals, profile),
+                                        unit ?? "kg",
+                                        alcohol,
+                                    ) + todayLine,
                             },
                         ],
                     };
@@ -3242,7 +3364,7 @@ export function registerTools(
                         storedGoals,
                         targetDate,
                         activity?.active_kcal,
-                    );
+                    ).then((a) => gateAdjustment(a, profile));
                     const goals = adj.goals;
                     const unit =
                         preferredWeightUnitFromProfile(profile) ?? "kg";
@@ -3564,6 +3686,20 @@ export function registerTools(
                     .describe(
                         "Caffeine in MILLIGRAMS, not grams (a 240 ml brewed coffee is 95 mg, a single espresso 63 mg, black tea 47 mg, a 250 ml energy drink 80 mg). Adds no calories. Pass it only for a meal that is genuinely a caffeine source; a 0 here records 'measured, and it was none' and starts showing the user a caffeine row.",
                     ),
+                sodium_mg: z.coerce
+                    .number()
+                    .min(0)
+                    .max(20_000)
+                    .optional()
+                    .describe(
+                        "Sodium in milligrams. Send only when get_profile says sodium tracking is enabled; label or chain figure first, else an estimate. 1 g salt ≈ 400 mg sodium.",
+                    ),
+                source: z
+                    .enum(["label", "chain", "barcode", "estimate", "recipe"])
+                    .optional()
+                    .describe(
+                        "Where the nutrition figures came from: 'label' (package label), 'chain' (restaurant's published nutrition), 'barcode' (lookup_barcode result), 'recipe' (a saved recipe), 'estimate' (your own estimate). Always send it.",
+                    ),
                 logged_at: z
                     .string()
                     .optional()
@@ -3668,11 +3804,16 @@ export function registerTools(
                     const prefix = deduplicated
                         ? "Already logged (idempotent retry)"
                         : "Water logged";
+                    const hidden = waterTrackingEnabledFromProfile(
+                        await getProfile(userId),
+                    )
+                        ? ""
+                        : " Saved, but water tracking is off, so it will not show in goals or widgets. Offer to turn it on with set_tracking.";
                     return {
                         content: [
                             {
                                 type: "text",
-                                text: `${prefix}: ${entry.amount_ml} ml at ${entry.logged_at}${entry.notes ? ` (${entry.notes})` : ""}. ID: ${entry.id}${note}`,
+                                text: `${prefix}: ${entry.amount_ml} ml at ${entry.logged_at}${entry.notes ? ` (${entry.notes})` : ""}. ID: ${entry.id}${note}${hidden}`,
                             },
                         ],
                     };
@@ -4597,6 +4738,71 @@ export function registerTools(
     );
 
     server.registerTool(
+        "set_tracking",
+        {
+            title: "Set Tracking Options",
+            description:
+                "Turn the opt-in trackers on or off: water (hydration line, water goal and the dashboard's water buttons) and sodium (a daily limit in mg and a sodium figure on every meal). Both are off by default. Entries are stored either way; this only controls what is shown. Pass only the trackers the user asked to change. Alcohol has its own tool, set_alcohol_tracking. Live from the next tool call, nothing to reconnect.",
+            annotations: {
+                readOnlyHint: false,
+                destructiveHint: false,
+                idempotentHint: true,
+                openWorldHint: false,
+            },
+            inputSchema: z.object({
+                water: z
+                    .boolean()
+                    .optional()
+                    .describe("true to show water tracking, false to hide it."),
+                sodium: z
+                    .boolean()
+                    .optional()
+                    .describe("true to track sodium, false to hide it."),
+            }),
+        },
+        async ({ water, sodium }) => {
+            return withAnalytics(
+                "set_tracking",
+                async () => {
+                    if (water === undefined && sodium === undefined)
+                        return {
+                            content: [
+                                {
+                                    type: "text",
+                                    text: "Nothing changed: pass water and/or sodium (true or false).",
+                                },
+                            ],
+                        };
+                    const profile = await upsertProfile(userId, {
+                        ...(water !== undefined
+                            ? { water_tracking_enabled: water }
+                            : {}),
+                        ...(sodium !== undefined
+                            ? { sodium_tracking_enabled: sodium }
+                            : {}),
+                    });
+                    const parts = [
+                        water === undefined
+                            ? null
+                            : waterTrackingEnabledFromProfile(profile)
+                              ? "Water tracking on: water now shows in goals, widgets and the dashboard."
+                              : "Water tracking off: water is hidden; anything logged is kept.",
+                        sodium === undefined
+                            ? null
+                            : sodiumTrackingEnabledFromProfile(profile)
+                              ? "Sodium tracking on: include sodium_mg on every meal from now on, and offer a daily limit (set_nutrition_goals sodium_mg; 2,300 mg is the common guideline)."
+                              : "Sodium tracking off: sodium is hidden; stored figures are kept.",
+                    ].filter((p): p is string => p !== null);
+                    return {
+                        content: [{ type: "text", text: parts.join(" ") }],
+                    };
+                },
+                analytics,
+            );
+        },
+    );
+
+    server.registerTool(
         "get_trends",
         {
             title: "Get Trends",
@@ -4678,12 +4884,15 @@ export function registerTools(
                     // included). The widget draws one goal line: the end
                     // date's, which is today's get_goal_progress goal.
                     const activeByDate = activityByDate(activityRows);
-                    const dayGoals = await effectiveGoalsByDate(
-                        userId,
+                    const dayGoals = gateAll(
+                        await effectiveGoalsByDate(
+                            userId,
+                            profile,
+                            goals,
+                            allBuckets.map((b) => b.date),
+                            activeByDate,
+                        ),
                         profile,
-                        goals,
-                        allBuckets.map((b) => b.date),
-                        activeByDate,
                     );
                     const textAdjs = textBuckets.map((b) =>
                         dayGoals.get(b.date)!,
@@ -4693,12 +4902,12 @@ export function registerTools(
                             Math.max(1, textAdjs.length),
                     );
                     const trendAdj = {
-                        goals: meanGoals(textAdjs, goals),
+                        goals: meanGoals(textAdjs, gateGoals(goals, profile)),
                         activeKcal: meanActive > 0 ? meanActive : null,
                     };
                     const endAdj = dayGoals.get(endDate);
                     const goalsPayload = goalsPayloadOf(
-                        endAdj?.goals ?? goals,
+                        endAdj?.goals ?? gateGoals(goals, profile),
                         alcohol,
                     );
 
@@ -4929,9 +5138,12 @@ export function registerTools(
                         alcoholTrackingEnabledFromProfile(profile);
                     const drinkUnit =
                         preferredDrinkUnitFromProfile(profile) ?? "us";
-                    const sync = await getIngestTokenStatus(userId).catch(
-                        () => null,
-                    );
+                    const [sync, storedGoals] = await Promise.all([
+                        getIngestTokenStatus(userId).catch(() => null),
+                        getNutritionGoals(userId).catch(() => null),
+                    ]);
+                    const waterOn = waterTrackingEnabledFromProfile(profile);
+                    const sodiumOn = sodiumTrackingEnabledFromProfile(profile);
 
                     const lines = [
                         tz === null
@@ -4952,8 +5164,17 @@ export function registerTools(
                         sync
                             ? `Activity sync: connected${sync.last_used_at ? `, last sync ${formatLocalDateTime(sync.last_used_at, tz ?? "UTC")}` : ", no sync received yet"}. Active calories raise each day's calorie goal and scale protein/carbs/fat with it.`
                             : "Activity sync: not connected. Active calories can be logged with log_active_calories, or synced from Apple Health with setup_activity_sync.",
+                        waterOn
+                            ? "Water tracking: enabled. Water appears in goals, widgets and the dashboard."
+                            : "Water tracking: off (opt-in), so water is hidden from goals, widgets and the dashboard. log_water still stores entries. Offer it only if the user wants to track hydration; enable with set_tracking.",
+                        sodiumOn
+                            ? "Sodium tracking: enabled. Send sodium_mg on every meal (label or chain figure first, else an estimate)."
+                            : "Sodium tracking: off (opt-in). Enable with set_tracking if the user watches salt or blood pressure.",
                         bodyProfileLine(profile),
-                    ];
+                        setupLine(
+                            setupChecklist(profile, storedGoals, sync != null),
+                        ),
+                    ].filter((l) => l !== "");
 
                     return {
                         content: [

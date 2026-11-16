@@ -2594,6 +2594,127 @@
             .qa-label + .quick {
                 margin-top: var(--s2);
             }
+            /* saved recipes: a servings picker beside the one-tap buttons */
+            .rq-head {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: var(--s2);
+            }
+            .rq-serv {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--s2);
+                margin-top: var(--s4);
+                font-size: var(--fs-small);
+                color: var(--ink-2);
+            }
+            .rq-serv select {
+                min-height: 32px;
+                padding: 0 var(--s2);
+            }
+
+            /* ---------- Today: setup checklist + water ---------- */
+            .setup {
+                margin: 0 0 var(--gap-block);
+            }
+            .setup-list {
+                list-style: none;
+                margin: var(--s3) 0 0;
+                padding: 0;
+            }
+            .setup-list li {
+                display: grid;
+                grid-template-columns: 1.5rem 1fr;
+                gap: var(--s2);
+                padding: var(--s2) 0;
+                border-top: 1px solid var(--line);
+                font-size: var(--fs-small);
+            }
+            .setup-list li:first-child {
+                border-top: 0;
+            }
+            .setup-list .ck {
+                font-family: var(--font-mono);
+                color: var(--ink-3);
+            }
+            .setup-list li.done {
+                color: var(--ink-3);
+            }
+            .setup-list li.done .ck {
+                color: var(--accent-text);
+            }
+            .setup-list b {
+                font-weight: 600;
+                color: var(--ink);
+            }
+            .setup-list li.done b {
+                color: var(--ink-3);
+                text-decoration: line-through;
+            }
+            .setup-list .say {
+                display: block;
+                color: var(--ink-2);
+            }
+            .setup-opts {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--s4);
+                margin-top: var(--s3);
+                font-size: var(--fs-small);
+            }
+            .setup-opts label {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--s2);
+                min-height: 44px;
+            }
+            .wq {
+                margin: 0 0 var(--gap-block);
+            }
+            .wq-fig {
+                font-family: var(--font-display);
+                font-weight: 700;
+                font-variant-numeric: tabular-nums;
+            }
+            .wq-bar {
+                height: 6px;
+                margin-top: var(--s3);
+                border-radius: var(--r-pill);
+                background: var(--surface-2);
+                overflow: hidden;
+            }
+            .wq-bar i {
+                display: block;
+                height: 100%;
+                background: var(--water);
+                border-radius: inherit;
+            }
+            .wq .qa {
+                min-width: 88px;
+                justify-content: center;
+            }
+            /* where a meal's numbers came from */
+            .m-src {
+                flex: none;
+                margin-left: var(--s2);
+                padding: 0 6px;
+                border: 1px solid var(--control);
+                border-radius: var(--r-pill);
+                font-family: var(--font-mono);
+                font-size: 0.625rem;
+                font-weight: 500;
+                letter-spacing: 0.06em;
+                line-height: 1.6;
+                text-transform: uppercase;
+                color: var(--ink-2);
+                vertical-align: 1px;
+            }
+            .m-src.est {
+                border-style: dashed;
+                color: var(--ink-3);
+            }
             .lm-hint:empty {
                 display: none;
             }
@@ -5077,12 +5198,36 @@
                         ? Math.round(f * 1000) / 10 + "% of what you eat"
                         : "25% of protein kcal, 7.5% of carbs, 2% of fat";
                 }
+                // Where a meal's numbers came from (vault feature 007). Absent on
+                // rows logged before the field existed: no badge, not "estimate".
+                const SOURCE_LABEL = {
+                    label: ["Label", "From the package label"],
+                    chain: ["Restaurant", "From the restaurant's published nutrition"],
+                    barcode: ["Barcode", "From a barcode lookup (Open Food Facts)"],
+                    recipe: ["Recipe", "From one of your saved recipes"],
+                    import: ["Imported", "Imported from another app's export"],
+                    estimate: ["Estimate", "Estimated by the assistant — treat as approximate"],
+                };
+                function sourceBadge(src) {
+                    const l = SOURCE_LABEL[src];
+                    if (!l) return "";
+                    return (
+                        '<span class="m-src' +
+                        (src === "estimate" ? " est" : "") +
+                        '" title="' +
+                        esc(l[1]) +
+                        '">' +
+                        esc(l[0]) +
+                        "</span>"
+                    );
+                }
                 function mealItem(m) {
                     return (
                         '<li><div class="m1"><span class="m-time">' +
                         esc(localTime(m.logged_at)) +
                         '</span><span class="m-type">' +
                         esc(mealTypeLabel(m.meal_type)) +
+                        sourceBadge(m.source) +
                         '</span><span class="m-kcal">' +
                         nz(m.calories) +
                         '<small>kcal</small></span></div><p class="m-desc">' +
@@ -6606,6 +6751,200 @@
                     });
                 }
 
+                // ---- first-run setup checklist (vault feature 006) ----------
+                // The server decides what is done (src/onboarding.ts, the same
+                // list get_profile reads to the assistant); the page only lists it.
+                // Hiding it is per browser and never blocks anything.
+                const SETUP_KEY = "nm-setup-hidden";
+                function setupHidden() {
+                    try {
+                        return localStorage.getItem(SETUP_KEY) === "1";
+                    } catch (e) {
+                        return false;
+                    }
+                }
+                function setupCardHtml() {
+                    const items = data.setup || [];
+                    const left = items.filter((i) => !i.done);
+                    if (!left.length || setupHidden()) return "";
+                    const tr = data.tracking || {};
+                    const box = (key, on, label) =>
+                        '<label><input type="checkbox" data-track="' +
+                        key +
+                        '"' +
+                        (on ? " checked" : "") +
+                        " /> " +
+                        label +
+                        "</label>";
+                    return (
+                        '<section class="facts rv setup" aria-labelledby="h-setup"><div class="facts-title"><h3 id="h-setup">Finish setting up</h3><span class="tag">' +
+                        (items.length - left.length) +
+                        " of " +
+                        items.length +
+                        " done</span></div>" +
+                        '<p class="facts-serving"><span>Each is one sentence to Claude — or use the Body tab.</span><button type="button" class="link-btn" data-setup-hide>Hide</button></p>' +
+                        '<ul class="setup-list">' +
+                        items
+                            .map(
+                                (i) =>
+                                    '<li class="' +
+                                    (i.done ? "done" : "") +
+                                    '"><span class="ck" aria-hidden="true">' +
+                                    (i.done ? "✓" : "○") +
+                                    "</span><span><b>" +
+                                    esc(i.label) +
+                                    "</b>" +
+                                    (i.done
+                                        ? '<span class="sr-only"> (done)</span>'
+                                        : '<span class="say">Say ' +
+                                          esc(i.say) +
+                                          "</span>") +
+                                    "</span></li>",
+                            )
+                            .join("") +
+                        "</ul>" +
+                        '<div class="setup-opts" role="group" aria-label="Optional trackers">' +
+                        box("water", tr.water, "Track water") +
+                        box("sodium", tr.sodium, "Track sodium") +
+                        '<span class="b-status" id="setup-status" role="status"></span></div></section>'
+                    );
+                }
+                // ---- one-tap water (vault features 004/005) ------------------
+                // Only for users who turned water tracking on; nobody else sees a
+                // water figure anywhere on the page.
+                let wqFlash = null; // { text, undoId, err }
+                let wqBusy = false;
+                function waterQuickHtml() {
+                    const tr = data.tracking || {};
+                    if (!tr.water) return "";
+                    const w = data.waterToday || { ml: 0, entries: [] };
+                    const goal = data.goals && data.goals.water_ml;
+                    const pct = goal ? Math.min(1, w.ml / goal) : 0;
+                    const L = (ml) => (ml / 1000).toFixed(1);
+                    return (
+                        '<section class="rv wq" aria-labelledby="h-wq"><div class="facts-title"><h3 id="h-wq">Water</h3><span class="wq-fig">' +
+                        L(w.ml) +
+                        (goal ? " / " + L(goal) : "") +
+                        " L</span></div>" +
+                        (goal
+                            ? '<div class="wq-bar" aria-hidden="true"><i style="width:' +
+                              (pct * 100).toFixed(1) +
+                              '%"></i></div>'
+                            : "") +
+                        (wqFlash
+                            ? '<p class="lw-flash' +
+                              (wqFlash.err ? " lm-err" : "") +
+                              '" role="status"><span>' +
+                              esc(wqFlash.text) +
+                              (wqFlash.undoId
+                                  ? ' <button type="button" class="link-btn" data-water-undo="' +
+                                    esc(wqFlash.undoId) +
+                                    '">Undo</button>'
+                                  : "") +
+                              "</span></p>"
+                            : "") +
+                        '<div class="quick" role="group" aria-label="Add water now">' +
+                        [250, 500]
+                            .map(
+                                (ml) =>
+                                    '<button type="button" class="qa" data-water-add="' +
+                                    ml +
+                                    '"><span>+ ' +
+                                    ml +
+                                    "</span><small>ml</small></button>",
+                            )
+                            .join("") +
+                        "</div></section>"
+                    );
+                }
+                function addWater(ml) {
+                    if (wqBusy) return;
+                    wqBusy = true;
+                    writeJson("POST", "/api/dashboard/water", {
+                        amount_ml: ml,
+                        client_key: uuid(),
+                    })
+                        .then(function (res) {
+                            wqBusy = false;
+                            wqFlash = res.ok
+                                ? {
+                                      text: "Added " + ml + " ml.",
+                                      undoId: res.body.entry.id,
+                                  }
+                                : {
+                                      text:
+                                          (res.body &&
+                                              res.body.error_description) ||
+                                          "Could not save.",
+                                      err: true,
+                                  };
+                            refresh();
+                        })
+                        .catch(function (err) {
+                            wqBusy = false;
+                            if (err && err.message === "unauthorized") return;
+                            wqFlash = {
+                                text: "Could not reach the server.",
+                                err: true,
+                            };
+                            contentDirty.today = true;
+                            paint();
+                        });
+                }
+                function undoWater(id) {
+                    writeJson(
+                        "DELETE",
+                        "/api/dashboard/water/" + encodeURIComponent(id),
+                    )
+                        .then(function () {
+                            wqFlash = { text: "Removed." };
+                            refresh();
+                        })
+                        .catch(function () {});
+                }
+                function setTracking(key, on, box) {
+                    const st = $("setup-status");
+                    if (box) box.disabled = true;
+                    const body = {};
+                    body[key] = on;
+                    writeJson("POST", "/api/dashboard/tracking", body)
+                        .then(function (res) {
+                            if (box) box.disabled = false;
+                            if (!res.ok) {
+                                if (box) box.checked = !on;
+                                if (st) st.textContent = "Could not save.";
+                                return;
+                            }
+                            refresh();
+                        })
+                        .catch(function () {
+                            if (box) {
+                                box.disabled = false;
+                                box.checked = !on;
+                            }
+                        });
+                }
+                document.addEventListener("click", function (ev) {
+                    const t = ev.target;
+                    if (!t.closest) return;
+                    const add = t.closest("[data-water-add]");
+                    if (add) return addWater(Number(add.dataset.waterAdd));
+                    const un = t.closest("[data-water-undo]");
+                    if (un) return undoWater(un.dataset.waterUndo);
+                    if (t.closest("[data-setup-hide]")) {
+                        try {
+                            localStorage.setItem(SETUP_KEY, "1");
+                        } catch (e) {}
+                        contentDirty.today = true;
+                        paint();
+                    }
+                });
+                document.addEventListener("change", function (ev) {
+                    const t = ev.target;
+                    if (!t.matches || !t.matches("[data-track]")) return;
+                    setTracking(t.dataset.track, t.checked, t);
+                });
+
                 RENDER.today = function () {
                     const t = data.daily[data.daily.length - 1];
                     const g = data.goals;
@@ -6613,7 +6952,9 @@
                     const eaten = t.calories || 0;
                     const last7 = data.daily.slice(-7);
                     $("today-body").innerHTML =
+                        setupCardHtml() +
                         logMealBlock("today") +
+                        waterQuickHtml() +
                         '<div class="today-grid"><div class="col">' +
                         '<section class="facts rv" aria-labelledby="h-today"><div class="facts-title"><h3 id="h-today">Today</h3><span class="tag">' +
                         plural(t.mealCount, "meal") +
@@ -11146,12 +11487,125 @@
                         })
                         .catch(function () {});
                 }
+                // Saved recipes (vault feature 009): one tap logs the chosen number
+                // of servings; the server scales the recipe's per-serving figures.
+                let recipes = [];
+                let recipesLoaded = false;
+                let recipeServings = 1;
+                function loadRecipes() {
+                    fetch("/api/dashboard/recipes", authHeader())
+                        .then((r) => (r.ok ? r.json() : null))
+                        .then(function (b) {
+                            if (!b || !token) return;
+                            recipes = b.recipes || [];
+                            recipesLoaded = true;
+                            contentDirty.meals = true;
+                            if (!$("lm-form")) paint();
+                        })
+                        .catch(function () {});
+                }
+                function recipeChips() {
+                    if (!recipesLoaded) return "";
+                    if (!recipes.length)
+                        return '<p class="form-hint qa-hint">Save a dish you make often — tell Claude “save my overnight oats as a recipe” — and it shows up here.</p>';
+                    const opt = (v, l) =>
+                        '<option value="' +
+                        v +
+                        '"' +
+                        (recipeServings === v ? " selected" : "") +
+                        ">" +
+                        l +
+                        "</option>";
+                    return (
+                        '<div class="rq-head"><p class="qa-label">Your recipes · tap to log now</p>' +
+                        '<label class="rq-serv" for="rq-servings">Servings<select class="input" id="rq-servings">' +
+                        opt(0.5, "½") +
+                        opt(1, "1") +
+                        opt(1.5, "1½") +
+                        opt(2, "2") +
+                        "</select></label></div>" +
+                        '<div class="quick" role="group" aria-label="Your recipes: log now">' +
+                        recipes
+                            .map(function (r) {
+                                const kcal =
+                                    r.calories != null
+                                        ? Math.round(r.calories * recipeServings)
+                                        : null;
+                                return (
+                                    '<button type="button" class="qa" data-recipe-log="' +
+                                    esc(r.id) +
+                                    '" title="' +
+                                    esc(r.name) +
+                                    '"><span>' +
+                                    esc(
+                                        r.name.length > 30
+                                            ? r.name.slice(0, 29) + "…"
+                                            : r.name,
+                                    ) +
+                                    "</span>" +
+                                    (kcal != null
+                                        ? "<small>" + fmt(kcal) + " kcal</small>"
+                                        : "") +
+                                    "</button>"
+                                );
+                            })
+                            .join("") +
+                        "</div>"
+                    );
+                }
+                function logRecipe(id) {
+                    if (lmBusy) return;
+                    lmBusy = true;
+                    document
+                        .querySelectorAll(".qa")
+                        .forEach((b) => (b.disabled = true));
+                    writeJson(
+                        "POST",
+                        "/api/dashboard/recipes/" +
+                            encodeURIComponent(id) +
+                            "/log",
+                        { servings: recipeServings, client_key: uuid() },
+                    )
+                        .then(function (res) {
+                            lmBusy = false;
+                            if (res.ok) return logged(res);
+                            lmFail(
+                                res,
+                                res.status === 404
+                                    ? "That recipe no longer exists."
+                                    : "Could not save.",
+                            );
+                        })
+                        .catch(function (err) {
+                            lmBusy = false;
+                            if (err && err.message === "unauthorized") return;
+                            lmFail(null, "Could not reach the server.");
+                        });
+                }
+                document.addEventListener("click", function (ev) {
+                    const t = ev.target;
+                    if (!t.closest) return;
+                    const r = t.closest("[data-recipe-log]");
+                    if (r) logRecipe(r.dataset.recipeLog);
+                });
+                document.addEventListener("change", function (ev) {
+                    if (!ev.target || ev.target.id !== "rq-servings") return;
+                    recipeServings = Number(ev.target.value) || 1;
+                    contentDirty.meals = true;
+                    paint();
+                    const sel = $("rq-servings");
+                    if (sel) sel.focus();
+                });
                 function quickChips(which) {
                     // Today is for the planned meals, not for habits.
                     if (which !== "meals" || !frequentLoaded) return "";
                     if (!frequent.length)
-                        return '<p class="form-hint qa-hint">Meals you log twice or more show up here as one-tap buttons.</p>';
+                        return (
+                            recipeChips() +
+                            '<p class="form-hint qa-hint">Meals you log twice or more show up here as one-tap buttons.</p>'
+                        );
                     return (
+                        recipeChips() +
                         '<p class="qa-label">Most frequent · tap to log again now</p>' +
                         '<div class="quick" role="group" aria-label="Most frequent meals: log again now">' +
                         frequent
@@ -12067,6 +12521,7 @@
                 }
                 function onData() {
                     loadFrequent();
+                    loadRecipes();
                     if (active === "weighins" || wl) loadWeights();
                     markDirty();
                     renderBanners();

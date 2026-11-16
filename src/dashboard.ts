@@ -100,6 +100,7 @@ import {
 import {
     MAX_ALCOHOL_G,
     MAX_CAFFEINE_MG,
+    MAX_SODIUM_MG,
     MAX_CALORIES,
     MAX_MACRO_G,
     MEAL_TYPE_VALUES,
@@ -907,6 +908,7 @@ export async function saveCalorieGoal(
         daily_sugar_g: existing?.daily_sugar_g,
         daily_alcohol_g: existing?.daily_alcohol_g,
         daily_caffeine_mg: existing?.daily_caffeine_mg,
+        daily_sodium_mg: existing?.daily_sodium_mg,
         daily_water_ml: existing?.daily_water_ml,
         target_weight_g: plan.target_weight_g ?? existing?.target_weight_g,
         calorie_goal_mode: plan.mode,
@@ -1167,6 +1169,7 @@ const MEAL_NUMBER_BOUNDS: Record<string, number> = {
     fat_g: MAX_MACRO_G,
     fiber_g: MAX_MACRO_G,
     sugar_g: MAX_MACRO_G,
+    sodium_mg: MAX_SODIUM_MG,
 };
 const UUID_RE =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1199,6 +1202,22 @@ export function checkMealPatch(
                     error: `meal_type must be one of: ${MEAL_TYPES.join(", ")}.`,
                 };
             patch.meal_type = raw as string;
+        } else if (key === "source") {
+            if (
+                ![
+                    "label",
+                    "chain",
+                    "barcode",
+                    "estimate",
+                    "import",
+                    "recipe",
+                ].includes(String(raw))
+            )
+                return {
+                    ok: false,
+                    error: "source is not a supported meal source.",
+                };
+            patch.source = String(raw);
         } else if (key in MEAL_NUMBER_BOUNDS) {
             // Clearing is refused, as update_meal cannot clear either:
             // updateMeal stores calories via toStoredInteger, where null
@@ -1270,6 +1289,8 @@ export async function updateMealFromDashboard(
                 fat_g: saved.fat_g,
                 fiber_g: saved.fiber_g,
                 sugar_g: saved.sugar_g,
+                sodium_mg: saved.sodium_mg,
+                source: saved.source,
             },
         },
     };
@@ -1284,6 +1305,7 @@ const MEAL_ENTRY_BOUNDS: Record<string, number> = {
     ...MEAL_NUMBER_BOUNDS,
     alcohol_g: MAX_ALCOHOL_G,
     caffeine_mg: MAX_CAFFEINE_MG,
+    sodium_mg: MAX_SODIUM_MG,
 };
 
 // The page mints one uuid per form-open / tap and the server prefixes it, so
@@ -1313,6 +1335,7 @@ export function checkMealEntry(
         "meal_type",
         "logged_at",
         "client_key",
+        "source",
         ...Object.keys(MEAL_ENTRY_BOUNDS),
     ]);
     for (const key of Object.keys(input))
@@ -1340,6 +1363,23 @@ export function checkMealEntry(
         description,
         meal_type: input.meal_type,
     };
+    if (input.source !== undefined) {
+        if (
+            ![
+                "label",
+                "chain",
+                "barcode",
+                "estimate",
+                "import",
+                "recipe",
+            ].includes(String(input.source))
+        )
+            return {
+                ok: false,
+                error: "source is not a supported meal source.",
+            };
+        meal.source = String(input.source);
+    }
     for (const [key, max] of Object.entries(MEAL_ENTRY_BOUNDS)) {
         const raw = input[key];
         if (raw === undefined || raw === null || raw === "") continue;
@@ -1376,6 +1416,8 @@ function mealSummary(m: Meal) {
         fat_g: m.fat_g,
         fiber_g: m.fiber_g,
         sugar_g: m.sugar_g,
+        sodium_mg: m.sodium_mg,
+        source: m.source,
     };
 }
 
@@ -1422,6 +1464,8 @@ export function repeatFields(
         "sugar_g",
         "alcohol_g",
         "caffeine_mg",
+        "sodium_mg",
+        "source",
         "notes",
     ] as const) {
         const v = source[key];
