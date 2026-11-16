@@ -6,17 +6,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_DE: ToolsDoc = {
     meta: {
-        title: "Werkzeug-Referenz: Alle 39 Werkzeuge",
+        title: "Werkzeug-Referenz: Alle 41 Werkzeuge",
         description:
-            "Alle 39 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt — Mahlzeiten erfassen, Barcodes scannen, deine Historie aus einer anderen App importieren, Wasser und Gewicht verfolgen, Ziele festlegen und Trends auswerten. Vollständige Referenz mit Beschreibungen und Beispielsätzen.",
+            "Alle 41 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt — Mahlzeiten erfassen, Barcodes scannen, deine Historie aus einer anderen App importieren, Wasser und Gewicht verfolgen, Ziele festlegen und Trends auswerten. Vollständige Referenz mit Beschreibungen und Beispielsätzen.",
         ogDescription:
-            "Alle 39 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt, inklusive eines CSV-Importers für deine Historie aus einer anderen App — mit Beschreibungen und Beispielsätzen.",
+            "Alle 41 Werkzeuge, die der Nutrition-MCP-Server deiner KI gibt, inklusive eines CSV-Importers für deine Historie aus einer anderen App — mit Beschreibungen und Beispielsätzen.",
     },
     hero: {
         eyebrow: "Referenz",
         title: "Alles, was deine KI kann",
         lead: "Du rufst diese Werkzeuge nie selbst auf — du sprichst einfach, und der Assistent wählt das richtige Werkzeug. Hier ist die vollständige Liste, die der Nutrition-MCP-Server bereitstellt, mit dem, was jedes tut, und einem Satz, der es auslöst.",
-        countBold: "39 Werkzeuge",
+        countBold: "41 Werkzeuge",
         countTail: "in 7 Bereichen",
     },
     categories: {
@@ -108,6 +108,21 @@ export const TOOLS_DE: ToolsDoc = {
                 "Erfasse eine Chicken-Burrito-Bowl mit extra Guacamole zum Mittagessen",
             photoHint:
                 "…oder mach einfach ein Foto von deinem Teller — die KI benennt jedes Gericht, schätzt Portionen in alltäglichen Maßen (ein Glas, eine Handvoll), prüft, wie du es früher erfasst hast, und bestätigt mit dir, bevor sie es erfasst.",
+        },
+        manage_recipes: {
+            description:
+                "Speichere, liste, lösche oder protokolliere gespeicherte Rezepte. Rezepte werden pro Portion gespeichert, damit eineinhalb Portionen Overnight Oats mit einem Schritt protokolliert werden können.",
+            params: {
+                action: "Rezeptaktion",
+                name: "Rezeptname",
+                recipe_id: "Rezept-ID",
+                servings: "Portionen",
+                per: "Pro Portion oder ganze Menge",
+                ingredients: "Zutaten",
+                meal_type: "Mahlzeit",
+                logged_at: "Essenszeit",
+            },
+            example: "Speichere meine Overnight Oats als Rezept",
         },
         lookup_barcode: {
             description:
@@ -410,7 +425,7 @@ export const TOOLS_DE: ToolsDoc = {
             description:
                 "Leg die Sprache der In-Chat-Widgets fest — die Dashboards und Diagramme, nicht das, was die KI dir zurückschreibt.",
             params: {
-                locale: "ISO-639-1-Code, z. B. <code>de</code>, <code>uk</code>. Unterstützt: Englisch, Deutsch, Spanisch, Französisch, Niederländisch, Polnisch, Italienisch, Ukrainisch.",
+                locale: "ISO-641-1-Code, z. B. <code>de</code>, <code>uk</code>. Unterstützt: Englisch, Deutsch, Spanisch, Französisch, Niederländisch, Polnisch, Italienisch, Ukrainisch.",
             },
             example: "Zeig meine Widgets auf Deutsch an",
         },
@@ -440,6 +455,12 @@ export const TOOLS_DE: ToolsDoc = {
             },
             example:
                 "Fang an, meinen Alkoholkonsum zu erfassen, in UK-Einheiten",
+        },
+        set_tracking: {
+            description:
+                "Schalte Wasser (Hydrationsanzeige, Wasserziel und Dashboard-Schaltflächen) und Natrium (Tageslimit in mg und Wert pro Mahlzeit) ein oder aus. Beides ist standardmäßig aus; beim Einschalten von Natrium wird ein Limit von 2.300 mg gesetzt, falls keines besteht.",
+            params: { water: "Wasser ein/aus", sodium: "Natrium ein/aus" },
+            example: "Erfasse mein Wasser",
         },
         delete_account: {
             description:

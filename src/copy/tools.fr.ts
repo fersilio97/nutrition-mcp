@@ -16,17 +16,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_FR: ToolsDoc = {
     meta: {
-        title: "Référence des outils : les 39 outils",
+        title: "Référence des outils : les 41 outils",
         description:
-            "Les 39 outils que le serveur Nutrition MCP donne à ton IA — enregistrer des repas, scanner des codes-barres, importer ton historique depuis une autre app, suivre l'eau et le poids, définir des objectifs et consulter les tendances. Référence complète avec descriptions et exemples de formulations.",
+            "Les 41 outils que le serveur Nutrition MCP donne à ton IA — enregistrer des repas, scanner des codes-barres, importer ton historique depuis une autre app, suivre l'eau et le poids, définir des objectifs et consulter les tendances. Référence complète avec descriptions et exemples de formulations.",
         ogDescription:
-            "Les 39 outils que le serveur Nutrition MCP donne à ton IA, dont un importateur CSV pour ton historique venu d'une autre app — avec descriptions et exemples de formulations.",
+            "Les 41 outils que le serveur Nutrition MCP donne à ton IA, dont un importateur CSV pour ton historique venu d'une autre app — avec descriptions et exemples de formulations.",
     },
     hero: {
         eyebrow: "Référence",
         title: "Tout ce que ton IA peut faire",
         lead: "Tu n'appelles jamais ces outils directement — tu parles simplement, et l'assistant choisit le bon outil. Voici l'ensemble complet exposé par le serveur Nutrition MCP, avec ce que fait chacun et une phrase qui le déclenche.",
-        countBold: "39 outils",
+        countBold: "41 outils",
         countTail: "répartis en 7 catégories",
     },
     categories: {
@@ -116,6 +116,21 @@ export const TOOLS_FR: ToolsDoc = {
                 "Enregistre un burrito bowl au poulet avec supplément de guacamole pour le déjeuner",
             photoHint:
                 "…ou prends simplement ton assiette en photo — l'IA identifie chaque plat, estime les portions avec des mesures courantes (un verre, une poignée), vérifie comment tu l'as enregistré auparavant, et confirme avec toi avant d'enregistrer.",
+        },
+        manage_recipes: {
+            description:
+                "Enregistre, affiche, supprime ou consigne tes recettes. Elles sont enregistrées par portion : une portion et demie de porridge se consigne en une étape sans nouvelle estimation.",
+            params: {
+                action: "Action",
+                name: "Nom de recette",
+                recipe_id: "ID de recette",
+                servings: "Portions",
+                per: "Par portion ou recette entière",
+                ingredients: "Ingrédients",
+                meal_type: "Type de repas",
+                logged_at: "Heure du repas",
+            },
+            example: "Enregistre mon porridge comme recette",
         },
         lookup_barcode: {
             description:
@@ -416,7 +431,7 @@ export const TOOLS_FR: ToolsDoc = {
             description:
                 "Définis la langue de l'interface pour les widgets interactifs dans le chat — les tableaux de bord et graphiques, pas ce que l'IA t'écrit.",
             params: {
-                locale: "Code ISO 639-1, par exemple <code>de</code>, <code>uk</code>. Langues prises en charge : anglais, allemand, espagnol, français, néerlandais, polonais, italien, ukrainien.",
+                locale: "Code ISO 641-1, par exemple <code>de</code>, <code>uk</code>. Langues prises en charge : anglais, allemand, espagnol, français, néerlandais, polonais, italien, ukrainien.",
             },
             example: "Affiche mes widgets en allemand",
         },
@@ -446,6 +461,15 @@ export const TOOLS_FR: ToolsDoc = {
             },
             example:
                 "Commence à suivre ma consommation d'alcool, en unités britanniques",
+        },
+        set_tracking: {
+            description:
+                "Active ou désactive l’eau (ligne d’hydratation, objectif et boutons du tableau de bord) et le sodium (limite quotidienne en mg et valeur par repas). Les deux sont désactivés ; activer le sodium définit une limite de 2 300 mg si besoin.",
+            params: {
+                water: "Eau : true pour activer, false pour désactiver",
+                sodium: "Sodium : true pour activer, false pour désactiver",
+            },
+            example: "Commence à suivre mon eau",
         },
         delete_account: {
             description:

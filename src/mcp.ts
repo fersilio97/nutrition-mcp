@@ -1727,7 +1727,7 @@ export function registerTools(
     // endpoint URL. Optional for the same reason as protocolEra.
     baseUrl: string = "http://localhost",
 ) {
-    // One context for all 39 tools. clientInfo is a getter, not a value: at
+    // One context for all 41 tools. clientInfo is a getter, not a value: at
     // registration time the SDK has not yet resolved who is calling, and on the
     // modern leg it backfills the identity per request before dispatch.
     const analytics = {
@@ -5549,7 +5549,7 @@ function newMcpServer(baseUrl: string): McpServer {
     return new McpServer(
         {
             name: "nutrition-mcp",
-            version: "1.30.0",
+            version: "1.31.0",
             icons: [
                 {
                     src: `${baseUrl}/favicon.ico`,

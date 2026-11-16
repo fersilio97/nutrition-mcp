@@ -8,17 +8,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_NL: ToolsDoc = {
     meta: {
-        title: "Toolreferentie: alle 39 tools",
+        title: "Toolreferentie: alle 41 tools",
         description:
-            "Alle 39 tools die de Nutrition MCP-server aan je AI geeft — maaltijden loggen, barcodes scannen, je geschiedenis uit een andere app importeren, water en gewicht bijhouden, doelen instellen en trends bekijken. Volledige referentie met beschrijvingen en voorbeeldzinnen.",
+            "Alle 41 tools die de Nutrition MCP-server aan je AI geeft — maaltijden loggen, barcodes scannen, je geschiedenis uit een andere app importeren, water en gewicht bijhouden, doelen instellen en trends bekijken. Volledige referentie met beschrijvingen en voorbeeldzinnen.",
         ogDescription:
-            "Alle 39 tools die de Nutrition MCP-server aan je AI geeft, inclusief een CSV-importer voor je geschiedenis uit een andere app — met beschrijvingen en voorbeeldzinnen.",
+            "Alle 41 tools die de Nutrition MCP-server aan je AI geeft, inclusief een CSV-importer voor je geschiedenis uit een andere app — met beschrijvingen en voorbeeldzinnen.",
     },
     hero: {
         eyebrow: "Referentie",
         title: "Alles wat je AI kan doen",
         lead: "Je roept deze tools nooit rechtstreeks aan — je praat gewoon, en de assistent kiest de juiste tool. Hier is de volledige set die de Nutrition MCP-server aanbiedt, met wat elke tool doet en een zin die hem activeert.",
-        countBold: "39 tools",
+        countBold: "41 tools",
         countTail: "verdeeld over 7 categorieën",
     },
     categories: {
@@ -108,6 +108,21 @@ export const TOOLS_NL: ToolsDoc = {
                 "Log een kip-burritobowl met extra guacamole voor de lunch",
             photoHint:
                 "…of maak gewoon een foto van je bord — de AI benoemt elk gerecht, schat de porties in alledaagse maten (een glas, een handvol), checkt hoe je het eerder hebt gelogd en bevestigt met jou voordat het gelogd wordt.",
+        },
+        manage_recipes: {
+            description:
+                "Sla recepten op, bekijk ze, verwijder ze of log ze. Ze worden per portie opgeslagen, zodat anderhalve portie overnight oats in één stap wordt gelogd zonder nieuwe schatting.",
+            params: {
+                action: "Actie",
+                name: "Receptnaam",
+                recipe_id: "Recept-ID",
+                servings: "Porties",
+                per: "Per portie of hele bereiding",
+                ingredients: "Ingrediënten",
+                meal_type: "Maaltijdtype",
+                logged_at: "Eettijd",
+            },
+            example: "Sla mijn overnight oats op als recept",
         },
         lookup_barcode: {
             description:
@@ -410,7 +425,7 @@ export const TOOLS_NL: ToolsDoc = {
             description:
                 "Stel de taal in voor de widgets in de chat — de dashboards en grafieken, niet wat de AI aan je terugschrijft.",
             params: {
-                locale: "ISO 639-1-code, bijv. <code>de</code>, <code>uk</code>. Ondersteund: Engels, Duits, Spaans, Frans, Nederlands, Pools, Italiaans en Oekraïens.",
+                locale: "ISO 641-1-code, bijv. <code>de</code>, <code>uk</code>. Ondersteund: Engels, Duits, Spaans, Frans, Nederlands, Pools, Italiaans en Oekraïens.",
             },
             example: "Zet mijn widgets in het Duits",
         },
@@ -439,6 +454,15 @@ export const TOOLS_NL: ToolsDoc = {
             },
             example:
                 "Begin met het bijhouden van mijn drankgebruik, in Britse eenheden",
+        },
+        set_tracking: {
+            description:
+                "Schakel water (hydratatielijn, doel en dashboardknoppen) en natrium (daglimiet in mg en waarde per maaltijd) in of uit. Beide staan uit; bij inschakelen van natrium wordt zo nodig een limiet van 2.300 mg ingesteld.",
+            params: {
+                water: "Water: true aan, false uit",
+                sodium: "Natrium: true aan, false uit",
+            },
+            example: "Houd mijn water bij",
         },
         delete_account: {
             description:

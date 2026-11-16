@@ -20,17 +20,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_JA: ToolsDoc = {
     meta: {
-        title: "ツールリファレンス：39個の全ツール",
+        title: "ツールリファレンス：41個の全ツール",
         description:
-            "Nutrition MCPサーバーがあなたのAIに提供する39個すべてのツール — 食事の記録、バーコードのスキャン、他のアプリからの履歴インポート、水分と体重の記録、目標の設定、トレンドの確認。説明と例文つきの完全なリファレンスです。",
+            "Nutrition MCPサーバーがあなたのAIに提供する41個すべてのツール — 食事の記録、バーコードのスキャン、他のアプリからの履歴インポート、水分と体重の記録、目標の設定、トレンドの確認。説明と例文つきの完全なリファレンスです。",
         ogDescription:
-            "Nutrition MCPサーバーがあなたのAIに提供する39個のツール。他のアプリからの履歴用CSVインポーターを含み、説明と例文つき。",
+            "Nutrition MCPサーバーがあなたのAIに提供する41個のツール。他のアプリからの履歴用CSVインポーターを含み、説明と例文つき。",
     },
     hero: {
         eyebrow: "リファレンス",
         title: "あなたのAIができること、すべて",
         lead: "これらのツールを直接呼び出すことはありません — ただ話しかけるだけで、アシスタントが適切なツールを選びます。Nutrition MCPサーバーが公開する全ツールと、それぞれの機能、呼び出すきっかけとなるフレーズをまとめました。",
-        countBold: "39個のツール",
+        countBold: "41個のツール",
         countTail: "7つの分野にわたる",
     },
     categories: {
@@ -116,6 +116,21 @@ export const TOOLS_JA: ToolsDoc = {
             example: "ランチにチキンブリトーボウルを、ワカモレ多めで記録して",
             photoHint:
                 "…または、お皿の写真を撮るだけでも構いません — AIが各料理を特定し、日常的な単位（グラス1杯、ひとつかみなど）で分量を見積もり、これまでの記録内容と照合したうえで、記録する前にあなたに確認します。",
+        },
+        manage_recipes: {
+            description:
+                "保存済みレシピを保存、一覧表示、削除、記録します。レシピは1食分ごとに保存されるため、オーバーナイトオーツ1.5食分も毎回推定せず一度で記録できます。",
+            params: {
+                action: "操作",
+                name: "レシピ名",
+                recipe_id: "レシピID",
+                servings: "食数",
+                per: "1食分または全量",
+                ingredients: "材料",
+                meal_type: "食事タイプ",
+                logged_at: "食べた日時",
+            },
+            example: "オーバーナイトオーツをレシピとして保存して",
         },
         lookup_barcode: {
             description:
@@ -406,7 +421,7 @@ export const TOOLS_JA: ToolsDoc = {
             description:
                 "チャット内ウィジェット（ダッシュボードやグラフ）のUI言語を設定します。AIがあなたに返す文章の言語ではありません。",
             params: {
-                locale: "ISO 639-1コード。例：<code>de</code>、<code>uk</code>。対応言語：英語、ドイツ語、スペイン語、フランス語、オランダ語、ポーランド語、イタリア語、ウクライナ語。",
+                locale: "ISO 641-1コード。例：<code>de</code>、<code>uk</code>。対応言語：英語、ドイツ語、スペイン語、フランス語、オランダ語、ポーランド語、イタリア語、ウクライナ語。",
             },
             example: "ウィジェットをドイツ語で表示して",
         },
@@ -434,6 +449,15 @@ export const TOOLS_JA: ToolsDoc = {
                     "グラム数と併せて表示する標準ドリンクの単位：<code>us</code>（1杯14g）または<code>uk</code>（1ユニット7.9g）。デフォルトは<code>us</code>。実際に保存されるのは純アルコールのグラム数です。",
             },
             example: "飲酒の記録を英国ユニットで始めて",
+        },
+        set_tracking: {
+            description:
+                "水分（水分ライン、目標、ダッシュボードのボタン）とナトリウム（1日の上限mg、各食事の値）をオン・オフします。初期状態では両方オフです。ナトリウムをオンにすると未設定の場合は2,300 mgの上限を設定します。",
+            params: {
+                water: "水分: trueでオン、falseでオフ",
+                sodium: "ナトリウム: trueでオン、falseでオフ",
+            },
+            example: "水分の記録を始めて",
         },
         delete_account: {
             description:
