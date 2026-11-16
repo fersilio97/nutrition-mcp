@@ -138,6 +138,7 @@ import {
     LAST7_DAYS,
 } from "./dashboard-stats.js";
 import { listFoods, suggestFood } from "./simple-foods.js";
+import { loadAdvisorReport } from "./advisor-data.js";
 
 // The weight rate needs a span longer than a day or a week to mean anything,
 // so the weight tracker always looks back at least this far, whatever range
@@ -2053,6 +2054,12 @@ export function createDashboardRouter(): Hono {
             body,
         );
         return c.json(res.json, res.status);
+    });
+
+    // The Advisor tab: a rule-based review of the last 7 complete days.
+    dash.get("/api/dashboard/advisor", authenticateBearer, async (c) => {
+        const userId = c.get("userId") as string;
+        return c.json(await loadAdvisorReport(userId));
     });
 
     // The meals this user logs most, from their own history — the "Log a

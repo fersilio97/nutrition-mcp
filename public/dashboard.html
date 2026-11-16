@@ -859,7 +859,7 @@
             }
             [role="tablist"] {
                 display: grid;
-                grid-template-columns: repeat(5, 1fr);
+                grid-template-columns: repeat(6, 1fr);
             }
             [role="tab"] {
                 position: relative;
@@ -897,6 +897,14 @@
             }
             [role="tab"][aria-selected="true"] svg {
                 stroke-width: 2.1;
+            }
+            /* Six equal columns: "Weigh-ins" at 12px overflows its column
+               on a 360-390px phone, so the labels step down a size. */
+            @media (max-width: 420px) {
+                [role="tab"] {
+                    font-size: 11px;
+                    letter-spacing: -0.01em;
+                }
             }
             /* The non-colour cue: weight plus a 2px bar under the label. */
             [role="tab"]::after {
@@ -3457,6 +3465,143 @@
             }
 
             /* ================= Weigh-ins ================= */
+            /* Advisor tab: score, findings, score parts. The markers are
+               "+" and "!" so good/improve never rests on colour alone. */
+            .adv-score {
+                display: flex;
+                align-items: center;
+                gap: var(--s6);
+                padding: var(--s4) 0 var(--s5);
+                margin-bottom: var(--gap-block);
+                border-bottom: 1px solid var(--line);
+            }
+            .adv-fig {
+                display: flex;
+                align-items: baseline;
+                gap: var(--s2);
+            }
+            .adv-fig b {
+                font-family: var(--font-display);
+                font-weight: 700;
+                font-size: clamp(3.25rem, 12vw, 5rem);
+                letter-spacing: -0.04em;
+                line-height: 1;
+                font-variant-numeric: tabular-nums;
+            }
+            .adv-fig span {
+                font-family: var(--font-mono);
+                font-size: var(--fs-small);
+                color: var(--ink-2);
+            }
+            .adv-verdict {
+                flex: 1;
+                min-width: 0;
+                display: grid;
+                gap: var(--s2);
+            }
+            .adv-vtext {
+                font-family: var(--font-display);
+                font-weight: 600;
+                font-size: var(--fs-row);
+                letter-spacing: -0.02em;
+                text-wrap: balance;
+            }
+            .adv-track {
+                height: 6px;
+                background: var(--surface-2);
+                overflow: hidden;
+            }
+            .adv-track i {
+                display: block;
+                height: 100%;
+                background: var(--accent);
+            }
+            .adv-cols {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: var(--s6);
+                margin-bottom: var(--gap-block);
+            }
+            @media (min-width: 720px) {
+                .adv-cols {
+                    grid-template-columns: 1fr 1fr;
+                }
+            }
+            .adv-h {
+                padding-top: var(--s2);
+                margin-bottom: var(--s3);
+                border-top: 3px solid var(--rule);
+                font-family: var(--font-mono);
+                font-size: var(--fs-eyebrow);
+                font-weight: 500;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+            }
+            .adv-list {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+            }
+            .adv-list li {
+                position: relative;
+                display: grid;
+                gap: 2px;
+                padding: var(--s3) 0 var(--s3) 1.6rem;
+                border-top: 1px solid var(--line-2);
+            }
+            .adv-list li:first-child {
+                border-top: 0;
+            }
+            .adv-list li::before {
+                position: absolute;
+                left: 0;
+                top: var(--s3);
+                font-family: var(--font-mono);
+                font-weight: 700;
+            }
+            .adv-list.good li::before {
+                content: "+";
+                color: var(--accent-text);
+            }
+            .adv-list.improve li::before {
+                content: "!";
+                color: var(--warn);
+            }
+            .adv-list li b {
+                font-weight: 600;
+            }
+            .adv-list li span {
+                font-size: var(--fs-small);
+                line-height: 1.5;
+                color: var(--ink-2);
+                text-wrap: pretty;
+            }
+            .adv-comps {
+                list-style: none;
+                margin: 0 0 var(--gap-block);
+                padding: 0;
+            }
+            .adv-comps li {
+                padding: var(--s3) 0;
+                border-top: 1px solid var(--line-2);
+            }
+            .adv-crow {
+                display: flex;
+                justify-content: space-between;
+                gap: var(--s4);
+                font-size: var(--fs-small);
+            }
+            .adv-pct {
+                font-family: var(--font-mono);
+                font-variant-numeric: tabular-nums;
+            }
+            .adv-na {
+                color: var(--ink-2);
+            }
+            .adv-comps .adv-track {
+                height: 4px;
+                margin-top: 6px;
+            }
             .wl-table {
                 width: 100%;
                 border-collapse: collapse;
@@ -4101,6 +4246,31 @@
                             </svg>
                             <span>Weigh-ins</span>
                         </button>
+                        <button
+                            role="tab"
+                            type="button"
+                            id="tab-advisor"
+                            aria-controls="panel-advisor"
+                            aria-selected="false"
+                            tabindex="-1"
+                            data-tab="advisor"
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M9 18h6M10 21h4" />
+                                <path
+                                    d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"
+                                />
+                            </svg>
+                            <span>Advisor</span>
+                        </button>
                     </div>
                 </nav>
             </div>
@@ -4162,6 +4332,17 @@
                     <div class="banner-slot"></div>
                     <div class="panel-body" id="weighins-body"></div>
                 </section>
+                <section
+                    role="tabpanel"
+                    id="panel-advisor"
+                    aria-labelledby="tab-advisor"
+                    tabindex="0"
+                    hidden
+                >
+                    <h2 class="sr-only">Advisor</h2>
+                    <div class="banner-slot"></div>
+                    <div class="panel-body" id="advisor-body"></div>
+                </section>
             </main>
         </div>
 
@@ -4186,7 +4367,14 @@
                 // or month stays: the server already leaves today out of it.
                 const keepToday = (r) =>
                     caloriesToday === "shown" || !r.in_progress || !!r.avg;
-                const TABS = ["today", "trends", "body", "meals", "weighins"];
+                const TABS = [
+                    "today",
+                    "trends",
+                    "body",
+                    "meals",
+                    "weighins",
+                    "advisor",
+                ];
                 // 7 days → daily bars, 30 → weekly, a year → monthly (the
                 // server's groupDays). 90 was dropped (§0c).
                 const RANGES = [
@@ -4982,6 +5170,12 @@
                         '<div class="skel">' +
                         SK_SEC(120) +
                         SK_SEC(120) +
+                        "</div>",
+                    advisor:
+                        '<div class="skel">' +
+                        SK_SEC(96) +
+                        SK_SEC(200) +
+                        SK_SEC(160) +
                         "</div>",
                 };
                 // First render after data, and every tab switch, plays the
@@ -12564,6 +12758,7 @@
                     loadFrequent();
                     loadRecipes();
                     if (active === "weighins" || wl) loadWeights();
+                    if (active === "advisor" || adv) loadAdvisor();
                     markDirty();
                     renderBanners();
                     renderRangeHeads();
@@ -12580,6 +12775,8 @@
                     token = null;
                     data = null;
                     wl = null;
+                    adv = null;
+                    advError = false;
                     weEditId = null;
                     loading = false;
                     loadError = false;
@@ -12654,6 +12851,187 @@
                             err.textContent = "Could not reach the server.";
                         });
                 });
+
+                /* ---------- advisor: the weekly review ---------- */
+                // Rule-based, computed server-side over the last 7 complete
+                // days (src/advisor.ts), so the page only paints it.
+                let adv = null; // null = not loaded yet
+                let advLoading = false;
+                let advError = false;
+                function loadAdvisor() {
+                    if (advLoading || !token) return;
+                    advLoading = true;
+                    advError = false;
+                    return fetch("/api/dashboard/advisor", {
+                        headers: { Authorization: "Bearer " + token },
+                    })
+                        .then(function (r) {
+                            if (r.status === 401) {
+                                signOut();
+                                throw new Error("unauthorized");
+                            }
+                            if (!r.ok) throw new Error("http " + r.status);
+                            return r.json();
+                        })
+                        .then(function (b) {
+                            advLoading = false;
+                            adv = b;
+                            contentDirty.advisor = true;
+                            if (active === "advisor") paint();
+                        })
+                        .catch(function (e) {
+                            advLoading = false;
+                            if (e && e.message === "unauthorized") return;
+                            advError = true;
+                            contentDirty.advisor = true;
+                            if (active === "advisor") paint();
+                        });
+                }
+                function advList(kind, title, empty) {
+                    const items = adv.findings.filter(function (f) {
+                        return f.kind === kind;
+                    });
+                    return (
+                        '<div class="adv-col"><h4 class="adv-h">' +
+                        title +
+                        "</h4>" +
+                        (items.length
+                            ? '<ul class="adv-list ' +
+                              kind +
+                              '">' +
+                              items
+                                  .map(function (f) {
+                                      return (
+                                          "<li><b>" +
+                                          esc(f.title) +
+                                          "</b><span>" +
+                                          esc(f.detail) +
+                                          "</span></li>"
+                                      );
+                                  })
+                                  .join("") +
+                              "</ul>"
+                            : '<p class="empty">' + empty + "</p>") +
+                        "</div>"
+                    );
+                }
+                RENDER.advisor = function () {
+                    const host = $("advisor-body");
+                    if (adv === null && !advError) {
+                        host.innerHTML = SKELETON.advisor;
+                        loadAdvisor();
+                        return;
+                    }
+                    if (adv === null) {
+                        host.innerHTML =
+                            '<section class="rv"><p class="b-status err" role="alert">Could not load the weekly review.</p><button type="button" class="btn" id="adv-retry">Try again</button></section>';
+                        $("adv-retry").addEventListener("click", function () {
+                            advError = false;
+                            contentDirty.advisor = true;
+                            paint();
+                        });
+                        return;
+                    }
+                    const head = secHead({
+                        eyebrow: "Weekly review",
+                        id: "h-adv",
+                        title: "Advisor",
+                        note:
+                            "The last " +
+                            adv.windowDays +
+                            " complete days, " +
+                            esc(shortDay(adv.window.start)) +
+                            " to " +
+                            esc(shortDay(adv.window.end)) +
+                            ". " +
+                            adv.loggedDays +
+                            " of " +
+                            adv.windowDays +
+                            " days logged.",
+                    });
+                    if (!adv.enoughData) {
+                        host.innerHTML =
+                            '<section class="rv" aria-labelledby="h-adv">' +
+                            head +
+                            '<p class="empty">' +
+                            esc(
+                                adv.findings[0]
+                                    ? adv.findings[0].detail
+                                    : "Not enough logged days for a review yet.",
+                            ) +
+                            "</p></section>";
+                        return;
+                    }
+                    const score =
+                        adv.score == null
+                            ? '<p class="empty">No score yet: there is no goal or data to judge against.</p>'
+                            : '<div class="adv-score"><div class="adv-fig"><b>' +
+                              adv.score +
+                              "</b><span>/ 100</span></div>" +
+                              '<div class="adv-verdict"><p class="adv-vtext">' +
+                              esc(adv.verdict) +
+                              '</p><div class="adv-track" role="img" aria-label="Score ' +
+                              adv.score +
+                              ' out of 100"><i style="width:' +
+                              adv.score +
+                              '%"></i></div></div></div>';
+                    const comps = adv.components
+                        .map(function (c) {
+                            const has = c.score != null;
+                            return (
+                                '<li><div class="adv-crow"><span>' +
+                                esc(c.label) +
+                                '</span><span class="' +
+                                (has ? "adv-pct" : "adv-na") +
+                                '">' +
+                                (has
+                                    ? Math.round(c.score * 100) + "%"
+                                    : "no data") +
+                                '</span></div><div class="adv-track"><i style="width:' +
+                                (has ? Math.round(c.score * 100) : 0) +
+                                '%"></i></div></li>'
+                            );
+                        })
+                        .join("");
+                    const advice = adv.advice
+                        ? '<section class="rv" aria-labelledby="h-adv-advice">' +
+                          secHead({
+                              eyebrow: "Nutritionist",
+                              id: "h-adv-advice",
+                              title: "In plain words",
+                          }) +
+                          '<p class="note">' +
+                          esc(adv.advice) +
+                          "</p></section>"
+                        : "";
+                    host.innerHTML =
+                        '<section class="rv" aria-labelledby="h-adv">' +
+                        head +
+                        score +
+                        '<div class="adv-cols">' +
+                        advList(
+                            "good",
+                            "Went well",
+                            "Nothing stood out this week.",
+                        ) +
+                        advList(
+                            "improve",
+                            "To improve",
+                            "Nothing to flag this week.",
+                        ) +
+                        "</div></section>" +
+                        advice +
+                        '<section class="rv" aria-labelledby="h-adv-parts">' +
+                        secHead({
+                            eyebrow: "Score",
+                            id: "h-adv-parts",
+                            title: "What makes up the score",
+                            note: "Each part is scored on its own. Parts with no data, such as no goal set, are left out and the rest are rescaled.",
+                        }) +
+                        '<ul class="adv-comps">' +
+                        comps +
+                        '</ul><p class="note">Estimates from your logged data, not medical or dietary advice.</p></section>';
+                };
 
                 /* ---------- weigh-ins: list, edit, delete ---------- */
                 // The list comes from its own endpoint (every entry, with

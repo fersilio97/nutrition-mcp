@@ -1,4 +1,4 @@
-// Typed content for /tools (the "all 41 tools" reference page), rendered
+// Typed content for /tools (the "all 42 tools" reference page), rendered
 // by scripts/gen-tools.ts. Extracted verbatim from the previously
 // hand-authored public/tools.html — see CLAUDE.md's "Public site" section
 // for the generator family this belongs to, and gen-tools.ts's own header
@@ -128,11 +128,11 @@ export interface ToolIdentity {
 }
 
 /**
- * All 41 tools, in the exact document order of public/tools.html (grouped
+ * All 42 tools, in the exact document order of public/tools.html (grouped
  * by category — see CategoryId — for the reader). Cross-checked against
- * the 41 `server.registerTool()` calls in src/mcp.ts: the two orders
+ * the 42 `server.registerTool()` calls in src/mcp.ts: the two orders
  * differ (mcp.ts registers in its own order, unrelated to this page's
- * reader-facing grouping) but the *set* of 41 tool names is identical —
+ * reader-facing grouping) but the *set* of 42 tool names is identical —
  * nothing here was dropped or invented.
  */
 export const TOOLS: ToolIdentity[] = [
@@ -447,6 +447,13 @@ export const TOOLS: ToolIdentity[] = [
         hasPhotoHint: false,
     },
     {
+        name: "get_eating_review",
+        category: "insights-trends",
+        badges: ["view"],
+        params: [{ name: "end_date", required: false }],
+        hasPhotoHint: false,
+    },
+    {
         name: "get_profile",
         category: "settings-account",
         badges: ["view"],
@@ -591,17 +598,17 @@ export interface ToolsDoc {
 
 const TOOLS_EN: ToolsDoc = {
     meta: {
-        title: "Tools Reference: All 41 Tools",
+        title: "Tools Reference: All 42 Tools",
         description:
-            "All 41 tools the Nutrition MCP server gives your AI — log meals, scan barcodes, import your history from another app, track water and weight, set goals, and review trends. Full reference with descriptions and example prompts.",
+            "All 42 tools the Nutrition MCP server gives your AI — log meals, scan barcodes, import your history from another app, track water and weight, set goals, and review trends. Full reference with descriptions and example prompts.",
         ogDescription:
-            "All 41 tools the Nutrition MCP server gives your AI, including a CSV importer for your history from another app — with descriptions and example prompts.",
+            "All 42 tools the Nutrition MCP server gives your AI, including a CSV importer for your history from another app — with descriptions and example prompts.",
     },
     hero: {
         eyebrow: "Reference",
         title: "Everything your AI can do",
         lead: "You never call these directly — you just talk, and the assistant picks the right tool. Here's the full set the Nutrition MCP server exposes, with what each one does and a phrase that triggers it.",
-        countBold: "41 tools",
+        countBold: "42 tools",
         countTail: "across 7 areas",
     },
     categories: {
@@ -976,6 +983,15 @@ const TOOLS_EN: ToolsDoc = {
             },
             example:
                 "Any patterns in how I eat — like late dinners or skipping breakfast?",
+        },
+        get_eating_review: {
+            description:
+                "Review how you ate over the past week: a 0–100 score, what went well and what to improve — late-heavy eating, spike days (including weekend overeating), protein, fiber, sugar, alcohol, breakfast, water and how complete your logging is.",
+            params: {
+                end_date:
+                    "Last day of the 7-day window (YYYY-MM-DD). Default: yesterday.",
+            },
+            example: "How did I eat this past week — what should I improve?",
         },
         get_profile: {
             description:

@@ -8,17 +8,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_NL: ToolsDoc = {
     meta: {
-        title: "Toolreferentie: alle 41 tools",
+        title: "Toolreferentie: alle 42 tools",
         description:
-            "Alle 41 tools die de Nutrition MCP-server aan je AI geeft — maaltijden loggen, barcodes scannen, je geschiedenis uit een andere app importeren, water en gewicht bijhouden, doelen instellen en trends bekijken. Volledige referentie met beschrijvingen en voorbeeldzinnen.",
+            "Alle 42 tools die de Nutrition MCP-server aan je AI geeft — maaltijden loggen, barcodes scannen, je geschiedenis uit een andere app importeren, water en gewicht bijhouden, doelen instellen en trends bekijken. Volledige referentie met beschrijvingen en voorbeeldzinnen.",
         ogDescription:
-            "Alle 41 tools die de Nutrition MCP-server aan je AI geeft, inclusief een CSV-importer voor je geschiedenis uit een andere app — met beschrijvingen en voorbeeldzinnen.",
+            "Alle 42 tools die de Nutrition MCP-server aan je AI geeft, inclusief een CSV-importer voor je geschiedenis uit een andere app — met beschrijvingen en voorbeeldzinnen.",
     },
     hero: {
         eyebrow: "Referentie",
         title: "Alles wat je AI kan doen",
         lead: "Je roept deze tools nooit rechtstreeks aan — je praat gewoon, en de assistent kiest de juiste tool. Hier is de volledige set die de Nutrition MCP-server aanbiedt, met wat elke tool doet en een zin die hem activeert.",
-        countBold: "41 tools",
+        countBold: "42 tools",
         countTail: "verdeeld over 7 categorieën",
     },
     categories: {
@@ -408,6 +408,15 @@ export const TOOLS_NL: ToolsDoc = {
             },
             example:
                 "Zitten er patronen in hoe ik eet — zoals late diners of het overslaan van het ontbijt?",
+        },
+        get_eating_review: {
+            description:
+                "Bekijk hoe je de afgelopen week gegeten hebt: een score van 0–100, wat goed ging en wat beter kan — veel eten laat op de dag, uitschieters (ook overeten in het weekend), eiwit, vezels, suiker, alcohol, ontbijt, water en hoe volledig je logt.",
+            params: {
+                end_date:
+                    "Laatste dag van het 7-dagenvenster (JJJJ-MM-DD). Standaard: gisteren.",
+            },
+            example: "Hoe heb ik de afgelopen week gegeten? Wat kan beter?",
         },
         get_profile: {
             description:
