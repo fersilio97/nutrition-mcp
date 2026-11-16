@@ -3905,6 +3905,11 @@
                 let macroTotals = pref("macro-totals", "on") === "on";
                 let caloriesAxis = pref("calories-axis", "full");
                 let caloriesToday = pref("calories-today", "hidden");
+                // Today's own column on every per-day Trends chart follows
+                // the one "Today" switch in the Trends head. A partial week
+                // or month stays: the server already leaves today out of it.
+                const keepToday = (r) =>
+                    caloriesToday === "shown" || !r.in_progress || !!r.avg;
                 const TABS = ["today", "trends", "body", "meals", "weighins"];
                 // 7 days → daily bars, 30 → weekly, a year → monthly (the
                 // server's groupDays). 90 was dropped (§0c).
@@ -4586,7 +4591,21 @@
                                         "</button>"
                                     );
                                 }).join("") +
-                                "</div>";
+                                "</div>" +
+                                // One Today switch for every per-day chart
+                                // on Trends; Meals shares this head but has
+                                // no running-day column to hide.
+                                (h.closest("#panel-trends")
+                                    ? chartPref(
+                                          "calories-today",
+                                          "Today",
+                                          caloriesToday,
+                                          [
+                                              ["hidden", "Today: Hidden"],
+                                              ["shown", "Shown"],
+                                          ],
+                                      )
+                                    : "");
                         });
                     if (focusDays != null) {
                         const b = document.querySelector(
@@ -4625,7 +4644,8 @@
                                 );
                             });
                         store("nutrition-dash-" + key, value);
-                        if (key.startsWith("macro-")) macroChart();
+                        if (key === "calories-today") CHARTS.trends();
+                        else if (key.startsWith("macro-")) macroChart();
                         else if (!barsView) calories2Chart();
                         else caloriesChart();
                         return;
@@ -6944,18 +6964,6 @@
                         eyebrow: "Energy",
                         id: "h-cal2",
                         title: 'Eaten vs burned <span class="est">(estimate)</span>',
-                        aside:
-                            '<div class="chart-prefs">' +
-                            chartPref(
-                                "calories-today",
-                                "Today",
-                                caloriesToday,
-                                [
-                                    ["hidden", "Today: Hidden"],
-                                    ["shown", "Shown"],
-                                ],
-                            ) +
-                            "</div>",
                         note:
                             "What you ate each day against what you burned, split into baseline, digestion and workout (watch active kcal). Pink shows days you ate over your burn" +
                             (hasDailyGoal()
@@ -8050,7 +8058,7 @@
                               " is dimmed and counts today once it ends.";
                     const balNote = !hasBurn()
                         ? ""
-                        : "Eaten − estimated burn, in kcal and in grams (÷ 6 kcal per gram of weight change). An estimate for spotting the trend — daily scale weight swings far more with water and salt. Today is left out until it ends." +
+                        : "Eaten − estimated burn, in kcal and in grams (÷ 6 kcal per gram of weight change). An estimate for spotting the trend — daily scale weight swings far more with water and salt. Today, when shown, is faded and left out of the net until it ends." +
                           (g === "day"
                               ? ""
                               : " Each bar is the " +
@@ -8124,15 +8132,6 @@
                                     [
                                         ["full", "Y axis: Full"],
                                         ["collapsed", "Collapsed"],
-                                    ],
-                                ) +
-                                chartPref(
-                                    "calories-today",
-                                    "Today bar",
-                                    caloriesToday,
-                                    [
-                                        ["hidden", "Today: Hidden"],
-                                        ["shown", "Shown"],
                                     ],
                                 ) +
                                 "</div>",
@@ -8796,9 +8795,7 @@
                 function caloriesChart() {
                     const host = $("cal-plot");
                     if (!host || !host.clientWidth) return;
-                    const rows = chartRows().filter(
-                        (r) => caloriesToday !== "hidden" || !r.in_progress,
-                    );
+                    const rows = chartRows().filter(keepToday);
                     const note = $("cal-axis-note");
                     const s = trendsStats(data.daily);
                     const c = chartSvg(
@@ -9026,9 +9023,17 @@
                 function balanceChart() {
                     const host = $("bal-plot");
                     if (!host || !host.clientWidth) return;
-                    const rows = chartRows();
-                    const plotted = (r) => r.band_g != null;
-                    const known = rows.filter(plotted);
+                    const rows = chartRows().filter(keepToday);
+                    // Today (when shown) draws its running balance, faded
+                    // like the Today tab's week chart, but never counts in
+                    // the net: eaten so far against a whole day's burn.
+                    const running = (r) =>
+                        r.in_progress && !r.avg && r.balance_g != null;
+                    const gOf = (r) => (running(r) ? r.balance_g : r.band_g);
+                    const kOf = (r) =>
+                        running(r) ? r.balance_kcal : r.band_kcal;
+                    const plotted = (r) => gOf(r) != null;
+                    const known = rows.filter((r) => r.band_g != null);
                     const netG = known.reduce((a, r) => a + r.band_g, 0);
                     const netK = known.reduce(
                         (a, r) => a + (r.band_kcal || 0),
@@ -9053,7 +9058,7 @@
                     const zeroY = (top + bottom) / 2;
                     const peak = Math.max.apply(
                         null,
-                        known.map((r) => Math.abs(r.band_g)),
+                        rows.filter(plotted).map((r) => Math.abs(gOf(r))),
                     );
                     // Direct labels (grams over kcal) only where a column is
                     // ≥ 64px wide; they need headroom past the bar end.
@@ -9092,7 +9097,7 @@
                     const lay = bandLayout(rows.length, plotW);
                     rows.forEach(function (r, i) {
                         if (!plotted(r)) return;
-                        const v = r.band_g;
+                        const v = gOf(r);
                         const x = L + lay.bw * i + (lay.bw - lay.barW) / 2;
                         const y = v >= 0 ? yAt(v) : zeroY;
                         const h = Math.max(1, Math.abs(yAt(v) - zeroY));
@@ -9118,7 +9123,7 @@
                                 svg,
                                 cx,
                                 gy + 14,
-                                fmtSigned(r.band_kcal || 0) + " kcal",
+                                fmtSigned(kOf(r) || 0) + " kcal",
                                 "lbl sub",
                             );
                         }
@@ -9157,6 +9162,21 @@
                                             : [],
                                     ),
                                 );
+                            else if (running(r))
+                                t = tipContent(r.title, [
+                                    [
+                                        r.balance_g >= 0 ? "s-gain" : "s-loss",
+                                        "Est. change so far",
+                                        fmtSigned(r.balance_g) + " g",
+                                        1,
+                                    ],
+                                    [
+                                        null,
+                                        "Eaten so far − full-day burn",
+                                        fmtSigned(r.balance_kcal) + " kcal",
+                                    ],
+                                    [null, "In progress", "not counted yet"],
+                                ]);
                             else if (!r.avg)
                                 t = tipContent(r.title, [
                                     [
@@ -9220,7 +9240,7 @@
                 function macroChart() {
                     const host = $("macro-plot");
                     if (!host || !host.clientWidth) return;
-                    const rows = chartRows();
+                    const rows = chartRows().filter(keepToday);
                     const logged = data.daily.filter((r) => r.mealCount > 0);
                     const avg = (k) =>
                         logged.length
