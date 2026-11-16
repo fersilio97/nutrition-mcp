@@ -5681,10 +5681,13 @@
                             t.window_days +
                             "-day trend (" +
                             plural(t.weighin_days, "weigh-in day") +
+                            (t.clamped
+                                ? "; kept within your last week of weigh-ins, since an outlier was tilting the line"
+                                : "") +
                             ")"
                         );
                     if (t.source === "recent_mean")
-                        return "average of the last 7 days of weigh-ins (not enough for a trend yet)";
+                        return "average of the last 7 days of weigh-ins (a trend line needs 2 weeks of them)";
                     return "your latest weigh-in (not enough weigh-ins to smooth)";
                 }
                 function planFlagsHtml(p) {
