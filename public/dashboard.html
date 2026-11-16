@@ -1186,6 +1186,93 @@
                 color: var(--ink);
                 font-weight: 600;
             }
+            /* Calibration gates as a checklist (calibrationNeedHtml). */
+            .req-count {
+                margin-left: var(--s2);
+                padding: 0.1em 0.55em;
+                border-radius: 999px;
+                background: var(--accent-soft, var(--line));
+                color: var(--ink);
+                font-family: var(--font-mono);
+                font-size: 0.7rem;
+                white-space: nowrap;
+            }
+            .req-list {
+                list-style: none;
+                margin: var(--s3) 0 var(--s2);
+                padding: 0;
+                display: grid;
+                gap: var(--s3);
+            }
+            .req {
+                display: grid;
+                grid-template-columns: 1.375rem minmax(0, 1fr);
+                gap: var(--s3);
+                align-items: start;
+            }
+            .req-ico {
+                width: 1.375rem;
+                height: 1.375rem;
+                border-radius: 50%;
+                border: 2px solid var(--ink-2);
+                display: grid;
+                place-items: center;
+                font-size: 0.75rem;
+                font-weight: 800;
+                line-height: 1;
+            }
+            .req.met .req-ico {
+                border-color: var(--accent);
+                background: var(--accent);
+                color: var(--bg);
+            }
+            .req-head {
+                margin: 0;
+                display: flex;
+                justify-content: space-between;
+                align-items: baseline;
+                gap: var(--s3);
+                font-weight: 600;
+                color: var(--ink);
+            }
+            .req.met .req-head {
+                font-weight: 400;
+                color: var(--ink-2);
+            }
+            .req-label small {
+                display: block;
+                font-weight: 400;
+                font-size: 0.8rem;
+                color: var(--ink-2);
+            }
+            .req-fig {
+                flex: none;
+                font-variant-numeric: tabular-nums;
+                font-size: var(--fs-small);
+            }
+            .req-bar {
+                display: block;
+                height: 4px;
+                margin-top: var(--s2);
+                border-radius: 2px;
+                background: var(--line);
+                overflow: hidden;
+            }
+            .req-bar i {
+                display: block;
+                height: 100%;
+                border-radius: inherit;
+                background: var(--ink-2);
+            }
+            .req.met .req-bar i {
+                background: var(--accent);
+            }
+            .req-hint {
+                margin: var(--s2) 0 0;
+                font-size: 0.8rem;
+                line-height: 1.45;
+                color: var(--ink-2);
+            }
             .goal-hint:empty {
                 display: none;
             }
@@ -5775,8 +5862,8 @@
                     if (!c || c.status === "ok") return "";
                     const w = c.window || {};
                     const rows = [];
-                    const add = (label, have, want, hint) =>
-                        rows.push({ label, have, want, hint });
+                    const add = (label, have, want, hint, sub) =>
+                        rows.push({ label, have, want, hint, sub });
                     if (c.status === "missing_bmr") {
                         rows.push({
                             label: "Height, birth date and sex in Body details",
@@ -5792,21 +5879,21 @@
                                   shortDay(w.last_date)
                                 : "";
                         add(
-                            "Time between your first and last weigh-in" +
-                                (range ? " (" + range + ")" : ""),
+                            "Days between your first and last weigh-in",
                             span,
                             21,
-                            "Counted in days. The span ends at your latest weigh-in, not today.",
+                            "The span ends at your latest weigh-in, not today.",
+                            range,
                         );
                         const wantSpan = Math.max(span, 21);
                         add(
-                            "Days with a full food log" +
-                                (range ? ", " + range : ""),
+                            "Days with a full food log",
                             c.counted_days || 0,
                             Math.ceil(wantSpan * 0.7),
                             "Out of the " +
                                 wantSpan +
                                 " days in that period, 70% need a full log. A day is full with 2+ meals and at least half your typical day’s calories. Marking a day on or off in the Meals tab changes this count straight away; a day with no meals can’t count.",
+                            range,
                         );
                         if (c.status === "too_noisy")
                             rows.push({
@@ -5817,37 +5904,73 @@
                                 text: "too scattered",
                             });
                     }
+                    // A checklist, not a table: each gate gets a tick or an
+                    // open ring, a bar towards its target, and its count, so
+                    // "what is left" reads at a glance. Rows with no count
+                    // (missing details, scattered weigh-ins) get no bar.
+                    let metCount = 0;
                     const items = rows
                         .map((r) => {
-                            const met = r.want != null && r.have >= r.want;
-                            const text =
-                                r.text ||
-                                (met
-                                    ? "✓ " + r.have + " of " + r.want
-                                    : r.have +
-                                      " of " +
-                                      r.want +
-                                      " needed · " +
-                                      (r.want - r.have) +
-                                      " to go");
+                            const counted = r.want != null;
+                            const met = counted && r.have >= r.want;
+                            if (met) metCount++;
+                            const fig = r.text
+                                ? r.text
+                                : met
+                                  ? r.have + " · needs " + r.want
+                                  : r.have +
+                                    " of " +
+                                    r.want +
+                                    " · " +
+                                    (r.want - r.have) +
+                                    " to go";
+                            const pct = counted
+                                ? Math.max(
+                                      0,
+                                      Math.min(
+                                          100,
+                                          Math.round((r.have / r.want) * 100),
+                                      ),
+                                  )
+                                : 0;
                             return (
-                                '<li class="' +
-                                (met ? "" : "bind") +
-                                '"><span>' +
+                                '<li class="req' +
+                                (met ? " met" : "") +
+                                '"><span class="req-ico" aria-hidden="true">' +
+                                (met ? "✓" : "") +
+                                '</span><div class="req-body"><p class="req-head"><span class="req-label">' +
                                 esc(r.label) +
-                                (r.hint && !met
-                                    ? "<br><small>" + esc(r.hint) + "</small>"
+                                '<span class="sr-only">' +
+                                (met ? " (met)" : " (not met yet)") +
+                                "</span>" +
+                                (r.sub
+                                    ? "<small>" + esc(r.sub) + "</small>"
                                     : "") +
-                                "</span><span>" +
-                                esc(text) +
-                                "</span></li>"
+                                '</span><span class="req-fig">' +
+                                esc(fig) +
+                                "</span></p>" +
+                                (counted
+                                    ? '<span class="req-bar" aria-hidden="true"><i style="width:' +
+                                      pct +
+                                      '%"></i></span>'
+                                    : "") +
+                                (r.hint && !met
+                                    ? '<p class="req-hint">' +
+                                      esc(r.hint) +
+                                      "</p>"
+                                    : "") +
+                                "</div></li>"
                             );
                         })
                         .join("");
                     return (
-                        '<details class="limit-how"><summary>Why it is using your BMR for now</summary><div><p class="note">There is not enough data yet for “Calibrated from my data”, so both choices give the same number. Calibration switches on when all of these are met:</p><ul class="limit-list">' +
+                        '<details class="limit-how"><summary>Why it is using your BMR for now <span class="req-count">' +
+                        metCount +
+                        " of " +
+                        rows.length +
+                        ' met</span></summary><div><p class="note">There is not enough data yet for “Calibrated from my data”, so both choices give the same number. Calibration switches on when all of these are met:</p><ol class="req-list">' +
                         items +
-                        "</ul></div></details>"
+                        "</ol></div></details>"
                     );
                 }
                 // The working behind today's derived goal, so the number
