@@ -2945,10 +2945,14 @@
             @media (min-width: 1024px) {
                 .body-grid {
                     grid-template-columns: 5fr 7fr;
+                    /* Only the weight panel sits beside the chart. The three
+                       boxes below take the full row, so an open box uses the
+                       width instead of being pinned to the 5fr column under a
+                       tall chart, and splits it with .box-cols instead. */
                     grid-template-areas:
                         "panel chart"
-                        "goal chart"
-                        "details chart"
+                        "goal goal"
+                        "details details"
                         "lab lab";
                     column-gap: clamp(2rem, 4vw, 3.5rem);
                     align-items: start;
@@ -2968,6 +2972,45 @@
                 .body-grid > .lab-sec {
                     grid-area: lab;
                 }
+                /* Inside a full-width box: what you set on the left, what it
+                   works out to on the right. The DOM order is the phone's
+                   reading order, so below 1024px nothing moves. */
+                .box-cols {
+                    display: grid;
+                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                    column-gap: clamp(2rem, 4vw, 3.5rem);
+                    align-items: start;
+                }
+                .box-cols > .plan-readout {
+                    margin-top: 0;
+                    padding-top: 0;
+                    border-top: 0;
+                }
+                /* The lab's table needs the full width, so its three
+                   controls sit side by side above it instead. */
+                .lab-controls {
+                    grid-template-columns: repeat(3, minmax(0, 1fr));
+                    column-gap: clamp(1.5rem, 3vw, 2.5rem);
+                }
+                .lab-controls .lab-row {
+                    grid-template-columns: 1fr;
+                    gap: var(--s2);
+                }
+                .lab-controls .lab-reset {
+                    grid-column: 1 / -1;
+                    justify-self: start;
+                }
+                details.body-box > .note {
+                    max-width: 70ch;
+                }
+            }
+            .box-sub {
+                margin: 0 0 var(--s2);
+                font-family: var(--font-mono);
+                font-size: 0.7rem;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--ink-2);
             }
             .w-now .fig-hero b {
                 font-weight: 800;
@@ -6232,6 +6275,7 @@
                         '<section class="goal-sec rv"><details class="body-box" id="goal-box"' +
                         (goalOpen ? " open" : "") +
                         "><summary>Calorie goal</summary>" +
+                        '<div class="box-cols"><div class="box-main">' +
                         '<div class="seg goal-seg" role="group" aria-label="Calorie goal type" id="g-mode">' +
                         goalSegHtml(v.mode) +
                         '</div><p class="note" id="g-note">' +
@@ -6248,9 +6292,9 @@
                         goalStatus.cls +
                         '" id="g-status" role="status">' +
                         esc(goalStatus.text) +
-                        "</span></div></form>" +
+                        "</span></div></form></div>" +
                         goalReadoutHtml() +
-                        "</details></section>"
+                        "</div></details></section>"
                     );
                 }
                 function setGoalStatus(text, cls) {
@@ -9702,10 +9746,10 @@
                             ? "your baseline burn calibrated from your weight trend"
                             : "your resting burn from Mifflin-St Jeor") +
                         ", plus your watch’s active calories).</p>" +
-                        '<form id="body-form" class="body-form" novalidate><div class="form-grid">' +
+                        '<form id="body-form" class="body-form" novalidate><div class="box-cols"><div class="box-main"><p class="box-sub">You</p><div class="form-grid">' +
                         '<div class="field"><label for="b-height">Height</label><span class="pair"><input class="input" id="b-height" type="number" inputmode="decimal" step="0.1" min="20" max="272" /><select class="input" id="b-unit" aria-label="Height unit"><option value="cm">cm</option><option value="in">in</option></select></span></div>' +
                         '<label class="field" for="b-birth">Birth date<input class="input" id="b-birth" type="date" /></label>' +
-                        '<label class="field wide" for="b-sex">Sex<select class="input" id="b-sex"><option value="">—</option><option value="male">Male</option><option value="female">Female</option></select></label></div>' +
+                        '<label class="field wide" for="b-sex">Sex<select class="input" id="b-sex"><option value="">—</option><option value="male">Male</option><option value="female">Female</option></select></label></div></div><div class="box-aside"><p class="box-sub">Burn model</p>' +
                         '<label class="field wide" for="b-resting">Baseline burn<select class="input" id="b-resting"><option value="formula">Formula (BMR)</option><option value="calibrated">Calibrated from my data</option></select></label>' +
                         '<div class="form-grid"><label class="field" for="b-k">Energy per gram of weight change (kcal/g)<input class="input" id="b-k" type="number" inputmode="decimal" step="0.1" min="3" max="9" placeholder="' +
                         data.modelSettings.default_kcal_per_gram +
@@ -9753,6 +9797,7 @@
                                   ) +
                                   ") if you choose calibrated burn.</p>"
                                 : "") +
+                        "</div></div>" +
                         '<div class="form-foot"><button type="submit" class="btn primary" id="b-save">Save</button><span class="b-status ' +
                         bodyStatus.cls +
                         '" id="b-status" role="status">' +
