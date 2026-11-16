@@ -5816,6 +5816,9 @@
                             " kcal</b><br>" +
                             goalSubText(t, p.goal_kcal) +
                             "</p>" +
+                            (p.mode === "date" && p.reached
+                                ? '<p class="note">Target reached or date passed: your goal is break-even.</p>'
+                                : planWorkingHtml(p)) +
                             (p.resting_basis !== "calibrated" &&
                             calibrationNeedHtml()
                                 ? calibrationNeedHtml()
@@ -5835,20 +5838,66 @@
                             " · " +
                             trendSourceText(p.trend) +
                             ".</p>";
-                    if (p.mode === "date")
-                        h +=
-                            '<p class="note">' +
-                            (p.reached
-                                ? "Target reached or date passed: your goal is break-even."
-                                : "Needs " +
-                                  sgn(round2(toUnit(p.rate_g_per_day * 7, u))) +
-                                  " " +
-                                  u +
-                                  "/week · " +
-                                  plural(p.days_left, "day") +
-                                  " left.") +
-                            "</p>";
                     return h + planFlagsHtml(p) + "</div>";
+                }
+                // How the "for your plan" figure is reached: the weight change
+                // per day (from the trend and the date, or the chosen rate)
+                // times the energy in a gram of it. Body tab only.
+                function planWorkingHtml(p) {
+                    const delta = Math.round(
+                        p.rate_g_per_day * p.kcal_per_gram,
+                    );
+                    if (!delta) return "";
+                    const u = data.weightUnit;
+                    const g = Math.abs(p.rate_g_per_day);
+                    const perDay =
+                        (Math.round(g * 10) / 10).toLocaleString("en-US") +
+                        " g/day";
+                    const verb = delta < 0 ? "lose" : "gain";
+                    let how;
+                    if (
+                        p.mode === "date" &&
+                        p.trend &&
+                        p.target_weight_g != null &&
+                        p.days_left
+                    )
+                        how =
+                            wfmt(
+                                Math.abs(p.target_weight_g - p.trend.weight_g),
+                                u,
+                            ) +
+                            " " +
+                            u +
+                            " to " +
+                            verb +
+                            " (trend " +
+                            wfmt(p.trend.weight_g, u) +
+                            " → " +
+                            wfmt(p.target_weight_g, u) +
+                            " " +
+                            u +
+                            ") ÷ " +
+                            plural(p.days_left, "day") +
+                            " left = " +
+                            perDay;
+                    else
+                        how =
+                            round2(toUnit(g * 7, u)) +
+                            " " +
+                            u +
+                            "/week to " +
+                            verb +
+                            " ÷ 7 = " +
+                            perDay;
+                    return (
+                        '<p class="note">' +
+                        fmt(Math.abs(delta)) +
+                        " for your plan = " +
+                        how +
+                        " × " +
+                        p.kcal_per_gram +
+                        " kcal per gram of weight change.</p>"
+                    );
                 }
                 function addDayIso(iso, n) {
                     const d = parseDay(iso);
