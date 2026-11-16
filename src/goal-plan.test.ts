@@ -9,7 +9,6 @@ import { buildScenario, previewInputs } from "./dashboard-fixture.js";
 import type { NutritionGoals } from "./supabase.js";
 import type { EnergyDay } from "./calibration.js";
 import {
-    ACTIVE_CREDIT,
     MIN_ACTIVE_DAYS,
     activeAverage,
     goalActiveKcal,
@@ -951,13 +950,11 @@ describe("goal active kcal: the usual from the morning, rising with the watch", 
         expect(goalActiveKcal(250, null)).toBe(250);
     });
 
-    test("a below-average day never lowers it", () => {
-        expect(goalActiveKcal(250, 104)).toBe(250);
+    test("once the day has active, a below-average day lowers it", () => {
+        expect(goalActiveKcal(250, 104)).toBe(104);
     });
 
-    test("a ride above the average raises it by ACTIVE_CREDIT of the excess", () => {
-        expect(goalActiveKcal(250, 1050)).toBe(
-            Math.round(250 + ACTIVE_CREDIT * 800),
-        );
+    test("a ride above the average raises it by all of the ride", () => {
+        expect(goalActiveKcal(250, 1050)).toBe(1050);
     });
 });

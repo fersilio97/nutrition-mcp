@@ -4677,7 +4677,7 @@ describe("activity-adjusted goals", () => {
         });
     });
 
-    test("with a trusted average, a fixed goal starts from the usual active, not today's", async () => {
+    test("with a trusted average, a fixed goal stands on the usual active until today's arrives", async () => {
         db.goals = baseGoals();
         // Ten complete, synced days before today at 500 active kcal each.
         for (let k = 1; k <= 10; k++) {
@@ -4696,12 +4696,18 @@ describe("activity-adjusted goals", () => {
                 );
         }
         await withTools(null, async (call) => {
+            // Nothing synced today yet: the goal stands on the usual 500.
+            const before = await call("get_goal_progress", {});
+            const sc = before.structuredContent as {
+                goals: { calories: number };
+            };
+            expect(sc.goals.calories).toBe(2300);
             const logged = await call("log_active_calories", {
                 active_kcal: 300,
             });
             expect(logged.isError).toBeFalsy();
-            // 300 today is below the usual 500: the goal holds at the usual.
-            expect(textOf(logged)).toContain("2,300 kcal (1,800 + 500 active)");
+            // Once today has a figure it is used, even below the usual.
+            expect(textOf(logged)).toContain("2,100 kcal (1,800 + 300 active)");
         });
     });
 

@@ -5198,16 +5198,15 @@
                 // What the Goal row says under its figure, per Calorie goal
                 // mode, with every part as a number so the line adds up to
                 // the goal on screen. Active is the goal active (goal-plan.ts
-                // goalActiveKcal): the lookback average from the morning, or
-                // today's figure once the watch passes it. Digestion is the
+                // goalActiveKcal): the lookback average until today has an
+                // active figure, then that figure. Digestion is the
                 // remainder — it is taken on the goal intake itself, which is
                 // what the ÷ (1 − share) gross-up means — so rounding can
                 // never break the sum.
                 function goalActivePart(p) {
                     const a = p.goal_active_kcal || 0;
-                    const avg = p.active_avg_kcal;
                     const label =
-                        avg == null || a > avg
+                        p.goal_active_source !== "average"
                             ? "active today"
                             : "active (" + p.window_days + "-day avg)";
                     return { kcal: a, text: fmt(a) + " " + label };
