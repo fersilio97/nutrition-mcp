@@ -39,6 +39,7 @@ import {
 } from "@modelcontextprotocol/client";
 import { Hono } from "hono";
 import { createActivitySyncRouter } from "./activity-sync.js";
+import { shiftLocalDate } from "./tz.js";
 import { todayInTz } from "./tz.js";
 import {
     createDashboardRouter,
@@ -4673,6 +4674,34 @@ describe("activity-adjusted goals", () => {
             await call("log_active_calories", { active_kcal: 200 });
             await call("log_active_calories", { active_kcal: 350 });
             expect(db.activity.get(today())).toBe(350);
+        });
+    });
+
+    test("with a trusted average, a fixed goal starts from the usual active, not today's", async () => {
+        db.goals = baseGoals();
+        // Ten complete, synced days before today at 500 active kcal each.
+        for (let k = 1; k <= 10; k++) {
+            const d = shiftLocalDate(today(), -k);
+            db.activity.set(d, 500);
+            for (const [h, id] of [
+                [8, "b"],
+                [19, "d"],
+            ] as const)
+                db.meals.push(
+                    meal({
+                        id: `avg-${k}-${id}`,
+                        logged_at: `${d}T${String(h).padStart(2, "0")}:00:00.000Z`,
+                        calories: 1100,
+                    }),
+                );
+        }
+        await withTools(null, async (call) => {
+            const logged = await call("log_active_calories", {
+                active_kcal: 300,
+            });
+            expect(logged.isError).toBeFalsy();
+            // 300 today is below the usual 500: the goal holds at the usual.
+            expect(textOf(logged)).toContain("2,300 kcal (1,800 + 500 active)");
         });
     });
 

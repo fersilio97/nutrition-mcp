@@ -537,6 +537,12 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
             min_window_days: MIN_WINDOW_DAYS,
             max_window_days: MAX_WINDOW_DAYS,
         },
+        // Display preferences kept on the profile, so they follow the user
+        // across devices. weekChartMode: what the Last 7 days red measures.
+        prefs: {
+            weekChartMode:
+                profile?.week_chart_mode === "goal" ? "goal" : "surplus",
+        },
         // Per-day rows carry that day's EFFECTIVE goal (baseline + active
         // kcal) next to its totals; `goals` above stays the baseline.
         // Built field by field (dashboard-stats.ts), so the bucket's
@@ -1652,6 +1658,22 @@ export function createDashboardRouter(): Hono {
             return c.json({ ok: true });
         },
     );
+
+    // Display preferences: { weekChartMode: "surplus" | "goal" }.
+    dash.post("/api/dashboard/prefs", authenticateBearer, async (c) => {
+        const body = await readObject(c);
+        const mode = body?.weekChartMode;
+        if (mode !== "surplus" && mode !== "goal")
+            return c.json({ error: "invalid_request" }, 400);
+        try {
+            await upsertProfile(c.get("userId") as string, {
+                week_chart_mode: mode,
+            });
+        } catch {
+            return c.json({ error: "unavailable" }, 503);
+        }
+        return c.json({ ok: true, weekChartMode: mode });
+    });
 
     // Set (or reset to the estimated burn) the daily calorie goal.
     dash.post("/api/dashboard/goal", authenticateBearer, async (c) => {

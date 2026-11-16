@@ -24,6 +24,7 @@ import {
     type BodyDetails,
     type WeighIn,
 } from "./body.js";
+import { adjustGoalsForActivity } from "./activity.js";
 import type { Calibration, EnergyDay, ModelParams } from "./calibration.js";
 import type { DashboardDay } from "./dashboard-stats.js";
 import type { BodySex, NutritionGoals } from "./supabase.js";
@@ -177,6 +178,53 @@ export function goalKcal(
     return Math.round(
         (restingKcal + (activeKcal ?? 0) + rateGPerDay * kcalPerGram) /
             (1 - tefShare),
+    );
+}
+
+/** Share of today's active kcal ABOVE the usual that is added to the goal.
+ *  1 = all of it (the user's choice, 2026-11-15: a long ride should be fully
+ *  eatable). The nutritionist suggested 0.5, since wrist watches overcount
+ *  hard sessions; this is the one knob to turn if the trend says so. */
+export const ACTIVE_CREDIT = 1;
+/** Counted days with a watch figure needed before the average is trusted;
+ *  with fewer, the goal falls back to the day's own (live) active kcal. */
+export const MIN_ACTIVE_DAYS = 7;
+
+/** Mean active kcal over the counted days of the `windowDays` before `date`
+ *  (the day itself excluded, so a part-finished today never drags it), or
+ *  null with fewer than MIN_ACTIVE_DAYS of them. Days the watch never synced
+ *  are left out rather than read as 0, which would bias the mean low. */
+export function activeAverage(
+    energyDays: Array<{
+        date: string;
+        counted: boolean;
+        active_kcal: number | null;
+    }>,
+    date: string,
+    windowDays: number,
+): number | null {
+    const from = shift(date, -windowDays);
+    const days = energyDays.filter(
+        (d) =>
+            d.counted &&
+            d.active_kcal != null &&
+            d.date >= from &&
+            d.date < date,
+    );
+    if (days.length < MIN_ACTIVE_DAYS) return null;
+    return days.reduce((s, d) => s + (d.active_kcal ?? 0), 0) / days.length;
+}
+
+/** The active kcal a day's goal is built on: the usual (the average) from
+ *  the morning, rising by ACTIVE_CREDIT of whatever the watch records above
+ *  it, never falling below it. Without a trusted average, the day's own. */
+export function goalActiveKcal(
+    average: number | null,
+    today: number | null,
+): number {
+    if (average == null) return today ?? 0;
+    return Math.round(
+        average + ACTIVE_CREDIT * Math.max(0, (today ?? 0) - average),
     );
 }
 
@@ -538,6 +586,11 @@ export interface GoalPlanView extends RatePlan {
     resting_basis: "calibrated" | "formula";
     /** Today's goal, kcal (resting + active + rate, grossed up). */
     goal_kcal: number | null;
+    /** Today's usual active kcal (the lookback mean), or null with too few
+     *  days; the goal starts from it in the morning. */
+    active_avg_kcal: number | null;
+    /** The active kcal today's goal is built on (goalActiveKcal). */
+    goal_active_kcal: number | null;
     flags: GoalFlag[];
 }
 
@@ -560,10 +613,14 @@ function shift(date: string, n: number): string {
 }
 
 /**
- * Sets every row's goal for a derived mode (burn, rate, date) from that day's
- * resting burn and active kcal, and returns the plan for the page. Fixed goals
- * are left exactly as buildDashboardDays made them. The rate is today's,
- * applied to every row, so a date goal re-derives daily and history follows it.
+ * Sets every row's goal from that day's resting burn and its goal active kcal
+ * (goalActiveKcal: the usual active from the morning, rising when the watch
+ * records more), and returns the plan for the page. A typed (fixed) goal is
+ * that figure plus the same goal active, macros scaled as
+ * adjustGoalsForActivity always has. The rate is today's, applied to every
+ * row, so a date goal re-derives daily and history follows it. Each past row
+ * uses the average of its own window, so "the day's goal" means the same
+ * thing on every bar.
  */
 export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
     const mode = resolveGoalMode(i.goals);
@@ -584,12 +641,34 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
         trend,
         i.today,
     );
-    if (mode !== "fixed") {
+    for (const row of i.rows) {
+        row.active_avg_kcal = activeAverage(
+            i.energyDays,
+            row.date,
+            i.model.windowDays,
+        );
+        row.goal_active_kcal = goalActiveKcal(
+            row.active_avg_kcal,
+            row.active_kcal,
+        );
+    }
+    if (mode === "fixed") {
+        // buildDashboardDays added the day's own active; redo it with the
+        // goal active so every mode follows the same rule.
+        for (const row of i.rows) {
+            const adj = adjustGoalsForActivity(i.goals, row.goal_active_kcal);
+            if (!adj.goals?.daily_calories) continue;
+            row.goal_calories = adj.goals.daily_calories;
+            row.goal_protein_g = adj.goals.daily_protein_g || null;
+            row.goal_carbs_g = adj.goals.daily_carbs_g || null;
+            row.goal_fat_g = adj.goals.daily_fat_g || null;
+        }
+    } else {
         for (const row of i.rows) {
             if (row.bmr_kcal == null) continue;
             const total = goalKcal(
                 row.bmr_kcal,
-                row.active_kcal,
+                row.goal_active_kcal ?? row.active_kcal,
                 plan.rate_g_per_day,
                 k,
                 f,
@@ -616,13 +695,16 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
     const goalToday = mode === "fixed" ? null : (row?.goal_calories ?? null);
     // A steady active-kcal reference: the window's mean over counted days
     // (today's figure is partial until the day ends).
+    // The same average the goal starts from, so a flag and the goal agree.
     const inWindow = i.energyDays.filter(
         (d) => d.counted && d.date >= from && d.date <= to,
     );
-    const activeRef = inWindow.length
-        ? inWindow.reduce((s, d) => s + (d.active_kcal ?? 0), 0) /
-          inWindow.length
-        : (row?.active_kcal ?? 0);
+    const activeRef =
+        row?.active_avg_kcal ??
+        (inWindow.length
+            ? inWindow.reduce((s, d) => s + (d.active_kcal ?? 0), 0) /
+              inWindow.length
+            : (row?.active_kcal ?? 0));
     const age = i.body.birth_date ? ageOn(i.body.birth_date, i.today) : null;
     // The formula BMR (for display) and the resting figure the user chose in
     // Body details (calibrated when applied), which both measures the deficit
@@ -656,6 +738,11 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
         bmr_kcal: bmr,
         resting_basis: calibrated ? "calibrated" : "formula",
         goal_kcal: goalToday,
+        active_avg_kcal:
+            row?.active_avg_kcal == null
+                ? null
+                : Math.round(row.active_avg_kcal),
+        goal_active_kcal: row?.goal_active_kcal ?? null,
         flags: goalFlags({
             plan,
             trend,

@@ -421,7 +421,7 @@ describe("what-if lab", () => {
 });
 
 describe("break-even goal", () => {
-    test("with no stored goal the goal is (resting + active) ÷ (1 − digestion share)", () => {
+    test("with no stored goal the goal is (resting + goal active) ÷ (1 − digestion share)", () => {
         const TODAY = "2026-12-01";
         const fx = buildScenario("offset", TODAY); // formula basis
         const p = buildDashboardPayload(
@@ -435,7 +435,10 @@ describe("break-even goal", () => {
         expect(f).toBeLessThan(0.2);
         for (const r of p.daily.filter((r) => r.bmr_kcal != null))
             expect(r.goal_calories).toBe(
-                Math.round((r.bmr_kcal! + (r.active_kcal ?? 0)) / (1 - f)),
+                Math.round(
+                    (r.bmr_kcal! + (r.goal_active_kcal ?? r.active_kcal ?? 0)) /
+                        (1 - f),
+                ),
             );
     });
 });

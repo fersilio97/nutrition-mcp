@@ -9,6 +9,10 @@ import { buildScenario, previewInputs } from "./dashboard-fixture.js";
 import type { NutritionGoals } from "./supabase.js";
 import type { EnergyDay } from "./calibration.js";
 import {
+    ACTIVE_CREDIT,
+    MIN_ACTIVE_DAYS,
+    activeAverage,
+    goalActiveKcal,
     goalFlags,
     goalKcal,
     gramsPerDayToRate,
@@ -418,36 +422,121 @@ describe("goalFlags", () => {
 describe("derived goals in the dashboard payload", () => {
     const TODAY = "2026-12-01";
     const fx = buildScenario("offset", TODAY);
+    const goalsOf = (goals: Partial<NutritionGoals>): NutritionGoals => ({
+        user_id: "",
+        daily_calories: null,
+        daily_protein_g: null,
+        daily_carbs_g: null,
+        daily_fat_g: null,
+        daily_fiber_g: null,
+        daily_sugar_g: null,
+        daily_alcohol_g: null,
+        daily_caffeine_mg: null,
+        daily_water_ml: null,
+        target_weight_g: null,
+        calorie_goal_mode: null,
+        weight_rate_g_per_day: null,
+        target_date: null,
+        updated_at: "",
+        ...goals,
+    });
     const payloadFor = (goals: Partial<NutritionGoals> | null) =>
         buildDashboardPayload(
             previewInputs(
+                { ...fx, goals: goals ? goalsOf(goals) : null },
+                30,
+                TODAY,
+            ),
+        );
+
+    test("today's goal starts from the lookback average, each past day from its own", () => {
+        const p = payloadFor({
+            calorie_goal_mode: "rate",
+            weight_rate_g_per_day: -70,
+        });
+        const avg = activeAverage(
+            p.calibrationDetail.days,
+            TODAY,
+            p.calibrationDetail.constants.window_days,
+        );
+        expect(avg).not.toBeNull();
+        expect(p.goalPlan.active_avg_kcal).toBe(Math.round(avg!));
+        const past = p.daily.filter(
+            (r) => r.date < TODAY && r.active_avg_kcal != null,
+        );
+        expect(past.length).toBeGreaterThan(5);
+        // Each window slides with its day, so the averages differ.
+        expect(
+            new Set(past.map((r) => Math.round(r.active_avg_kcal!))).size,
+        ).toBeGreaterThan(1);
+        for (const r of p.daily.filter((r) => r.bmr_kcal != null))
+            expect(r.goal_calories).toBe(
+                goalKcal(
+                    r.bmr_kcal!,
+                    r.goal_active_kcal!,
+                    p.goalPlan.rate_g_per_day,
+                    p.goalPlan.kcal_per_gram,
+                    p.goalPlan.tef_share,
+                ),
+            );
+    });
+
+    test("a ride above the average raises today's goal by all of the excess", () => {
+        const goals = {
+            calorie_goal_mode: "rate" as const,
+            weight_rate_g_per_day: -70,
+        };
+        const before = payloadFor(goals);
+        const avg = before.goalPlan.active_avg_kcal!;
+        const ride = avg + 800;
+        const withRide = buildDashboardPayload(
+            previewInputs(
                 {
                     ...fx,
-                    goals: goals
-                        ? {
-                              user_id: "",
-                              daily_calories: null,
-                              daily_protein_g: null,
-                              daily_carbs_g: null,
-                              daily_fat_g: null,
-                              daily_fiber_g: null,
-                              daily_sugar_g: null,
-                              daily_alcohol_g: null,
-                              daily_caffeine_mg: null,
-                              daily_water_ml: null,
-                              target_weight_g: null,
-                              calorie_goal_mode: null,
-                              weight_rate_g_per_day: null,
-                              target_date: null,
-                              updated_at: "",
-                              ...goals,
-                          }
-                        : null,
+                    activity: [
+                        ...fx.activity.filter((a) => a.date !== TODAY),
+                        {
+                            user_id: "",
+                            date: TODAY,
+                            active_kcal: ride,
+                            source: "test",
+                            updated_at: "",
+                        },
+                    ],
+                    goals: goalsOf(goals),
                 },
                 30,
                 TODAY,
             ),
         );
+        expect(withRide.goalPlan.goal_active_kcal).toBe(ride);
+        const t = withRide.daily.at(-1)!;
+        expect(t.goal_calories).toBe(
+            goalKcal(
+                t.bmr_kcal!,
+                ride,
+                withRide.goalPlan.rate_g_per_day,
+                withRide.goalPlan.kcal_per_gram,
+                withRide.goalPlan.tef_share,
+            ),
+        );
+        // All 800 kcal above the usual reach the goal, grossed up for the
+        // digestion of eating them.
+        const atUsual = goalKcal(
+            t.bmr_kcal!,
+            avg,
+            withRide.goalPlan.rate_g_per_day,
+            withRide.goalPlan.kcal_per_gram,
+            withRide.goalPlan.tef_share,
+        );
+        expect(
+            Math.abs(
+                t.goal_calories! -
+                    atUsual -
+                    800 / (1 - withRide.goalPlan.tef_share),
+            ),
+        ).toBeLessThanOrEqual(1);
+    });
 
     test("a rate goal lowers every day's goal by the grossed-up deficit", () => {
         const burn = payloadFor(null);
@@ -482,13 +571,13 @@ describe("derived goals in the dashboard payload", () => {
         expect(p.goalPlan.trend!.source).toBe("trend");
     });
 
-    test("a fixed goal is untouched and raises no plan flags", () => {
+    test("a fixed goal is its figure plus the goal active and raises no plan flags", () => {
         const p = payloadFor({ daily_calories: 2100 });
         expect(p.goalPlan.mode).toBe("fixed");
         expect(p.goalPlan.flags).toEqual([]);
         expect(
             p.daily.every(
-                (r) => r.goal_calories === 2100 + (r.active_kcal ?? 0),
+                (r) => r.goal_calories === 2100 + (r.goal_active_kcal ?? 0),
             ),
         ).toBe(true);
     });
@@ -821,5 +910,54 @@ describe("checkModelSettings", () => {
             { trend_window_days: 30.5 },
         ])
             expect(checkModelSettings(bad).ok).toBe(false);
+    });
+});
+
+describe("goal active kcal: the usual from the morning, rising with the watch", () => {
+    const days = (n: number, kcal: number | null, counted = true) =>
+        Array.from({ length: n }, (_, i) => ({
+            date: `2026-11-${String(i + 1).padStart(2, "0")}`,
+            counted,
+            active_kcal: kcal,
+        }));
+
+    test("the average covers counted, synced days before the date only", () => {
+        const e = [
+            ...days(10, 300),
+            { date: "2026-11-11", counted: true, active_kcal: null },
+            { date: "2026-11-12", counted: false, active_kcal: 2000 },
+            { date: "2026-11-13", counted: true, active_kcal: 5000 },
+        ];
+        // 11-13 is the day itself: a part-finished today never drags it.
+        expect(activeAverage(e, "2026-11-13", 42)).toBe(300);
+    });
+
+    test("too few days: no average, so the day's own figure is used", () => {
+        const e = days(MIN_ACTIVE_DAYS - 1, 300);
+        expect(activeAverage(e, "2026-11-30", 42)).toBeNull();
+        expect(goalActiveKcal(null, 120)).toBe(120);
+        expect(goalActiveKcal(null, null)).toBe(0);
+    });
+
+    test("the lookback is the trend window", () => {
+        const e = days(10, 300);
+        expect(activeAverage(e, "2026-11-30", 42)).toBe(300);
+        // 2026-11-30 − 15 days = 11-15: none of the 10 days are inside.
+        expect(activeAverage(e, "2026-11-30", 15)).toBeNull();
+    });
+
+    test("morning: nothing synced yet, the goal stands on the average", () => {
+        expect(goalActiveKcal(250, 0)).toBe(250);
+        expect(goalActiveKcal(250, null)).toBe(250);
+    });
+
+    test("a below-average day never lowers it", () => {
+        expect(goalActiveKcal(250, 104)).toBe(250);
+    });
+
+    test("a ride above the average raises it by ACTIVE_CREDIT of the excess", () => {
+        expect(goalActiveKcal(250, 1050)).toBe(
+            Math.round(250 + ACTIVE_CREDIT * 800),
+        );
     });
 });

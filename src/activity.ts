@@ -1,9 +1,11 @@
 // Activity-adjusted daily goals. Pure: no Supabase, so it unit-tests with
 // fixtures (the import.ts / insights.ts convention).
 //
-// The model, chosen to match how MyFitnessPal treats a wearable's burn: the
-// stored calorie goal is the no-exercise baseline, and on a given day every
-// active kilocalorie the watch recorded is added on top of it. Protein, carbs
+// The stored calorie goal is the no-exercise baseline and active kcal are added
+// on top of it. WHICH active figure is goal-plan.ts's call (goalActiveKcal):
+// since 2026-11-15 the usual (lookback average) from the morning, rising when
+// the watch records more, rather than the day's running total — the old
+// MyFitnessPal-style rule left the goal near the baseline every morning. Protein, carbs
 // and fat scale by the same ratio (1800 + 300 → ×2100/1800), so the macro
 // split the user chose survives a bigger day. Fiber, sugar, alcohol, caffeine
 // and water are not energy targets and stay exactly as set.
@@ -39,10 +41,16 @@ export function derivedAdjustment(
     row: {
         goal_calories: number;
         active_kcal: number | null;
+        /** The active kcal the goal was built on (goal-plan.ts
+         *  goalActiveKcal); falls back to active_kcal. */
+        goal_active_kcal?: number | null;
         goal_protein_g: number | null;
         goal_carbs_g: number | null;
         goal_fat_g: number | null;
     },
+    /** False for a typed (fixed) goal read from the same row: its macros
+     *  all scale with the calories rather than holding protein. */
+    derived = true,
 ): ActivityAdjustment {
     const blank = {
         user_id: "",
@@ -68,14 +76,14 @@ export function derivedAdjustment(
         daily_carbs_g: row.goal_carbs_g,
         daily_fat_g: row.goal_fat_g,
     };
-    const active = Math.round(row.active_kcal ?? 0);
+    const active = Math.round(row.goal_active_kcal ?? row.active_kcal ?? 0);
     if (!(active > 0))
         return {
             goals,
             base: null,
             activeKcal: null,
             factor: 1,
-            derived: true,
+            derived,
         };
     const baseKcal = row.goal_calories - active;
     return {
@@ -83,7 +91,7 @@ export function derivedAdjustment(
         base: { ...goals, daily_calories: baseKcal },
         activeKcal: active,
         factor: baseKcal > 0 ? row.goal_calories / baseKcal : 1,
-        derived: true,
+        derived,
     };
 }
 
