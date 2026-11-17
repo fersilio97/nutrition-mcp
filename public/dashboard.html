@@ -3699,6 +3699,11 @@
             }
             .meals-table .n {
                 text-align: right;
+                font-variant-numeric: tabular-nums;
+            }
+            /* the day-total row is the desktop table's; phones keep .tot */
+            .meals-table tr.daytot {
+                display: none;
             }
             .meals-table thead th {
                 padding: 0 var(--s3) var(--s2);
@@ -3797,7 +3802,33 @@
                     background: var(--surface-2);
                 }
                 .meals-table tr.day .tot {
-                    float: right;
+                    display: none;
+                }
+                .meals-table tr.daytot {
+                    display: table-row;
+                }
+                .meals-table tr.daytot td {
+                    padding-top: var(--s2);
+                    padding-bottom: var(--s2);
+                    background: var(--surface-2);
+                    border-bottom: 1px solid var(--rule);
+                }
+                .meals-table tr.daytot td.dt {
+                    padding-left: var(--s3);
+                    font-family: var(--font-mono);
+                    font-size: var(--fs-eyebrow);
+                    letter-spacing: 0.08em;
+                    text-transform: uppercase;
+                    color: var(--ink-3);
+                }
+                .meals-table tr.daytot td.k {
+                    font-family: var(--font-display);
+                    font-weight: 700;
+                    letter-spacing: -0.02em;
+                }
+                .meals-table tr.daytot td.mac b {
+                    font-weight: 600;
+                    color: var(--ink);
                 }
                 .meals-table tr.meal td {
                     border-bottom: 1px solid var(--line);
@@ -3816,7 +3847,10 @@
                     padding-top: 6px;
                     padding-bottom: 6px;
                     text-align: right;
-                    vertical-align: middle;
+                    /* baseline, like every other cell: the pills' labels sit
+                       on the first text line, even beside a two-line
+                       description (was "middle", which floated them). */
+                    vertical-align: baseline;
                 }
                 .meals-table thead th {
                     border-bottom: 1px solid var(--rule);
@@ -12702,6 +12736,21 @@
                                 '<span class="tot">' +
                                 tot +
                                 "</span></th></tr>" +
+                                // Desktop: the day's totals as a row in the
+                                // meal columns, so 1,240 sits under kcal and
+                                // 95 under P (the one-line .tot above is the
+                                // phone layout's and is hidden here).
+                                '<tr class="daytot"><td class="dt" colspan="3">Day total</td><td class="n k">' +
+                                fmt(sum(g.meals, "calories")) +
+                                "</td>" +
+                                MAC.map(function (x) {
+                                    return (
+                                        '<td class="n mac"><b>' +
+                                        fmt(sum(g.meals, x[0])) +
+                                        "</b></td>"
+                                    );
+                                }).join("") +
+                                '<td class="e"></td></tr>' +
                                 g.meals
                                     .map(function (m, i) {
                                         const editing = mealEditId === m.id;
