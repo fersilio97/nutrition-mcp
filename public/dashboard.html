@@ -7391,9 +7391,13 @@
                     const ios = isIos();
                     if (!ios && !installPrompt) return "";
                     return (
-                        '<section class="install-tip rv" aria-labelledby="h-install"><img src="/dashboard-app/icon-192.png" alt="" width="40" height="40" /><div><h3 id="h-install">Add Nutrition to your Home Screen</h3><p>' +
+                        '<section class="install-tip rv" aria-labelledby="h-install"><img src="/dashboard-app/icon-192.png" alt="" width="40" height="40" /><div><h3 id="h-install">' +
+                        (ios || matchMedia("(pointer: coarse)").matches
+                            ? "Add Nutrition to your Home Screen"
+                            : "Install Nutrition as an app") +
+                        "</h3><p>" +
                         (ios
-                            ? 'Tap <b>Share</b> <svg class="i-share" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5v8M5 4.5l3-3 3 3M3.5 7.5v6h9v-6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>, then <b>Add to Home Screen</b>. It opens full screen and stays signed in.'
+                            ? 'Tap <b>Share</b> <svg class="i-share" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5v8M5 4.5l3-3 3 3M3.5 7.5v6h9v-6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>, then <b>Add to Home Screen</b>. It opens full screen; sign in once there.'
                             : "It opens in its own window, one tap from your dock or home screen.") +
                         '</p></div><div class="install-acts">' +
                         (installPrompt
@@ -13672,9 +13676,30 @@
                 // background for days: coming back to it refetches (at most
                 // once a minute), which also rolls "today" over at midnight.
                 let lastShown = Date.now();
+                // A refetch repaints the panels, so it waits while the user
+                // is mid-entry: a focused field, a field that differs from
+                // what was rendered, or an open Edit panel.
+                function midEntry() {
+                    if (mealEditId || weEditId) return true;
+                    const app = $("app");
+                    const a = document.activeElement;
+                    if (
+                        a &&
+                        app.contains(a) &&
+                        a.matches("input, textarea, select")
+                    )
+                        return true;
+                    return Array.prototype.some.call(
+                        app.querySelectorAll(
+                            'input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), textarea',
+                        ),
+                        (el) => el.value !== el.defaultValue,
+                    );
+                }
                 function resumed() {
                     if (document.visibilityState !== "visible") return;
                     if (!token || Date.now() - lastShown < 60000) return;
+                    if (midEntry()) return;
                     lastShown = Date.now();
                     refresh();
                 }

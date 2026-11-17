@@ -140,5 +140,7 @@ describe("page wiring", () => {
 
     test("refetches when the installed app comes back to the foreground", () => {
         expect(page).toContain('addEventListener("visibilitychange"');
+        // ...but never repaints over a half-typed entry.
+        expect(page).toContain("if (midEntry()) return;");
     });
 });
