@@ -77,7 +77,7 @@ Score each category 1–5 in steps of 0.5, with a one-line, evidence-based reaso
 ## 8. Stop for the user
 - Commit, push the branch, and open a **draft** PR with `--repo fersilio97/nutrition-mcp`, because bare `gh` targets upstream.
 - The PR body lists any migration with the instruction "run `supabase db push` before merging".
-- **Never merge, and never apply migrations.** Merging `main` deploys to production.
+- **Never merge, apply migrations or deploy on your own.** Production is the asus server (nutrition.labucu.com); shipping is the user's call, done with the `deploy-asus` skill (migration → merge → rebuild → verify).
 - Set the batch's vault notes to `ready-for-review` and add the PR link.
 - The next iteration starts when the user says the batch is merged or says "next iteration".
 
