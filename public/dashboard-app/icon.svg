@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Dashboard app icon (vault 011). An original mark: an apple whose body
+       carries the Nutrition Facts label's heavy rule and two hairlines.
+       Full-bleed background, so the same art works as a maskable icon (the
+       glyph stays inside the 80% safe circle). The PNGs beside it are
+       rendered from this file at 180, 192 and 512 px. -->
+  <rect width="512" height="512" fill="#3b7a4f"/>
+  <path d="M262 178 C 268 150, 282 132, 300 120" fill="none" stroke="#fbfbf9" stroke-width="15" stroke-linecap="round"/>
+  <path d="M286 150 C 300 106, 352 98, 378 112 C 364 150, 322 166, 286 150 Z" fill="#cfe5d4"/>
+  <path d="M256 186 C 224 160, 150 158, 128 228 C 106 302, 148 404, 204 408 C 228 410, 240 398, 256 398 C 272 398, 284 410, 308 408 C 364 404, 406 302, 384 228 C 362 158, 288 160, 256 186 Z" fill="#fbfbf9"/>
+  <rect x="172" y="262" width="168" height="18" rx="2" fill="#3b7a4f"/>
+  <rect x="172" y="304" width="168" height="7" rx="2" fill="#3b7a4f"/>
+  <rect x="172" y="334" width="112" height="7" rx="2" fill="#3b7a4f"/>
+</svg>

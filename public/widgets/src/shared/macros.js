@@ -118,6 +118,20 @@ const MACROS = [
         signal: "null",
     },
     {
+        key: "sodium_mg",
+        label: "Sodium",
+        unit: "mg",
+        color: "var(--sodium)",
+        // Whole milligrams, as every label prints it. Opt-in: the server only
+        // sends a sodium LIMIT when the user turned sodium tracking on
+        // (gateGoals in src/mcp.ts), so "goal" is the whole gate — a figure
+        // the model sent while tracking is off never surfaces here.
+        decimals: 0,
+        role: "limit",
+        direction: "ceiling",
+        signal: "goal",
+    },
+    {
         key: "fiber_g",
         label: "Fiber",
         unit: "g",
@@ -397,6 +411,8 @@ function macroBarTile(m, ctx, interactive) {
 // has never recorded any — the same suppression the model-facing text applies
 // (recordedGoalLine in src/mcp.ts).
 function limitShown(m, ctx) {
+    if (m.signal === "goal")
+        return ctx.goal ? (ctx.goal[m.key] ?? null) != null : false;
     const v = ctx.vals?.[m.key];
     if (v == null) return false;
     if (m.signal === "null") return true;
@@ -503,7 +519,7 @@ function macroCtxOf(vals, goal, wording, meals, opts) {
 // keep one row at both widths. The row therefore handles one to four cells
 // with no special case — alcohol simply is or is not among them.
 function gridCols(n) {
-    return `--lc:${n === 4 ? 2 : n};--lcw:${n}`;
+    return `--lc:${n === 4 ? 2 : n === 5 ? 3 : n};--lcw:${n}`;
 }
 
 // Full macro strip: the calorie row, the three macro bars, the limits row and

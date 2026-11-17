@@ -34,6 +34,31 @@
         />
         <meta name="color-scheme" content="light dark" />
         <meta name="robots" content="noindex, nofollow" />
+        <!-- Installable app (vault 011): manifest + icons + a service
+             worker scoped to /dashboard. iOS 26 opens any Home Screen site
+             as an app; the apple-* metas keep older iOS doing the same.
+             The status bar stays "default" (opaque) so nothing slides
+             under it. theme-color follows the in-page theme toggle too. -->
+        <link rel="manifest" href="/dashboard.webmanifest" />
+        <link rel="icon" type="image/svg+xml" href="/dashboard-app/icon.svg" />
+        <link
+            rel="apple-touch-icon"
+            href="/dashboard-app/apple-touch-icon.png"
+        />
+        <meta
+            name="theme-color"
+            content="#fbfbf9"
+            media="(prefers-color-scheme: light)"
+        />
+        <meta
+            name="theme-color"
+            content="#0d1210"
+            media="(prefers-color-scheme: dark)"
+        />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="Nutrition" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <title>Your nutrition dashboard</title>
         <style>
             /* =============================================================
@@ -859,7 +884,7 @@
             }
             [role="tablist"] {
                 display: grid;
-                grid-template-columns: repeat(5, 1fr);
+                grid-template-columns: repeat(6, 1fr);
             }
             [role="tab"] {
                 position: relative;
@@ -897,6 +922,14 @@
             }
             [role="tab"][aria-selected="true"] svg {
                 stroke-width: 2.1;
+            }
+            /* Six equal columns: "Weigh-ins" at 12px overflows its column
+               on a 360-390px phone, so the labels step down a size. */
+            @media (max-width: 420px) {
+                [role="tab"] {
+                    font-size: 11px;
+                    letter-spacing: -0.01em;
+                }
             }
             /* The non-colour cue: weight plus a 2px bar under the label. */
             [role="tab"]::after {
@@ -1916,6 +1949,11 @@
             .track i.s-fiber {
                 background: var(--fiber);
             }
+            /* sodium is a limit with no palette slot of its own: neutral ink,
+               so only the "over" chip carries colour */
+            .track i.s-sodium {
+                background: var(--ink-3);
+            }
             .facts-nut li:nth-child(3) .track i {
                 transition-delay: 40ms;
             }
@@ -2593,6 +2631,218 @@
             }
             .qa-label + .quick {
                 margin-top: var(--s2);
+            }
+            /* saved recipes: a servings picker beside the one-tap buttons */
+            .rq-head {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: var(--s2);
+            }
+            .rq-serv {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--s2);
+                margin-top: var(--s4);
+                font-size: var(--fs-small);
+                color: var(--ink-2);
+            }
+            .rq-serv select {
+                min-height: 32px;
+                padding: 0 var(--s2);
+            }
+
+            /* ---------- Today: setup checklist + water ---------- */
+            .setup {
+                margin: 0 0 var(--gap-block);
+            }
+            /* install hint (vault 011): one ruled row, not another card */
+            .install-tip {
+                display: flex;
+                align-items: center;
+                gap: var(--s3);
+                margin: 0 0 var(--gap-block);
+                padding: var(--s3) 0;
+                border-top: 3px solid var(--rule);
+                border-bottom: 1px solid var(--line);
+            }
+            .install-tip img {
+                flex: none;
+                border-radius: 10px;
+            }
+            .install-tip h3 {
+                margin: 0;
+                font-size: 1rem;
+            }
+            .install-tip p {
+                margin: 2px 0 0;
+                color: var(--ink-2);
+                font-size: 0.875rem;
+            }
+            .install-tip .i-share {
+                width: 1em;
+                height: 1em;
+                vertical-align: -0.15em;
+            }
+            .install-acts {
+                margin-left: auto;
+                display: flex;
+                align-items: center;
+                gap: var(--s2);
+                flex: none;
+            }
+            @media (max-width: 600px) {
+                /* icon | text, the buttons under the text */
+                .install-tip {
+                    display: grid;
+                    grid-template-columns: 40px minmax(0, 1fr);
+                    align-items: start;
+                    row-gap: var(--s2);
+                }
+                .install-acts {
+                    grid-column: 2;
+                    margin-left: 0;
+                }
+            }
+            .setup-more {
+                display: none;
+            }
+            /* phones: one line until opened (vault 018) */
+            @media (max-width: 600px) {
+                .setup .facts-title h3 {
+                    font-size: 1.25rem;
+                }
+                .setup-more {
+                    display: inline-flex;
+                    margin-top: var(--s2);
+                }
+                .setup:not(.open) .facts-serving,
+                .setup:not(.open) .setup-list,
+                .setup:not(.open) .setup-opts {
+                    display: none;
+                }
+            }
+            /* phones: each quick-log row scrolls sideways instead of
+               stacking a screenful of full-width pills (vault 019) */
+            @media (max-width: 600px) {
+                .lm .quick {
+                    flex-wrap: nowrap;
+                    overflow-x: auto;
+                    scroll-snap-type: x proximity;
+                    -webkit-overflow-scrolling: touch;
+                    scrollbar-width: none;
+                    margin-right: calc(-1 * var(--s4));
+                    padding-right: var(--s4);
+                    padding-bottom: 2px;
+                }
+                .lm .quick::-webkit-scrollbar {
+                    display: none;
+                }
+                .lm .qa {
+                    flex: none;
+                    scroll-snap-align: start;
+                }
+            }
+            .setup-list {
+                list-style: none;
+                margin: var(--s3) 0 0;
+                padding: 0;
+            }
+            .setup-list li {
+                display: grid;
+                grid-template-columns: 1.5rem 1fr;
+                gap: var(--s2);
+                padding: var(--s2) 0;
+                border-top: 1px solid var(--line);
+                font-size: var(--fs-small);
+            }
+            .setup-list li:first-child {
+                border-top: 0;
+            }
+            .setup-list .ck {
+                font-family: var(--font-mono);
+                color: var(--ink-3);
+            }
+            .setup-list li.done {
+                color: var(--ink-3);
+            }
+            .setup-list li.done .ck {
+                color: var(--accent-text);
+            }
+            .setup-list b {
+                font-weight: 600;
+                color: var(--ink);
+            }
+            .setup-list li.done b {
+                color: var(--ink-3);
+                text-decoration: line-through;
+            }
+            .setup-list .say {
+                display: block;
+                color: var(--ink-2);
+            }
+            .setup-opts {
+                display: flex;
+                flex-wrap: wrap;
+                gap: var(--s4);
+                margin-top: var(--s3);
+                font-size: var(--fs-small);
+            }
+            .setup-opts label {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--s2);
+                min-height: 44px;
+            }
+            .wq {
+                margin: 0 0 var(--gap-block);
+            }
+            /* a quick-log strip, sized like "Log a meal", not a facts card */
+            .wq .facts-title h3 {
+                font-size: 1.25rem;
+            }
+            .wq-fig {
+                font-family: var(--font-display);
+                font-weight: 700;
+                font-variant-numeric: tabular-nums;
+            }
+            .wq-bar {
+                height: 6px;
+                margin-top: var(--s3);
+                border-radius: var(--r-pill);
+                background: var(--surface-2);
+                overflow: hidden;
+            }
+            .wq-bar i {
+                display: block;
+                height: 100%;
+                background: var(--water);
+                border-radius: inherit;
+            }
+            .wq .qa {
+                min-width: 88px;
+                justify-content: center;
+            }
+            /* where a meal's numbers came from */
+            .m-src {
+                flex: none;
+                margin-left: var(--s2);
+                padding: 0 6px;
+                border: 1px solid var(--control);
+                border-radius: var(--r-pill);
+                font-family: var(--font-mono);
+                font-size: 0.625rem;
+                font-weight: 500;
+                letter-spacing: 0.06em;
+                line-height: 1.6;
+                text-transform: uppercase;
+                color: var(--ink-2);
+                vertical-align: 1px;
+            }
+            .m-src.est {
+                border-style: dashed;
+                color: var(--ink-3);
             }
             .lm-hint:empty {
                 display: none;
@@ -3327,6 +3577,143 @@
             }
 
             /* ================= Weigh-ins ================= */
+            /* Advisor tab: score, findings, score parts. The markers are
+               "+" and "!" so good/improve never rests on colour alone. */
+            .adv-score {
+                display: flex;
+                align-items: center;
+                gap: var(--s6);
+                padding: var(--s4) 0 var(--s5);
+                margin-bottom: var(--gap-block);
+                border-bottom: 1px solid var(--line);
+            }
+            .adv-fig {
+                display: flex;
+                align-items: baseline;
+                gap: var(--s2);
+            }
+            .adv-fig b {
+                font-family: var(--font-display);
+                font-weight: 700;
+                font-size: clamp(3.25rem, 12vw, 5rem);
+                letter-spacing: -0.04em;
+                line-height: 1;
+                font-variant-numeric: tabular-nums;
+            }
+            .adv-fig span {
+                font-family: var(--font-mono);
+                font-size: var(--fs-small);
+                color: var(--ink-2);
+            }
+            .adv-verdict {
+                flex: 1;
+                min-width: 0;
+                display: grid;
+                gap: var(--s2);
+            }
+            .adv-vtext {
+                font-family: var(--font-display);
+                font-weight: 600;
+                font-size: var(--fs-row);
+                letter-spacing: -0.02em;
+                text-wrap: balance;
+            }
+            .adv-track {
+                height: 6px;
+                background: var(--surface-2);
+                overflow: hidden;
+            }
+            .adv-track i {
+                display: block;
+                height: 100%;
+                background: var(--accent);
+            }
+            .adv-cols {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: var(--s6);
+                margin-bottom: var(--gap-block);
+            }
+            @media (min-width: 720px) {
+                .adv-cols {
+                    grid-template-columns: 1fr 1fr;
+                }
+            }
+            .adv-h {
+                padding-top: var(--s2);
+                margin-bottom: var(--s3);
+                border-top: 3px solid var(--rule);
+                font-family: var(--font-mono);
+                font-size: var(--fs-eyebrow);
+                font-weight: 500;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+            }
+            .adv-list {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+            }
+            .adv-list li {
+                position: relative;
+                display: grid;
+                gap: 2px;
+                padding: var(--s3) 0 var(--s3) 1.6rem;
+                border-top: 1px solid var(--line-2);
+            }
+            .adv-list li:first-child {
+                border-top: 0;
+            }
+            .adv-list li::before {
+                position: absolute;
+                left: 0;
+                top: var(--s3);
+                font-family: var(--font-mono);
+                font-weight: 700;
+            }
+            .adv-list.good li::before {
+                content: "+";
+                color: var(--accent-text);
+            }
+            .adv-list.improve li::before {
+                content: "!";
+                color: var(--warn);
+            }
+            .adv-list li b {
+                font-weight: 600;
+            }
+            .adv-list li span {
+                font-size: var(--fs-small);
+                line-height: 1.5;
+                color: var(--ink-2);
+                text-wrap: pretty;
+            }
+            .adv-comps {
+                list-style: none;
+                margin: 0 0 var(--gap-block);
+                padding: 0;
+            }
+            .adv-comps li {
+                padding: var(--s3) 0;
+                border-top: 1px solid var(--line-2);
+            }
+            .adv-crow {
+                display: flex;
+                justify-content: space-between;
+                gap: var(--s4);
+                font-size: var(--fs-small);
+            }
+            .adv-pct {
+                font-family: var(--font-mono);
+                font-variant-numeric: tabular-nums;
+            }
+            .adv-na {
+                color: var(--ink-2);
+            }
+            .adv-comps .adv-track {
+                height: 4px;
+                margin-top: 6px;
+            }
             .wl-table {
                 width: 100%;
                 border-collapse: collapse;
@@ -3385,6 +3772,11 @@
             }
             .meals-table .n {
                 text-align: right;
+                font-variant-numeric: tabular-nums;
+            }
+            /* the day-total row is the desktop table's; phones keep .tot */
+            .meals-table tr.daytot {
+                display: none;
             }
             .meals-table thead th {
                 padding: 0 var(--s3) var(--s2);
@@ -3483,7 +3875,33 @@
                     background: var(--surface-2);
                 }
                 .meals-table tr.day .tot {
-                    float: right;
+                    display: none;
+                }
+                .meals-table tr.daytot {
+                    display: table-row;
+                }
+                .meals-table tr.daytot td {
+                    padding-top: var(--s2);
+                    padding-bottom: var(--s2);
+                    background: var(--surface-2);
+                    border-bottom: 1px solid var(--rule);
+                }
+                .meals-table tr.daytot td.dt {
+                    padding-left: var(--s3);
+                    font-family: var(--font-mono);
+                    font-size: var(--fs-eyebrow);
+                    letter-spacing: 0.08em;
+                    text-transform: uppercase;
+                    color: var(--ink-3);
+                }
+                .meals-table tr.daytot td.k {
+                    font-family: var(--font-display);
+                    font-weight: 700;
+                    letter-spacing: -0.02em;
+                }
+                .meals-table tr.daytot td.mac b {
+                    font-weight: 600;
+                    color: var(--ink);
                 }
                 .meals-table tr.meal td {
                     border-bottom: 1px solid var(--line);
@@ -3502,7 +3920,10 @@
                     padding-top: 6px;
                     padding-bottom: 6px;
                     text-align: right;
-                    vertical-align: middle;
+                    /* baseline, like every other cell: the pills' labels sit
+                       on the first text line, even beside a two-line
+                       description (was "middle", which floated them). */
+                    vertical-align: baseline;
                 }
                 .meals-table thead th {
                     border-bottom: 1px solid var(--rule);
@@ -3971,6 +4392,31 @@
                             </svg>
                             <span>Weigh-ins</span>
                         </button>
+                        <button
+                            role="tab"
+                            type="button"
+                            id="tab-advisor"
+                            aria-controls="panel-advisor"
+                            aria-selected="false"
+                            tabindex="-1"
+                            data-tab="advisor"
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M9 18h6M10 21h4" />
+                                <path
+                                    d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"
+                                />
+                            </svg>
+                            <span>Advisor</span>
+                        </button>
                     </div>
                 </nav>
             </div>
@@ -4032,6 +4478,17 @@
                     <div class="banner-slot"></div>
                     <div class="panel-body" id="weighins-body"></div>
                 </section>
+                <section
+                    role="tabpanel"
+                    id="panel-advisor"
+                    aria-labelledby="tab-advisor"
+                    tabindex="0"
+                    hidden
+                >
+                    <h2 class="sr-only">Advisor</h2>
+                    <div class="banner-slot"></div>
+                    <div class="panel-body" id="advisor-body"></div>
+                </section>
             </main>
         </div>
 
@@ -4056,7 +4513,14 @@
                 // or month stays: the server already leaves today out of it.
                 const keepToday = (r) =>
                     caloriesToday === "shown" || !r.in_progress || !!r.avg;
-                const TABS = ["today", "trends", "body", "meals", "weighins"];
+                const TABS = [
+                    "today",
+                    "trends",
+                    "body",
+                    "meals",
+                    "weighins",
+                    "advisor",
+                ];
                 // 7 days → daily bars, 30 → weekly, a year → monthly (the
                 // server's groupDays). 90 was dropped (§0c).
                 const RANGES = [
@@ -4606,7 +5070,27 @@
                         document.documentElement.getAttribute("data-theme");
                     return cur === "dark" || (!cur && mq.matches);
                 }
+                // The browser chrome / iOS status bar colour. The two
+                // media-scoped metas cover the system theme; when the page's
+                // own toggle overrides it, both are pointed at the chosen bg.
+                function syncThemeColor() {
+                    const cur =
+                        document.documentElement.getAttribute("data-theme");
+                    document
+                        .querySelectorAll('meta[name="theme-color"]')
+                        .forEach(function (m) {
+                            const own = /dark/.test(m.media)
+                                ? "#0d1210"
+                                : "#fbfbf9";
+                            m.content = !cur
+                                ? own
+                                : cur === "dark"
+                                  ? "#0d1210"
+                                  : "#fbfbf9";
+                        });
+                }
                 function syncThemeBtn() {
+                    syncThemeColor();
                     const dark = isDark();
                     $("theme-btn").setAttribute(
                         "aria-label",
@@ -4853,6 +5337,12 @@
                         SK_SEC(120) +
                         SK_SEC(120) +
                         "</div>",
+                    advisor:
+                        '<div class="skel">' +
+                        SK_SEC(96) +
+                        SK_SEC(200) +
+                        SK_SEC(160) +
+                        "</div>",
                 };
                 // First render after data, and every tab switch, plays the
                 // reveal (blocks rise, rules draw, bars grow). A refetch (a
@@ -4936,7 +5426,11 @@
                         .querySelectorAll(".banner-slot")
                         .forEach(function (s) {
                             s.innerHTML = loadError
-                                ? '<div class="banner" role="alert"><p>Could not load data. Is the server running?</p><button type="button" class="btn" data-retry>Retry</button><button type="button" class="icon-btn" data-dismiss aria-label="Dismiss"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>'
+                                ? '<div class="banner" role="alert"><p>' +
+                                  (navigator.onLine === false
+                                      ? "You are offline. Retry once you reconnect."
+                                      : "Could not load data. Is the server running?") +
+                                  '</p><button type="button" class="btn" data-retry>Retry</button><button type="button" class="icon-btn" data-dismiss aria-label="Dismiss"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>'
                                 : "";
                         });
                 }
@@ -5077,12 +5571,45 @@
                         ? Math.round(f * 1000) / 10 + "% of what you eat"
                         : "25% of protein kcal, 7.5% of carbs, 2% of fat";
                 }
+                // Where a meal's numbers came from (vault feature 007). Absent on
+                // rows logged before the field existed: no badge, not "estimate".
+                const SOURCE_LABEL = {
+                    label: ["Label", "From the package label"],
+                    chain: [
+                        "Restaurant",
+                        "From the restaurant's published nutrition",
+                    ],
+                    barcode: [
+                        "Barcode",
+                        "From a barcode lookup (Open Food Facts)",
+                    ],
+                    recipe: ["Recipe", "From one of your saved recipes"],
+                    import: ["Imported", "Imported from another app's export"],
+                    estimate: [
+                        "Estimate",
+                        "Estimated by the assistant — treat as approximate",
+                    ],
+                };
+                function sourceBadge(src) {
+                    const l = SOURCE_LABEL[src];
+                    if (!l) return "";
+                    return (
+                        '<span class="m-src' +
+                        (src === "estimate" ? " est" : "") +
+                        '" title="' +
+                        esc(l[1]) +
+                        '">' +
+                        esc(l[0]) +
+                        "</span>"
+                    );
+                }
                 function mealItem(m) {
                     return (
                         '<li><div class="m1"><span class="m-time">' +
                         esc(localTime(m.logged_at)) +
                         '</span><span class="m-type">' +
                         esc(mealTypeLabel(m.meal_type)) +
+                        sourceBadge(m.source) +
                         '</span><span class="m-kcal">' +
                         nz(m.calories) +
                         '<small>kcal</small></span></div><p class="m-desc">' +
@@ -5097,7 +5624,11 @@
                         nz(m.fiber_g) +
                         "</b></span><span>Sug <b>" +
                         nz(m.sugar_g) +
-                        "</b></span></p></li>"
+                        "</b></span>" +
+                        (data.tracking && data.tracking.sodium
+                            ? "<span>Na <b>" + nz(m.sodium_mg) + "</b></span>"
+                            : "") +
+                        "</p></li>"
                     );
                 }
                 // Calorie bars against each day's goal: --kcal up to the
@@ -6606,6 +7137,295 @@
                     });
                 }
 
+                // ---- first-run setup checklist (vault feature 006) ----------
+                // The server decides what is done (src/onboarding.ts, the same
+                // list get_profile reads to the assistant); the page only lists it.
+                // Hiding it is per browser and never blocks anything.
+                const SETUP_KEY = "nm-setup-hidden";
+                function setupHidden() {
+                    try {
+                        return localStorage.getItem(SETUP_KEY) === "1";
+                    } catch (e) {
+                        return false;
+                    }
+                }
+                // On a phone the full checklist would fill the first screen
+                // (audit 2, vault 018): it starts as one line there and
+                // opens on tap. Desktop always shows it whole.
+                let setupOpen = false;
+                function setupCardHtml() {
+                    const items = data.setup || [];
+                    const left = items.filter((i) => !i.done);
+                    if (!left.length || setupHidden()) return "";
+                    const tr = data.tracking || {};
+                    const box = (key, on, label) =>
+                        '<label><input type="checkbox" data-track="' +
+                        key +
+                        '"' +
+                        (on ? " checked" : "") +
+                        " /> " +
+                        label +
+                        "</label>";
+                    return (
+                        '<section class="facts rv setup' +
+                        (setupOpen ? " open" : "") +
+                        '" aria-labelledby="h-setup"><div class="facts-title"><h3 id="h-setup">Finish setting up</h3><span class="tag">' +
+                        (items.length - left.length) +
+                        " of " +
+                        items.length +
+                        " done</span></div>" +
+                        '<button type="button" class="link-btn setup-more" data-setup-open aria-expanded="' +
+                        setupOpen +
+                        '">' +
+                        (setupOpen
+                            ? "Fewer details"
+                            : plural(left.length, "step") + " left · show") +
+                        "</button>" +
+                        '<p class="facts-serving"><span>Each is one sentence to Claude — or use the Body tab.</span><button type="button" class="link-btn" data-setup-hide>Hide</button></p>' +
+                        '<ul class="setup-list">' +
+                        items
+                            .map(
+                                (i) =>
+                                    '<li class="' +
+                                    (i.done ? "done" : "") +
+                                    '"><span class="ck" aria-hidden="true">' +
+                                    (i.done ? "✓" : "○") +
+                                    "</span><span><b>" +
+                                    esc(i.label) +
+                                    "</b>" +
+                                    (i.done
+                                        ? '<span class="sr-only"> (done)</span>'
+                                        : '<span class="say">Say ' +
+                                          esc(i.say) +
+                                          "</span>") +
+                                    "</span></li>",
+                            )
+                            .join("") +
+                        "</ul>" +
+                        '<div class="setup-opts" role="group" aria-label="Optional trackers">' +
+                        box("water", tr.water, "Track water") +
+                        box("sodium", tr.sodium, "Track sodium") +
+                        '<span class="b-status" id="setup-status" role="status"></span></div></section>'
+                    );
+                }
+                // ---- one-tap water (vault features 004/005) ------------------
+                // Only for users who turned water tracking on; nobody else sees a
+                // water figure anywhere on the page.
+                let wqFlash = null; // { text, undoId, err }
+                let wqBusy = false;
+                function waterQuickHtml() {
+                    const tr = data.tracking || {};
+                    if (!tr.water) return "";
+                    const w = data.waterToday || { ml: 0, entries: [] };
+                    const goal = data.goals && data.goals.water_ml;
+                    const pct = goal ? Math.min(1, w.ml / goal) : 0;
+                    const L = (ml) => (ml / 1000).toFixed(1);
+                    return (
+                        '<section class="rv wq" aria-labelledby="h-wq"><div class="facts-title"><h3 id="h-wq">Water</h3><span class="wq-fig">' +
+                        L(w.ml) +
+                        (goal ? " / " + L(goal) : "") +
+                        " L</span></div>" +
+                        (goal
+                            ? '<div class="wq-bar" aria-hidden="true"><i style="width:' +
+                              (pct * 100).toFixed(1) +
+                              '%"></i></div>'
+                            : "") +
+                        (wqFlash
+                            ? '<p class="lw-flash' +
+                              (wqFlash.err ? " lm-err" : "") +
+                              '" role="status"><span>' +
+                              esc(wqFlash.text) +
+                              (wqFlash.undoId
+                                  ? ' <button type="button" class="link-btn" data-water-undo="' +
+                                    esc(wqFlash.undoId) +
+                                    '">Undo</button>'
+                                  : "") +
+                              "</span></p>"
+                            : "") +
+                        '<div class="quick" role="group" aria-label="Add water now">' +
+                        [250, 500]
+                            .map(
+                                (ml) =>
+                                    '<button type="button" class="qa" data-water-add="' +
+                                    ml +
+                                    '"><span>+ ' +
+                                    ml +
+                                    "</span><small>ml</small></button>",
+                            )
+                            .join("") +
+                        "</div></section>"
+                    );
+                }
+                function addWater(ml) {
+                    if (wqBusy) return;
+                    wqBusy = true;
+                    writeJson("POST", "/api/dashboard/water", {
+                        amount_ml: ml,
+                        client_key: uuid(),
+                    })
+                        .then(function (res) {
+                            wqBusy = false;
+                            wqFlash = res.ok
+                                ? {
+                                      text: "Added " + ml + " ml.",
+                                      undoId: res.body.entry.id,
+                                  }
+                                : {
+                                      text:
+                                          (res.body &&
+                                              res.body.error_description) ||
+                                          "Could not save.",
+                                      err: true,
+                                  };
+                            refresh();
+                        })
+                        .catch(function (err) {
+                            wqBusy = false;
+                            if (err && err.message === "unauthorized") return;
+                            wqFlash = {
+                                text: "Could not reach the server.",
+                                err: true,
+                            };
+                            contentDirty.today = true;
+                            paint();
+                        });
+                }
+                function undoWater(id) {
+                    writeJson(
+                        "DELETE",
+                        "/api/dashboard/water/" + encodeURIComponent(id),
+                    )
+                        .then(function () {
+                            wqFlash = { text: "Removed." };
+                            refresh();
+                        })
+                        .catch(function () {});
+                }
+                function setTracking(key, on, box) {
+                    const st = $("setup-status");
+                    if (box) box.disabled = true;
+                    const body = {};
+                    body[key] = on;
+                    writeJson("POST", "/api/dashboard/tracking", body)
+                        .then(function (res) {
+                            if (box) box.disabled = false;
+                            if (!res.ok) {
+                                if (box) box.checked = !on;
+                                if (st) st.textContent = "Could not save.";
+                                return;
+                            }
+                            refresh();
+                        })
+                        .catch(function () {
+                            if (box) {
+                                box.disabled = false;
+                                box.checked = !on;
+                            }
+                        });
+                }
+                document.addEventListener("click", function (ev) {
+                    const t = ev.target;
+                    if (!t.closest) return;
+                    const add = t.closest("[data-water-add]");
+                    if (add) return addWater(Number(add.dataset.waterAdd));
+                    const un = t.closest("[data-water-undo]");
+                    if (un) return undoWater(un.dataset.waterUndo);
+                    if (t.closest("[data-setup-open]")) {
+                        setupOpen = !setupOpen;
+                        contentDirty.today = true;
+                        paint();
+                        return;
+                    }
+                    if (t.closest("[data-setup-hide]")) {
+                        try {
+                            localStorage.setItem(SETUP_KEY, "1");
+                        } catch (e) {}
+                        contentDirty.today = true;
+                        paint();
+                    }
+                });
+                document.addEventListener("change", function (ev) {
+                    const t = ev.target;
+                    if (!t.matches || !t.matches("[data-track]")) return;
+                    setTracking(t.dataset.track, t.checked, t);
+                });
+
+                // ---- install hint (vault 011) ------------------------------
+                // Shown on the Today tab until the page runs as an installed
+                // app or the user says "Not now". Chromium hands us a native
+                // prompt (beforeinstallprompt); iOS has none, so it gets the
+                // two taps to do it by hand. Desktop without a prompt: nothing.
+                const INSTALL_KEY = "nm-install-hidden";
+                let installPrompt = null;
+                function isStandalone() {
+                    return (
+                        (window.matchMedia &&
+                            matchMedia("(display-mode: standalone)").matches) ||
+                        navigator.standalone === true
+                    );
+                }
+                function isIos() {
+                    return (
+                        /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+                        (navigator.platform === "MacIntel" &&
+                            navigator.maxTouchPoints > 1)
+                    );
+                }
+                window.addEventListener("beforeinstallprompt", function (e) {
+                    e.preventDefault();
+                    installPrompt = e;
+                    if (data) {
+                        contentDirty.today = true;
+                        paint();
+                    }
+                });
+                window.addEventListener("appinstalled", function () {
+                    installPrompt = null;
+                    if (data) {
+                        contentDirty.today = true;
+                        paint();
+                    }
+                });
+                function installCardHtml() {
+                    if (isStandalone() || load(INSTALL_KEY) === "1") return "";
+                    const ios = isIos();
+                    if (!ios && !installPrompt) return "";
+                    return (
+                        '<section class="install-tip rv" aria-labelledby="h-install"><img src="/dashboard-app/icon-192.png" alt="" width="40" height="40" /><div><h3 id="h-install">' +
+                        (ios || matchMedia("(pointer: coarse)").matches
+                            ? "Add Nutrition to your Home Screen"
+                            : "Install Nutrition as an app") +
+                        "</h3><p>" +
+                        (ios
+                            ? 'Tap <b>Share</b> <svg class="i-share" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5v8M5 4.5l3-3 3 3M3.5 7.5v6h9v-6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>, then <b>Add to Home Screen</b>. It opens full screen; sign in once there.'
+                            : "It opens in its own window, one tap from your dock or home screen.") +
+                        '</p></div><div class="install-acts">' +
+                        (installPrompt
+                            ? '<button type="button" class="btn primary" data-install>Install</button>'
+                            : "") +
+                        '<button type="button" class="link-btn" data-install-hide>Not now</button></div></section>'
+                    );
+                }
+                document.addEventListener("click", function (ev) {
+                    const t = ev.target;
+                    if (!t.closest) return;
+                    if (t.closest("[data-install]") && installPrompt) {
+                        const p = installPrompt;
+                        installPrompt = null;
+                        p.prompt();
+                        Promise.resolve(p.userChoice).then(function () {
+                            contentDirty.today = true;
+                            paint();
+                        });
+                        return;
+                    }
+                    if (t.closest("[data-install-hide]")) {
+                        store(INSTALL_KEY, "1");
+                        contentDirty.today = true;
+                        paint();
+                    }
+                });
+
                 RENDER.today = function () {
                     const t = data.daily[data.daily.length - 1];
                     const g = data.goals;
@@ -6613,7 +7433,10 @@
                     const eaten = t.calories || 0;
                     const last7 = data.daily.slice(-7);
                     $("today-body").innerHTML =
+                        installCardHtml() +
+                        setupCardHtml() +
                         logMealBlock("today") +
+                        waterQuickHtml() +
                         '<div class="today-grid"><div class="col">' +
                         '<section class="facts rv" aria-labelledby="h-today"><div class="facts-title"><h3 id="h-today">Today</h3><span class="tag">' +
                         plural(t.mealCount, "meal") +
@@ -6658,6 +7481,20 @@
                             g && g.fiber_g,
                             "g",
                         ) +
+                        // Opt-in (vault 008): only for users tracking sodium,
+                        // summed from today's meals (a limit, mg).
+                        (data.tracking && data.tracking.sodium
+                            ? nutrientRow(
+                                  "Sodium",
+                                  "s-sodium",
+                                  meals.reduce(
+                                      (sum, m) => sum + (m.sodium_mg || 0),
+                                      0,
+                                  ),
+                                  g && g.sodium_mg,
+                                  "mg",
+                              )
+                            : "") +
                         '</ul><p class="facts-foot">' +
                         (t.goal_calories
                             ? ""
@@ -10782,7 +11619,7 @@
                             );
                         }).join("") +
                         "</div>" +
-                        '<div class="form-foot"><button type="submit" class="btn primary" id="me-save">Save changes</button><button type="button" class="btn" id="me-cancel">Cancel</button><span class="b-status" id="me-status" role="status"></span><button type="button" class="btn danger" id="me-delete">Delete meal</button></div>' +
+                        '<div class="form-foot"><button type="submit" class="btn primary" id="me-save">Save changes</button><button type="button" class="btn" id="me-cancel">Cancel</button><span class="b-status" id="me-status" role="status"></span><button type="button" class="btn" id="me-recipe" title="Save this meal\u2019s figures as a one-serving recipe you can log in one tap">Save as recipe</button><button type="button" class="btn danger" id="me-delete">Delete meal</button></div>' +
                         '<p class="form-hint">Times are in ' +
                         esc(data.timezone) +
                         ". Only the fields you change are saved.</p></form>"
@@ -11146,12 +11983,133 @@
                         })
                         .catch(function () {});
                 }
+                // Saved recipes (vault feature 009): one tap logs the chosen number
+                // of servings; the server scales the recipe's per-serving figures.
+                let recipes = [];
+                let recipesLoaded = false;
+                let recipeServings = 1;
+                function loadRecipes() {
+                    fetch("/api/dashboard/recipes", authHeader())
+                        .then((r) => (r.ok ? r.json() : null))
+                        .then(function (b) {
+                            if (!b || !token) return;
+                            recipes = b.recipes || [];
+                            recipesLoaded = true;
+                            contentDirty.meals = true;
+                            if (!$("lm-form")) paint();
+                        })
+                        .catch(function () {});
+                }
+                function recipeChips() {
+                    if (!recipesLoaded) return "";
+                    if (!recipes.length)
+                        return '<p class="form-hint qa-hint">Save a dish you make often — tell Claude “save my overnight oats as a recipe” — and it shows up here.</p>';
+                    const opt = (v, l) =>
+                        '<option value="' +
+                        v +
+                        '"' +
+                        (recipeServings === v ? " selected" : "") +
+                        ">" +
+                        l +
+                        "</option>";
+                    return (
+                        '<div class="rq-head"><p class="qa-label">Your recipes · tap to log now</p>' +
+                        '<label class="rq-serv" for="rq-servings">Servings<select class="input" id="rq-servings">' +
+                        opt(0.5, "½") +
+                        opt(1, "1") +
+                        opt(1.5, "1½") +
+                        opt(2, "2") +
+                        "</select></label></div>" +
+                        '<div class="quick" role="group" aria-label="Your recipes: log now">' +
+                        recipes
+                            .map(function (r) {
+                                const kcal =
+                                    r.calories != null
+                                        ? Math.round(
+                                              r.calories * recipeServings,
+                                          )
+                                        : null;
+                                return (
+                                    '<button type="button" class="qa" data-recipe-log="' +
+                                    esc(r.id) +
+                                    '" title="' +
+                                    esc(r.name) +
+                                    '"><span>' +
+                                    esc(
+                                        r.name.length > 30
+                                            ? r.name.slice(0, 29) + "…"
+                                            : r.name,
+                                    ) +
+                                    "</span>" +
+                                    (kcal != null
+                                        ? "<small>" +
+                                          fmt(kcal) +
+                                          " kcal</small>"
+                                        : "") +
+                                    "</button>"
+                                );
+                            })
+                            .join("") +
+                        "</div>"
+                    );
+                }
+                function logRecipe(id) {
+                    if (lmBusy) return;
+                    lmBusy = true;
+                    document
+                        .querySelectorAll(".qa")
+                        .forEach((b) => (b.disabled = true));
+                    writeJson(
+                        "POST",
+                        "/api/dashboard/recipes/" +
+                            encodeURIComponent(id) +
+                            "/log",
+                        {
+                            servings: recipeServings,
+                            client_key: uuid(),
+                            meal_type: defaultMealType(),
+                        },
+                    )
+                        .then(function (res) {
+                            lmBusy = false;
+                            if (res.ok) return logged(res);
+                            lmFail(
+                                res,
+                                res.status === 404
+                                    ? "That recipe no longer exists."
+                                    : "Could not save.",
+                            );
+                        })
+                        .catch(function (err) {
+                            lmBusy = false;
+                            if (err && err.message === "unauthorized") return;
+                            lmFail(null, "Could not reach the server.");
+                        });
+                }
+                document.addEventListener("click", function (ev) {
+                    const t = ev.target;
+                    if (!t.closest) return;
+                    const r = t.closest("[data-recipe-log]");
+                    if (r) logRecipe(r.dataset.recipeLog);
+                });
+                document.addEventListener("change", function (ev) {
+                    if (!ev.target || ev.target.id !== "rq-servings") return;
+                    recipeServings = Number(ev.target.value) || 1;
+                    contentDirty.meals = true;
+                    paint();
+                    const sel = $("rq-servings");
+                    if (sel) sel.focus();
+                });
                 function quickChips(which) {
                     // Today is for the planned meals, not for habits.
                     if (which !== "meals" || !frequentLoaded) return "";
                     if (!frequent.length)
-                        return '<p class="form-hint qa-hint">Meals you log twice or more show up here as one-tap buttons.</p>';
+                        return (
+                            recipeChips() +
+                            '<p class="form-hint qa-hint">Meals you log twice or more show up here as one-tap buttons.</p>'
+                        );
                     return (
+                        recipeChips() +
                         '<p class="qa-label">Most frequent · tap to log again now</p>' +
                         '<div class="quick" role="group" aria-label="Most frequent meals: log again now">' +
                         frequent
@@ -11574,6 +12532,37 @@
                             lmFail(null, "Could not reach the server.");
                         });
                 }
+                // "Save as recipe" (vault 020): the meal's figures become a
+                // one-serving recipe; the recipe chips reload to show it.
+                function saveMealAsRecipe() {
+                    const b = $("me-recipe");
+                    const st = $("me-status");
+                    if (!b || !mealEditId) return;
+                    b.disabled = true;
+                    writeJson(
+                        "POST",
+                        "/api/dashboard/meals/" +
+                            encodeURIComponent(mealEditId) +
+                            "/recipe",
+                        {},
+                    )
+                        .then(function (res) {
+                            b.disabled = false;
+                            if (!st) return;
+                            st.textContent = res.ok
+                                ? (res.body.updated
+                                      ? "Recipe updated: "
+                                      : "Saved as recipe: ") +
+                                  res.body.recipe.name
+                                : (res.body && res.body.error_description) ||
+                                  "Could not save.";
+                            st.className = "b-status" + (res.ok ? "" : " err");
+                            if (res.ok) loadRecipes();
+                        })
+                        .catch(function () {
+                            b.disabled = false;
+                        });
+                }
                 // Permanent, so it takes two clicks: the first arms the button, the
                 // second deletes; it disarms itself after four seconds.
                 let meDelArmed = false;
@@ -11660,6 +12649,7 @@
                     if (un) return undoMeal(un.dataset.undo);
                     if (t.closest("[data-lm-open]")) return openLogMeal();
                     if (t.closest("#me-delete")) return deleteMealFromEdit();
+                    if (t.closest("#me-recipe")) return saveMealAsRecipe();
                     if (t.closest("#lm-cancel")) {
                         lmOpen = false;
                         lmDraft = null;
@@ -11877,6 +12867,11 @@
                         ["fiber_g", "Fib"],
                         ["sugar_g", "Sug"],
                     ];
+                    // Opt-in (vault 021): a sodium column only for users who
+                    // track it, so the table stays as it was for everyone else.
+                    const sod = !!(data.tracking && data.tracking.sodium);
+                    if (sod) MAC.push(["sodium_mg", "Na"]);
+                    const cols = 10 + (sod ? 1 : 0);
                     const body = groups
                         .map(function (g, gi) {
                             const dayRow = data.daily.find(
@@ -11906,13 +12901,30 @@
                                 " · Fib " +
                                 fmt(sum(g.meals, "fiber_g"));
                             return (
-                                '<tbody><tr class="day"><th colspan="10" scope="colgroup">' +
+                                '<tbody><tr class="day"><th colspan="' +
+                                cols +
+                                '" scope="colgroup">' +
                                 esc(day) +
                                 partial +
                                 calibrationToggle(dayRow) +
                                 '<span class="tot">' +
                                 tot +
                                 "</span></th></tr>" +
+                                // Desktop: the day's totals as a row in the
+                                // meal columns, so 1,240 sits under kcal and
+                                // 95 under P (the one-line .tot above is the
+                                // phone layout's and is hidden here).
+                                '<tr class="daytot"><td class="dt" colspan="3">Day total</td><td class="n k">' +
+                                fmt(sum(g.meals, "calories")) +
+                                "</td>" +
+                                MAC.map(function (x) {
+                                    return (
+                                        '<td class="n mac"><b>' +
+                                        fmt(sum(g.meals, x[0])) +
+                                        "</b></td>"
+                                    );
+                                }).join("") +
+                                '<td class="e"></td></tr>' +
                                 g.meals
                                     .map(function (m, i) {
                                         const editing = mealEditId === m.id;
@@ -11932,6 +12944,7 @@
                                             esc(mealTypeLabel(m.meal_type)) +
                                             '</td><td class="d">' +
                                             esc(m.description) +
+                                            sourceBadge(m.source) +
                                             '</td><td class="n k">' +
                                             nz(m.calories) +
                                             "</td>" +
@@ -11972,13 +12985,17 @@
                                             (editing
                                                 ? '<tr class="edit-row' +
                                                   (last ? " last" : "") +
-                                                  '"><td colspan="10">' +
+                                                  '"><td colspan="' +
+                                                  cols +
+                                                  '">' +
                                                   mealEditForm(m) +
                                                   "</td></tr>"
                                                 : duping
                                                   ? '<tr class="edit-row' +
                                                     (last ? " last" : "") +
-                                                    '"><td colspan="10">' +
+                                                    '"><td colspan="' +
+                                                    cols +
+                                                    '">' +
                                                     mealDupForm(m) +
                                                     "</td></tr>"
                                                   : "")
@@ -11996,7 +13013,11 @@
                               esc(mealFlash) +
                               "</p>"
                             : "") +
-                        '<div class="meals-wrap rv"><table class="meals-table"><caption class="sr-only">Meals in this range, grouped by day, newest first</caption><thead><tr><th scope="col">Time</th><th scope="col">Meal</th><th scope="col">Description</th><th scope="col" class="n">kcal</th><th scope="col" class="n">P</th><th scope="col" class="n">C</th><th scope="col" class="n">F</th><th scope="col" class="n">Fib</th><th scope="col" class="n">Sug</th><th scope="col"><span class="sr-only">Duplicate or edit</span></th></tr></thead>' +
+                        '<div class="meals-wrap rv"><table class="meals-table"><caption class="sr-only">Meals in this range, grouped by day, newest first</caption><thead><tr><th scope="col">Time</th><th scope="col">Meal</th><th scope="col">Description</th><th scope="col" class="n">kcal</th><th scope="col" class="n">P</th><th scope="col" class="n">C</th><th scope="col" class="n">F</th><th scope="col" class="n">Fib</th><th scope="col" class="n">Sug</th>' +
+                        (sod
+                            ? '<th scope="col" class="n" title="Sodium, mg">Na</th>'
+                            : "") +
+                        '<th scope="col"><span class="sr-only">Duplicate or edit</span></th></tr></thead>' +
                         body +
                         '</table><p class="meals-foot">Showing the ' +
                         plural(
@@ -12016,7 +13037,9 @@
                     sub.classList.toggle("is-error", loadError && !data);
                     if (loadError && !data)
                         sub.textContent =
-                            "Could not load data. Is the server running?";
+                            navigator.onLine === false
+                                ? "You are offline. Your data loads when you reconnect."
+                                : "Could not load data. Is the server running?";
                     else if (data)
                         sub.textContent =
                             longDay(data.endDate) + " · " + data.timezone;
@@ -12067,7 +13090,9 @@
                 }
                 function onData() {
                     loadFrequent();
+                    loadRecipes();
                     if (active === "weighins" || wl) loadWeights();
+                    if (active === "advisor" || adv) loadAdvisor();
                     markDirty();
                     renderBanners();
                     renderRangeHeads();
@@ -12084,6 +13109,8 @@
                     token = null;
                     data = null;
                     wl = null;
+                    adv = null;
+                    advError = false;
                     weEditId = null;
                     loading = false;
                     loadError = false;
@@ -12158,6 +13185,187 @@
                             err.textContent = "Could not reach the server.";
                         });
                 });
+
+                /* ---------- advisor: the weekly review ---------- */
+                // Rule-based, computed server-side over the last 7 complete
+                // days (src/advisor.ts), so the page only paints it.
+                let adv = null; // null = not loaded yet
+                let advLoading = false;
+                let advError = false;
+                function loadAdvisor() {
+                    if (advLoading || !token) return;
+                    advLoading = true;
+                    advError = false;
+                    return fetch("/api/dashboard/advisor", {
+                        headers: { Authorization: "Bearer " + token },
+                    })
+                        .then(function (r) {
+                            if (r.status === 401) {
+                                signOut();
+                                throw new Error("unauthorized");
+                            }
+                            if (!r.ok) throw new Error("http " + r.status);
+                            return r.json();
+                        })
+                        .then(function (b) {
+                            advLoading = false;
+                            adv = b;
+                            contentDirty.advisor = true;
+                            if (active === "advisor") paint();
+                        })
+                        .catch(function (e) {
+                            advLoading = false;
+                            if (e && e.message === "unauthorized") return;
+                            advError = true;
+                            contentDirty.advisor = true;
+                            if (active === "advisor") paint();
+                        });
+                }
+                function advList(kind, title, empty) {
+                    const items = adv.findings.filter(function (f) {
+                        return f.kind === kind;
+                    });
+                    return (
+                        '<div class="adv-col"><h4 class="adv-h">' +
+                        title +
+                        "</h4>" +
+                        (items.length
+                            ? '<ul class="adv-list ' +
+                              kind +
+                              '">' +
+                              items
+                                  .map(function (f) {
+                                      return (
+                                          "<li><b>" +
+                                          esc(f.title) +
+                                          "</b><span>" +
+                                          esc(f.detail) +
+                                          "</span></li>"
+                                      );
+                                  })
+                                  .join("") +
+                              "</ul>"
+                            : '<p class="empty">' + empty + "</p>") +
+                        "</div>"
+                    );
+                }
+                RENDER.advisor = function () {
+                    const host = $("advisor-body");
+                    if (adv === null && !advError) {
+                        host.innerHTML = SKELETON.advisor;
+                        loadAdvisor();
+                        return;
+                    }
+                    if (adv === null) {
+                        host.innerHTML =
+                            '<section class="rv"><p class="b-status err" role="alert">Could not load the weekly review.</p><button type="button" class="btn" id="adv-retry">Try again</button></section>';
+                        $("adv-retry").addEventListener("click", function () {
+                            advError = false;
+                            contentDirty.advisor = true;
+                            paint();
+                        });
+                        return;
+                    }
+                    const head = secHead({
+                        eyebrow: "Weekly review",
+                        id: "h-adv",
+                        title: "Advisor",
+                        note:
+                            "The last " +
+                            adv.windowDays +
+                            " complete days, " +
+                            esc(shortDay(adv.window.start)) +
+                            " to " +
+                            esc(shortDay(adv.window.end)) +
+                            ". " +
+                            adv.loggedDays +
+                            " of " +
+                            adv.windowDays +
+                            " days logged.",
+                    });
+                    if (!adv.enoughData) {
+                        host.innerHTML =
+                            '<section class="rv" aria-labelledby="h-adv">' +
+                            head +
+                            '<p class="empty">' +
+                            esc(
+                                adv.findings[0]
+                                    ? adv.findings[0].detail
+                                    : "Not enough logged days for a review yet.",
+                            ) +
+                            "</p></section>";
+                        return;
+                    }
+                    const score =
+                        adv.score == null
+                            ? '<p class="empty">No score yet: there is no goal or data to judge against.</p>'
+                            : '<div class="adv-score"><div class="adv-fig"><b>' +
+                              adv.score +
+                              "</b><span>/ 100</span></div>" +
+                              '<div class="adv-verdict"><p class="adv-vtext">' +
+                              esc(adv.verdict) +
+                              '</p><div class="adv-track" role="img" aria-label="Score ' +
+                              adv.score +
+                              ' out of 100"><i style="width:' +
+                              adv.score +
+                              '%"></i></div></div></div>';
+                    const comps = adv.components
+                        .map(function (c) {
+                            const has = c.score != null;
+                            return (
+                                '<li><div class="adv-crow"><span>' +
+                                esc(c.label) +
+                                '</span><span class="' +
+                                (has ? "adv-pct" : "adv-na") +
+                                '">' +
+                                (has
+                                    ? Math.round(c.score * 100) + "%"
+                                    : "no data") +
+                                '</span></div><div class="adv-track"><i style="width:' +
+                                (has ? Math.round(c.score * 100) : 0) +
+                                '%"></i></div></li>'
+                            );
+                        })
+                        .join("");
+                    const advice = adv.advice
+                        ? '<section class="rv" aria-labelledby="h-adv-advice">' +
+                          secHead({
+                              eyebrow: "Nutritionist",
+                              id: "h-adv-advice",
+                              title: "In plain words",
+                          }) +
+                          '<p class="note">' +
+                          esc(adv.advice) +
+                          "</p></section>"
+                        : "";
+                    host.innerHTML =
+                        '<section class="rv" aria-labelledby="h-adv">' +
+                        head +
+                        score +
+                        '<div class="adv-cols">' +
+                        advList(
+                            "good",
+                            "Went well",
+                            "Nothing stood out this week.",
+                        ) +
+                        advList(
+                            "improve",
+                            "To improve",
+                            "Nothing to flag this week.",
+                        ) +
+                        "</div></section>" +
+                        advice +
+                        '<section class="rv" aria-labelledby="h-adv-parts">' +
+                        secHead({
+                            eyebrow: "Score",
+                            id: "h-adv-parts",
+                            title: "What makes up the score",
+                            note: "Each part is scored on its own. Parts with no data, such as no goal set, are left out and the rest are rescaled.",
+                        }) +
+                        '<ul class="adv-comps">' +
+                        comps +
+                        '</ul><p class="note">Estimates from your logged data, not medical or dietary advice.</p></section>';
+                };
 
                 /* ---------- weigh-ins: list, edit, delete ---------- */
                 // The list comes from its own endpoint (every entry, with
@@ -12463,6 +13671,53 @@
                     showApp();
                     refresh();
                 }
+
+                // An installed app has no reload button and can sit in the
+                // background for days: coming back to it refetches (at most
+                // once a minute), which also rolls "today" over at midnight.
+                let lastShown = Date.now();
+                // A refetch repaints the panels, so it waits while the user
+                // is mid-entry: a focused field, a field that differs from
+                // what was rendered, or an open Edit panel.
+                function midEntry() {
+                    if (mealEditId || weEditId) return true;
+                    const app = $("app");
+                    const a = document.activeElement;
+                    if (
+                        a &&
+                        app.contains(a) &&
+                        a.matches("input, textarea, select")
+                    )
+                        return true;
+                    return Array.prototype.some.call(
+                        app.querySelectorAll(
+                            'input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), textarea',
+                        ),
+                        (el) => el.value !== el.defaultValue,
+                    );
+                }
+                function resumed() {
+                    if (document.visibilityState !== "visible") return;
+                    if (!token || Date.now() - lastShown < 60000) return;
+                    if (midEntry()) return;
+                    lastShown = Date.now();
+                    refresh();
+                }
+                document.addEventListener("visibilitychange", function () {
+                    if (document.visibilityState === "hidden")
+                        lastShown = Date.now();
+                    else resumed();
+                });
+                window.addEventListener("online", function () {
+                    if (token && loadError) refresh();
+                });
+
+                // The service worker (public/dashboard-sw.js) makes the page
+                // installable and opens it offline. It never sees /api.
+                if ("serviceWorker" in navigator)
+                    navigator.serviceWorker
+                        .register("/dashboard-sw.js", { scope: "/dashboard" })
+                        .catch(function () {});
             })();
         </script>
     </body>

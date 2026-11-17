@@ -11,17 +11,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_ES: ToolsDoc = {
     meta: {
-        title: "Referencia de herramientas: las 39 herramientas",
+        title: "Referencia de herramientas: las 42 herramientas",
         description:
-            "Las 39 herramientas que el servidor Nutrition MCP le da a tu IA: registra comidas, escanea códigos de barras, importa tu historial desde otra app, controla el agua y el peso, define objetivos y revisa tendencias. Referencia completa con descripciones y frases de ejemplo.",
+            "Las 42 herramientas que el servidor Nutrition MCP le da a tu IA: registra comidas, escanea códigos de barras, importa tu historial desde otra app, controla el agua y el peso, define objetivos y revisa tendencias. Referencia completa con descripciones y frases de ejemplo.",
         ogDescription:
-            "Las 39 herramientas que el servidor Nutrition MCP le da a tu IA, incluido un importador CSV para tu historial desde otra app, con descripciones y frases de ejemplo.",
+            "Las 42 herramientas que el servidor Nutrition MCP le da a tu IA, incluido un importador CSV para tu historial desde otra app, con descripciones y frases de ejemplo.",
     },
     hero: {
         eyebrow: "Referencia",
         title: "Todo lo que tu IA puede hacer",
         lead: "Nunca llamas a estas herramientas directamente: tú solo hablas, y el asistente elige la herramienta correcta. Aquí tienes el conjunto completo que expone el servidor Nutrition MCP, con lo que hace cada una y una frase que la activa.",
-        countBold: "39 herramientas",
+        countBold: "42 herramientas",
         countTail: "en 7 áreas",
     },
     categories: {
@@ -110,6 +110,21 @@ export const TOOLS_ES: ToolsDoc = {
                 "Registra un bowl de burrito de pollo con guacamole extra para el almuerzo",
             photoHint:
                 "…o simplemente saca una foto de tu plato: la IA nombra cada alimento, calcula las porciones en medidas cotidianas (un vaso, un puñado), revisa cómo lo has registrado antes y te confirma antes de guardarlo.",
+        },
+        manage_recipes: {
+            description:
+                "Guarda, enumera, elimina o registra tus recetas. Se guardan por ración, así que una ración y media de avena nocturna se registra en un paso sin volver a estimarla.",
+            params: {
+                action: "Acción",
+                name: "Nombre de receta",
+                recipe_id: "ID de receta",
+                servings: "Raciones",
+                per: "Por ración o lote",
+                ingredients: "Ingredientes",
+                meal_type: "Tipo de comida",
+                logged_at: "Hora de comida",
+            },
+            example: "Guarda mi avena nocturna como receta",
         },
         lookup_barcode: {
             description:
@@ -391,6 +406,16 @@ export const TOOLS_ES: ToolsDoc = {
             example:
                 "¿Hay patrones en cómo como, como cenas tardías o saltarme el desayuno?",
         },
+        get_eating_review: {
+            description:
+                "Repasa cómo has comido la última semana: una puntuación de 0 a 100, qué fue bien y qué mejorar — comer sobre todo tarde, días de exceso (también en fin de semana), proteínas, fibra, azúcar, alcohol, desayuno, agua y lo completo que es tu registro.",
+            params: {
+                end_date:
+                    "Último día de la ventana de 7 días (AAAA-MM-DD). Por defecto, ayer.",
+            },
+            example:
+                "¿Cómo he comido esta última semana? ¿Qué debería mejorar?",
+        },
         get_profile: {
             description:
                 "Consulta todos tus ajustes de un vistazo: zona horaria (además de la fecha y hora locales), idioma de los widgets, unidad de peso preferida, si se muestran los widgets interactivos del chat y si el seguimiento de alcohol está activado.",
@@ -407,7 +432,7 @@ export const TOOLS_ES: ToolsDoc = {
             description:
                 "Define el idioma de la interfaz para los widgets del chat: los paneles y gráficos, no lo que la IA te responde por escrito.",
             params: {
-                locale: "Código ISO 639-1, p. ej. <code>de</code>, <code>uk</code>. Compatibles: inglés, alemán, español, francés, neerlandés, polaco, italiano y ucraniano.",
+                locale: "Código ISO 641-1, p. ej. <code>de</code>, <code>uk</code>. Compatibles: inglés, alemán, español, francés, neerlandés, polaco, italiano y ucraniano.",
             },
             example: "Muéstrame los widgets en alemán",
         },
@@ -437,6 +462,15 @@ export const TOOLS_ES: ToolsDoc = {
             },
             example:
                 "Empieza a registrar lo que bebo, en unidades del Reino Unido",
+        },
+        set_tracking: {
+            description:
+                "Activa o desactiva agua (línea de hidratación, objetivo y botones del panel) y sodio (límite diario en mg y cifra en cada comida). Ambos están desactivados; al activar sodio se fija un límite de 2.300 mg si no existe.",
+            params: {
+                water: "Agua: true para activar, false para desactivar",
+                sodium: "Sodio: true para activar, false para desactivar",
+            },
+            example: "Empieza a registrar mi agua",
         },
         delete_account: {
             description:

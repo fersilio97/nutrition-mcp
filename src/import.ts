@@ -55,6 +55,7 @@ export const MAX_ALCOHOL_G = 500;
  *  failure — 0.18 instead of 180 — and no ceiling can catch that, which is why
  *  the header must carry the unit (see CSV_COLUMNS in src/export.ts). */
 export const MAX_CAFFEINE_MG = 5_000;
+export const MAX_SODIUM_MG = 20_000;
 const MAX_DESCRIPTION_CHARS = 2_000;
 const MAX_NOTES_CHARS = 4_000;
 const MAX_PAST_MS = 20 * 365.25 * 24 * 3600 * 1000;
@@ -137,6 +138,7 @@ export interface ImportRow {
      *  a caller reading "caffeine" off a column and sending grams is off by
      *  1000x, and no bound can distinguish that from a genuinely small dose. */
     caffeine_mg?: number;
+    sodium_mg?: number;
     notes?: string;
     /** Caller-chosen correlation label. Echoed back; never used as a key. */
     client_row_id?: string;
@@ -729,6 +731,7 @@ export function validateRow(
         // The one row whose unit is not "g". numberError renders this unit into
         // the message, so a caffeine bound must never report grams.
         ["caffeine_mg", row.caffeine_mg, MAX_CAFFEINE_MG, "mg"],
+        ["sodium_mg", row.sodium_mg, MAX_SODIUM_MG, "mg"],
     ] as const) {
         const err = checkMacro(field, value, max, unit);
         if (err) return fail(err);
@@ -738,6 +741,7 @@ export function validateRow(
         description,
         meal_type: mealType,
         logged_at: ts.value.iso,
+        source: "import",
     };
     // Rounded here rather than left to insertMeal so the dry-run echo and the
     // per-row report show the number that will actually be stored — a fitness
@@ -760,6 +764,7 @@ export function validateRow(
     // meal that never carried caffeine stays NULL rather than becoming a 0 that
     // would drag every average down.
     if (row.caffeine_mg !== undefined) input.caffeine_mg = row.caffeine_mg;
+    if (row.sodium_mg !== undefined) input.sodium_mg = row.sodium_mg;
     if (row.notes !== undefined) input.notes = row.notes;
 
     return {
@@ -791,7 +796,8 @@ function sha256Hex(parts: (string | number | null | undefined)[]): string {
 /** Content digest of a resolved row. Excludes source_line so that re-exporting
  *  a file with lines added or removed still dedupes against a prior import. */
 export function rowContentDigest(userId: string, input: MealInput): string {
-    // DO NOT ADD fiber_g, sugar_g, alcohol_g OR caffeine_mg TO THIS ARRAY.
+    // DO NOT ADD fiber_g, sugar_g, alcohol_g, caffeine_mg, sodium_mg OR source
+    // TO THIS ARRAY.
     //
     // The list below is not "the fields of a meal" — it is a frozen positional
     // hash input. Appending to it changes the digest of every row hashed from

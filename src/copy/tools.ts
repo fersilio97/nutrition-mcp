@@ -1,4 +1,4 @@
-// Typed content for /tools (the "all 39 tools" reference page), rendered
+// Typed content for /tools (the "all 42 tools" reference page), rendered
 // by scripts/gen-tools.ts. Extracted verbatim from the previously
 // hand-authored public/tools.html — see CLAUDE.md's "Public site" section
 // for the generator family this belongs to, and gen-tools.ts's own header
@@ -128,11 +128,11 @@ export interface ToolIdentity {
 }
 
 /**
- * All 39 tools, in the exact document order of public/tools.html (grouped
+ * All 42 tools, in the exact document order of public/tools.html (grouped
  * by category — see CategoryId — for the reader). Cross-checked against
- * the 39 `server.registerTool()` calls in src/mcp.ts: the two orders
+ * the 42 `server.registerTool()` calls in src/mcp.ts: the two orders
  * differ (mcp.ts registers in its own order, unrelated to this page's
- * reader-facing grouping) but the *set* of 39 tool names is identical —
+ * reader-facing grouping) but the *set* of 42 tool names is identical —
  * nothing here was dropped or invented.
  */
 export const TOOLS: ToolIdentity[] = [
@@ -155,6 +155,22 @@ export const TOOLS: ToolIdentity[] = [
             { name: "notes", required: false },
         ],
         hasPhotoHint: true,
+    },
+    {
+        name: "manage_recipes",
+        category: "logging-food-meals",
+        badges: ["log"],
+        params: [
+            { name: "action", required: true },
+            { name: "name", required: false },
+            { name: "recipe_id", required: false },
+            { name: "servings", required: false },
+            { name: "per", required: false },
+            { name: "ingredients", required: false },
+            { name: "meal_type", required: false },
+            { name: "logged_at", required: false },
+        ],
+        hasPhotoHint: false,
     },
     {
         name: "lookup_barcode",
@@ -431,6 +447,13 @@ export const TOOLS: ToolIdentity[] = [
         hasPhotoHint: false,
     },
     {
+        name: "get_eating_review",
+        category: "insights-trends",
+        badges: ["view"],
+        params: [{ name: "end_date", required: false }],
+        hasPhotoHint: false,
+    },
+    {
         name: "get_profile",
         category: "settings-account",
         badges: ["view"],
@@ -472,6 +495,16 @@ export const TOOLS: ToolIdentity[] = [
         params: [
             { name: "enabled", required: true },
             { name: "drink_unit", required: false },
+        ],
+        hasPhotoHint: false,
+    },
+    {
+        name: "set_tracking",
+        category: "settings-account",
+        badges: ["setting"],
+        params: [
+            { name: "water", required: false },
+            { name: "sodium", required: false },
         ],
         hasPhotoHint: false,
     },
@@ -565,17 +598,17 @@ export interface ToolsDoc {
 
 const TOOLS_EN: ToolsDoc = {
     meta: {
-        title: "Tools Reference: All 39 Tools",
+        title: "Tools Reference: All 42 Tools",
         description:
-            "All 39 tools the Nutrition MCP server gives your AI — log meals, scan barcodes, import your history from another app, track water and weight, set goals, and review trends. Full reference with descriptions and example prompts.",
+            "All 42 tools the Nutrition MCP server gives your AI — log meals, scan barcodes, import your history from another app, track water and weight, set goals, and review trends. Full reference with descriptions and example prompts.",
         ogDescription:
-            "All 39 tools the Nutrition MCP server gives your AI, including a CSV importer for your history from another app — with descriptions and example prompts.",
+            "All 42 tools the Nutrition MCP server gives your AI, including a CSV importer for your history from another app — with descriptions and example prompts.",
     },
     hero: {
         eyebrow: "Reference",
         title: "Everything your AI can do",
         lead: "You never call these directly — you just talk, and the assistant picks the right tool. Here's the full set the Nutrition MCP server exposes, with what each one does and a phrase that triggers it.",
-        countBold: "39 tools",
+        countBold: "42 tools",
         countTail: "across 7 areas",
     },
     categories: {
@@ -663,6 +696,22 @@ const TOOLS_EN: ToolsDoc = {
             example: "Log a chicken burrito bowl with extra guac for lunch",
             photoHint:
                 "…or just snap a photo of your plate — the AI names each dish, sizes portions in everyday measures (a glass, a handful), checks how you've logged it before, and confirms with you before logging.",
+        },
+        manage_recipes: {
+            description:
+                "Save, list, delete or log your saved recipes. A recipe is stored per serving, so 'overnight oats, one and a half servings' logs in one step instead of being re-estimated every time.",
+            params: {
+                action: "What to do: save, list, delete or log",
+                name: "Recipe name (required to save; exact name when logging)",
+                recipe_id: "Recipe ID from your saved recipe list",
+                servings:
+                    "Servings the recipe makes, or servings eaten when logging",
+                per: "Whether nutrient figures are per serving or for the whole batch",
+                ingredients: "Recipe ingredients with amounts",
+                meal_type: "Meal type when logging the recipe",
+                logged_at: "When you ate it, if not now",
+            },
+            example: "Save my overnight oats as a recipe",
         },
         lookup_barcode: {
             description:
@@ -935,6 +984,15 @@ const TOOLS_EN: ToolsDoc = {
             example:
                 "Any patterns in how I eat — like late dinners or skipping breakfast?",
         },
+        get_eating_review: {
+            description:
+                "Review how you ate over the past week: a 0–100 score, what went well and what to improve — late-heavy eating, spike days (including weekend overeating), protein, fiber, sugar, alcohol, breakfast, water and how complete your logging is.",
+            params: {
+                end_date:
+                    "Last day of the 7-day window (YYYY-MM-DD). Default: yesterday.",
+            },
+            example: "How did I eat this past week — what should I improve?",
+        },
         get_profile: {
             description:
                 "See your current settings in one go: timezone (plus local date and time), widget language, preferred weight unit, whether in-chat widgets are shown, and whether alcohol tracking is on.",
@@ -979,6 +1037,15 @@ const TOOLS_EN: ToolsDoc = {
                     "Which standard drink to show alongside the grams: <code>us</code> (14 g per drink) or <code>uk</code> (7.9 g per unit). Defaults to <code>us</code>; grams of pure ethanol are what's actually stored.",
             },
             example: "Start tracking my drinking, in UK units",
+        },
+        set_tracking: {
+            description:
+                "Turn the opt-in trackers on or off: water (hydration line, water goal and the dashboard's water buttons) and sodium (a daily limit in mg plus a sodium figure on every meal). Both are off by default; turning sodium on sets a 2,300 mg limit if none exists.",
+            params: {
+                water: "true to show water tracking, false to hide it",
+                sodium: "true to track sodium, false to hide it",
+            },
+            example: "Start tracking my water",
         },
         delete_account: {
             description:

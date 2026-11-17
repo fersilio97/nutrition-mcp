@@ -51,6 +51,8 @@ const CSV_COLUMNS = [
     // anyone else's — turns 180 mg into 180 g.
     "caffeine_mg",
     "notes",
+    "sodium_mg",
+    "source",
 ] as const;
 
 /**
@@ -96,6 +98,8 @@ export function buildMealsCsv(meals: Meal[], tz: string): string {
                 csvEscape(m.alcohol_g),
                 csvEscape(m.caffeine_mg),
                 csvEscape(m.notes),
+                csvEscape(m.sodium_mg),
+                csvEscape(m.source),
             ].join(","),
         );
     }
@@ -214,6 +218,7 @@ const GOALS_CSV_COLUMNS = [
     "calorie_goal_mode",
     "weight_rate_g_per_day",
     "target_date",
+    "daily_sodium_mg",
 ] as const;
 
 /**
@@ -244,6 +249,7 @@ export function buildGoalsCsv(
                 csvEscape(goals.calorie_goal_mode),
                 csvEscape(goals.weight_rate_g_per_day),
                 csvEscape(goals.target_date),
+                csvEscape(goals.daily_sodium_mg),
             ].join(","),
         );
     }
@@ -385,6 +391,7 @@ export function buildExportReadme(opts: {
         "The unit is part of every column name, because these columns do not all agree:",
         "  * _g columns are grams; alcohol_g and daily_alcohol_g are grams of pure ethanol, not the volume of the drink.",
         "  * caffeine_mg and daily_caffeine_mg are MILLIGRAMS, unlike every gram column beside them. A cup of coffee is about 95 mg.",
+        "  * sodium_mg and daily_sodium_mg are milligrams.",
         "  * amount_ml and daily_water_ml are millilitres.",
         `  * weight_g and target_weight_g are grams — the canonical form the server stores. weight.csv also gives weight_display in ${weightUnit}, with weight_unit naming it, so you do not have to divide anything by hand.`,
         "  * calories are kcal.",

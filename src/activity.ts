@@ -62,6 +62,7 @@ export function derivedAdjustment(
         daily_sugar_g: null,
         daily_alcohol_g: null,
         daily_caffeine_mg: null,
+        daily_sodium_mg: null,
         daily_water_ml: null,
         target_weight_g: null,
         calorie_goal_mode: null,

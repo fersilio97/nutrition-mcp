@@ -22,6 +22,8 @@ function meal(overrides: Partial<Meal> = {}): Meal {
         sugar_g: null,
         alcohol_g: null,
         caffeine_mg: null,
+        sodium_mg: null,
+        source: null,
         notes: null,
         idempotency_key: null,
         ...overrides,

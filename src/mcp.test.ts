@@ -1,3 +1,4 @@
+import type { Recipe, RecipeDraft } from "./recipes.js";
 import { test, expect, describe, mock, beforeEach, afterAll } from "bun:test";
 import { z } from "zod";
 import {
@@ -19,6 +20,7 @@ import {
     missingNutrientNote,
     registerTools,
     START_IMPORT_OUTPUT_SCHEMA,
+    EATING_REVIEW_OUTPUT_SCHEMA,
     GOALS_ITEM,
     TOTALS_ITEM,
     TRENDS_DAY_ITEM,
@@ -30,6 +32,7 @@ import {
     MAX_GOAL_G,
     MAX_GOAL_MG,
     gateAlcohol,
+    gateGoals,
     handleMcp,
 } from "./mcp.js";
 import {
@@ -50,6 +53,8 @@ import {
     deleteMealFromDashboard,
     saveBodyDetails,
     updateMealFromDashboard,
+    recipeFromMeal,
+    saveRecipeFromMeal,
 } from "./dashboard.js";
 import { previewPayload } from "./dashboard-fixture.js";
 import { McpServer, InMemoryTransport } from "@modelcontextprotocol/server";
@@ -97,6 +102,8 @@ function meal(over: Partial<Meal> = {}): Meal {
         // fixture meal a milligram figure would hide the suppression this whole
         // feature turns on — the tests that want caffeine ask for it.
         caffeine_mg: null,
+        sodium_mg: null,
+        source: null,
         notes: null,
         idempotency_key: null,
         ...over,
@@ -115,6 +122,7 @@ function goals(over: Partial<NutritionGoals> = {}): NutritionGoals {
         daily_alcohol_g: 28,
         // Milligrams, and the EFSA/FDA figure the tool description offers.
         daily_caffeine_mg: 400,
+        daily_sodium_mg: null,
         daily_water_ml: 2500,
         target_weight_g: null,
         calorie_goal_mode: null,
@@ -274,6 +282,8 @@ describe("nutrientPresence", () => {
         sugar_g: null,
         alcohol_g: null,
         caffeine_mg: null,
+        sodium_mg: null,
+        source: null,
     };
 
     test("one non-null meal makes the day carry the nutrient", () => {
@@ -284,6 +294,7 @@ describe("nutrientPresence", () => {
             sugar_g: false,
             alcohol_g: false,
             caffeine_mg: false,
+            sodium_mg: false,
         });
     });
 
@@ -293,12 +304,14 @@ describe("nutrientPresence", () => {
             sugar_g: false,
             alcohol_g: false,
             caffeine_mg: false,
+            sodium_mg: false,
         });
         expect(nutrientPresence([])).toEqual({
             fiber_g: false,
             sugar_g: false,
             alcohol_g: false,
             caffeine_mg: false,
+            sodium_mg: false,
         });
     });
 
@@ -318,6 +331,7 @@ describe("nutrientPresence", () => {
             sugar_g: false,
             alcohol_g: false,
             caffeine_mg: true,
+            sodium_mg: false,
         });
         expect(
             nutrientPresence([meal({ ...blank, caffeine_mg: 0 })]).caffeine_mg,
@@ -337,6 +351,8 @@ describe("rangeAverages", () => {
         sugar_g: null,
         alcohol_g: null,
         caffeine_mg: null,
+        sodium_mg: null,
+        source: null,
     };
 
     // The measured regression: 30 g of fiber a day, but a window that reaches
@@ -442,6 +458,8 @@ describe("formatProgress suppresses unrecorded nutrients", () => {
         sugar_g: null,
         alcohol_g: null,
         caffeine_mg: null,
+        sodium_mg: null,
+        source: null,
     };
     const present = nutrientPresence([meal(blank)]);
     const totals = sumMeals([meal(blank)]);
@@ -453,6 +471,7 @@ describe("formatProgress suppresses unrecorded nutrients", () => {
                 daily_fiber_g: null,
                 daily_sugar_g: null,
                 daily_caffeine_mg: null,
+                daily_sodium_mg: null,
             }),
             null,
             present,
@@ -789,6 +808,7 @@ describe("gateAlcohol", () => {
         sugar_g: 12,
         alcohol_g: 14,
         caffeine_mg: 95,
+        sodium_mg: 0,
         mealTypes: new Set(["dinner"]),
     }));
 
@@ -1237,6 +1257,7 @@ describe("structuredContent literals satisfy their schemas", () => {
                     daily_sugar_g: null,
                     daily_alcohol_g: null,
                     daily_caffeine_mg: null,
+                    daily_sodium_mg: null,
                 }),
                 "us",
             ),
@@ -1305,6 +1326,7 @@ describe("trendsDayPayloadOf", () => {
         sugar_g: mealsForDay.reduce((s, m) => s + (m.sugar_g ?? 0), 0),
         alcohol_g: mealsForDay.reduce((s, m) => s + (m.alcohol_g ?? 0), 0),
         caffeine_mg: mealsForDay.reduce((s, m) => s + (m.caffeine_mg ?? 0), 0),
+        sodium_mg: mealsForDay.reduce((s, m) => s + (m.sodium_mg ?? 0), 0),
         mealTypes: new Set(["dinner"]),
     });
 
@@ -1315,6 +1337,8 @@ describe("trendsDayPayloadOf", () => {
                 sugar_g: null,
                 alcohol_g: null,
                 caffeine_mg: null,
+                sodium_mg: null,
+                source: null,
             }),
         ]);
         const payload = trendsDayPayloadOf(bucket, "us");
@@ -1432,6 +1456,8 @@ function storedMeal(input: Record<string, unknown>): Meal {
         sugar_g: null,
         alcohol_g: null,
         caffeine_mg: null,
+        sodium_mg: null,
+        source: null,
         ...defined,
     });
 }
@@ -1470,6 +1496,7 @@ const db = {
         day: string;
         counted: boolean;
     }>,
+    recipes: [] as Recipe[],
 };
 
 mock.module("./supabase.js", () => ({
@@ -1619,6 +1646,29 @@ mock.module("./supabase.js", () => ({
         db.goals = { ...goals(), ...patch } as NutritionGoals;
         return db.goals;
     },
+    listRecipes: async () => db.recipes,
+    getRecipe: async (_u: string, id: string) =>
+        db.recipes.find((r) => r.id === id) ?? null,
+    saveRecipe: async (userId: string, draft: RecipeDraft) => {
+        const i = db.recipes.findIndex(
+            (r) => r.name.toLowerCase() === draft.name.toLowerCase(),
+        );
+        const recipe: Recipe = {
+            id: i >= 0 ? db.recipes[i]!.id : `r-${db.recipes.length + 1}`,
+            user_id: userId,
+            created_at: "",
+            updated_at: "",
+            ...draft,
+        };
+        if (i >= 0) db.recipes[i] = recipe;
+        else db.recipes.push(recipe);
+        return { recipe, updated: i >= 0 };
+    },
+    deleteRecipe: async (_u: string, id: string) => {
+        const before = db.recipes.length;
+        db.recipes = db.recipes.filter((r) => r.id !== id);
+        return db.recipes.length < before;
+    },
     upsertActivity: async (
         userId: string,
         date: string,
@@ -1713,6 +1763,7 @@ beforeEach(() => {
     db.activityThrows = false;
     db.weights = [];
     db.calibrationDays = [];
+    db.recipes = [];
 });
 
 interface ToolResult {
@@ -2114,6 +2165,8 @@ describe("missingNutrientNote", () => {
         sugar_g: null,
         alcohol_g: null,
         caffeine_mg: null,
+        sodium_mg: null,
+        source: null,
         notes: null,
         idempotency_key: null,
     } satisfies Meal;
@@ -2149,6 +2202,8 @@ describe("missingNutrientNote", () => {
             fiber_g: 6,
             sugar_g: 4,
             caffeine_mg: null,
+            sodium_mg: null,
+            source: null,
         });
         expect(note).toBe("");
     });
@@ -2324,10 +2379,17 @@ describe("log_meal and update_meal round-trip caffeine_mg", () => {
             "auto:ce32507d8d98f40ce37b9dcd4161d18dfb5628f1c97316342dda1f0d02ce95c6";
         const at = "2026-07-20T12:00:00.000Z";
         await withTools(null, async (call) => {
-            await call("log_meal", { ...coffee, logged_at: at });
+            await call("log_meal", {
+                ...coffee,
+                sodium_mg: 850,
+                source: "label",
+                logged_at: at,
+            });
             await call("log_meal", {
                 ...coffee,
                 caffeine_mg: undefined,
+                sodium_mg: 1200,
+                source: "estimate",
                 logged_at: at,
             });
         });
@@ -2343,7 +2405,65 @@ describe("log_meal and update_meal round-trip caffeine_mg", () => {
     });
 });
 
+describe("sodium and meal source round-trip", () => {
+    test("log_meal stores sodium and source and returns both", async () => {
+        await withTools(null, async (call) => {
+            const r = await call("log_meal", {
+                description: "Soup",
+                meal_type: "lunch",
+                sodium_mg: "780",
+                source: "label",
+            });
+            expect(db.inserted[0]!.sodium_mg).toBe(780);
+            expect(db.inserted[0]!.source).toBe("label");
+            const sc = r.structuredContent as any;
+            expect(sc.logged_meal.sodium_mg).toBe(780);
+            expect(sc.logged_meal.source).toBe("label");
+            expect(sc.totals.sodium_mg).toBe(780);
+        });
+    });
+
+    test("update_meal can change source", async () => {
+        await withTools(null, async (call) => {
+            await call("update_meal", { id: "m1", source: "chain" });
+            expect(db.mealUpdates[0]!.source).toBe("chain");
+        });
+    });
+});
+
+test("formatProgress shows Sodium only when a limit is set", () => {
+    const noLimit = formatProgress(
+        sumMeals([meal({ sodium_mg: 500 })]),
+        goals({ daily_sodium_mg: null }),
+        null,
+        nutrientPresence([meal({ sodium_mg: 500 })]),
+    );
+    expect(noLimit).not.toContain("Sodium");
+    const withLimit = formatProgress(
+        sumMeals([meal({ sodium_mg: 500 })]),
+        goals({ daily_sodium_mg: 2300 }),
+        null,
+        nutrientPresence([meal({ sodium_mg: 500 })]),
+    );
+    expect(withLimit).toContain("Sodium: 500 / 2300 mg limit");
+});
+
+test("gateGoals hides sodium limit while sodium tracking is off", () => {
+    const result = gateGoals(goals({ daily_sodium_mg: 2300 }), {
+        sodium_tracking_enabled: false,
+    } as any);
+    expect(result?.daily_sodium_mg).toBeNull();
+});
+
 describe("set_nutrition_goals accepts a caffeine limit", () => {
+    test("stores a sodium limit and preserves it on a later calorie edit", async () => {
+        await withTools(null, async (call) => {
+            await call("set_nutrition_goals", { sodium_mg: 2300 });
+            expect(db.goals!.daily_sodium_mg).toBe(2300);
+            await call("set_nutrition_goals", { daily_calories: 2100 });
+            expect(db.goals!.daily_sodium_mg).toBe(2300);
+        });
+    });
     test("the limit is stored in milligrams and echoed back", async () => {
         await withTools(null, async (call) => {
             const r = await call("set_nutrition_goals", {
@@ -3091,6 +3211,81 @@ describe("get_nutrition_summary discloses its logged-day denominator", () => {
 // The same covered-days rule as fiber and sugar, but with no opt-in above it
 // and with the "never recorded" case as the norm rather than the exception —
 // so the summary is where a fabricated "0 mg average" would be most visible.
+// Vault bug 003 (UX audit 2026-11-16): under a derived goal (burn / rate /
+// date) there is no stored calorie number, and get_trends / get_nutrition_summary
+// read the stored row — so they showed no calorie goal and stale macros while
+// get_goal_progress showed the real one. Every reader must report the same
+// goal for the same day.
+describe("every goal reader agrees on today's derived goal", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    function stageBurnUser(): void {
+        db.profile = {
+            ...PROFILE_BASE,
+            height_cm: 170,
+            birth_date: "1997-06-27",
+            sex: "male",
+        } as actualSupabase.Profile;
+        db.goals = goals({
+            daily_calories: null,
+            calorie_goal_mode: "burn",
+            daily_carbs_g: 185,
+            daily_fat_g: 65,
+        });
+        db.weights = [
+            {
+                id: "w1",
+                user_id: "u1",
+                weight_g: 81_200,
+                logged_at: `${today}T08:00:00.000Z`,
+                notes: null,
+                created_at: `${today}T08:00:00.000Z`,
+                idempotency_key: null,
+            },
+        ];
+        db.meals = [
+            meal({
+                id: "m1",
+                logged_at: `${today}T09:00:00.000Z`,
+                calories: 250,
+            }),
+        ];
+    }
+
+    test("get_trends and get_nutrition_summary carry get_goal_progress's goals", async () => {
+        stageBurnUser();
+        await withTools(null, async (call) => {
+            const progress = (await call("get_goal_progress", {}))
+                .structuredContent as { goals: Record<string, number | null> };
+            const trends = (await call("get_trends", { days: 7 }))
+                .structuredContent as { goals: Record<string, number | null> };
+            const summary = (
+                await call("get_nutrition_summary", {
+                    start_date: today,
+                    end_date: today,
+                })
+            ).structuredContent as { goals: Record<string, number | null> };
+
+            expect(progress.goals.calories).toBeGreaterThan(0);
+            for (const k of ["calories", "protein_g", "carbs_g", "fat_g"]) {
+                expect(trends.goals[k]).toBe(progress.goals[k]!);
+                expect(summary.goals[k]).toBe(progress.goals[k]!);
+            }
+        });
+    });
+
+    test("get_nutrition_goals names the figure in effect today", async () => {
+        stageBurnUser();
+        await withTools(null, async (call) => {
+            const progress = (await call("get_goal_progress", {}))
+                .structuredContent as { goals: { calories: number } };
+            const text = textOf(await call("get_nutrition_goals", {}));
+            expect(text).toContain(
+                `In effect today (${today}): ${Math.round(progress.goals.calories)} kcal`,
+            );
+        });
+    });
+});
+
 describe("get_nutrition_summary reports caffeine over its covered days only", () => {
     const START = "2026-07-20";
     const END = "2026-07-24"; // 5 calendar days inclusive
@@ -5052,6 +5247,17 @@ describe("dashboard API", () => {
         // Populate every array so element shapes are compared too.
         const now = new Date().toISOString();
         db.meals = [meal({ logged_at: now })];
+        db.water = [
+            {
+                id: "h0",
+                user_id: "u1",
+                amount_ml: 250,
+                logged_at: now,
+                notes: null,
+                created_at: now,
+                idempotency_key: null,
+            },
+        ];
         db.weights = [
             {
                 ...db.weights[0]!,
@@ -5466,5 +5672,350 @@ describe("weight-rate calorie goals through the tools", () => {
             );
             expect(burn.goals.calories - sc.goals.calories).toBeLessThan(520);
         });
+    });
+});
+
+// ---------- UX audit batch 1: water/sodium opt-ins, recipes, setup ----------
+
+describe("water is an opt-in", () => {
+    test("off: no water goal in the payload and no water line in the text", async () => {
+        db.profile = { ...PROFILE_BASE, water_tracking_enabled: false };
+        db.goals = goals();
+        await withTools(null, async (call) => {
+            const r = await call("get_goal_progress", {});
+            const sc = r.structuredContent as {
+                goals: { water_ml: number | null; calories: number | null };
+            };
+            expect(sc.goals.water_ml).toBeNull();
+            expect(sc.goals.calories).toBe(2000);
+            expect(textOf(r)).not.toContain("Water");
+        });
+    });
+
+    test("on: the stored water goal is shown", async () => {
+        db.profile = { ...PROFILE_BASE, water_tracking_enabled: true };
+        db.goals = goals();
+        await withTools(null, async (call) => {
+            const r = await call("get_goal_progress", {});
+            const sc = r.structuredContent as { goals: { water_ml: number } };
+            expect(sc.goals.water_ml).toBe(2500);
+            expect(textOf(r)).toContain("Water: 0 / 2500 ml");
+        });
+    });
+
+    test("no profile row means off (a brand-new account)", async () => {
+        db.profile = null;
+        db.goals = goals();
+        await withTools(null, async (call) => {
+            const sc = (await call("get_goal_progress", {}))
+                .structuredContent as { goals: { water_ml: number | null } };
+            expect(sc.goals.water_ml).toBeNull();
+        });
+    });
+
+    test("set_nutrition_goals keeps a hidden water target in the stored row", async () => {
+        db.profile = { ...PROFILE_BASE, water_tracking_enabled: false };
+        db.goals = goals();
+        await withTools(null, async (call) => {
+            await call("set_nutrition_goals", { daily_calories: 1900 });
+            expect(db.goals!.daily_water_ml).toBe(2500);
+        });
+    });
+});
+
+describe("set_tracking", () => {
+    test("flips the flags and seeds a sodium limit only when none exists", async () => {
+        db.goals = goals({ daily_sodium_mg: null });
+        await withTools(null, async (call) => {
+            const text = textOf(
+                await call("set_tracking", { water: true, sodium: true }),
+            );
+            expect(db.profilePatches.at(-1)).toMatchObject({
+                water_tracking_enabled: true,
+                sodium_tracking_enabled: true,
+            });
+            expect(db.goals!.daily_sodium_mg).toBe(2300);
+            // the seed carried the rest of the row
+            expect(db.goals!.daily_calories).toBe(2000);
+            expect(text).toContain("2,300 mg");
+        });
+        db.goals = goals({ daily_sodium_mg: 1500 });
+        await withTools(null, async (call) => {
+            await call("set_tracking", { sodium: true });
+            expect(db.goals!.daily_sodium_mg).toBe(1500);
+        });
+    });
+
+    test("nothing to change says so", async () => {
+        await withTools(null, async (call) => {
+            expect(textOf(await call("set_tracking", {}))).toContain(
+                "Nothing changed",
+            );
+            expect(db.profilePatches).toHaveLength(0);
+        });
+    });
+});
+
+describe("manage_recipes", () => {
+    test("save per batch, list, log 1.5 servings, delete", async () => {
+        db.goals = goals();
+        await withTools(null, async (call) => {
+            const saved = textOf(
+                await call("manage_recipes", {
+                    action: "save",
+                    name: "Lentil stew",
+                    servings: 4,
+                    per: "batch",
+                    calories: 1800,
+                    protein_g: 110,
+                    ingredients: ["lentils 300 g", "carrot 2"],
+                }),
+            );
+            expect(saved).toContain("Recipe saved");
+            expect(db.recipes[0]!.calories).toBe(450);
+
+            expect(
+                textOf(await call("manage_recipes", { action: "list" })),
+            ).toContain("Lentil stew (makes 4 servings; per serving: 450 kcal");
+
+            const logged = textOf(
+                await call("manage_recipes", {
+                    action: "log",
+                    name: "lentil STEW",
+                    servings: 1.5,
+                    meal_type: "dinner",
+                }),
+            );
+            expect(logged).toContain("Meal logged from recipe");
+            const row = db.inserted.at(-1)!;
+            expect(row.description).toBe("Lentil stew (1.5 servings)");
+            expect(row.calories).toBe(675);
+            expect(row.protein_g).toBe(41.3);
+            expect(row.source).toBe("recipe");
+            expect(row.meal_type).toBe("dinner");
+            // unknown nutrients are omitted, never written as 0
+            expect(row.fat_g).toBeUndefined();
+
+            expect(
+                textOf(
+                    await call("manage_recipes", {
+                        action: "delete",
+                        recipe_id: db.recipes[0]!.id,
+                    }),
+                ),
+            ).toContain("Deleted recipe");
+            expect(db.recipes).toHaveLength(0);
+        });
+    });
+
+    test("never logs a substring match", async () => {
+        db.recipes = [
+            {
+                id: "r-1",
+                user_id: "u1",
+                name: "Overnight oats with peanut butter",
+                servings: 1,
+                ingredients: [],
+                calories: 500,
+                protein_g: null,
+                carbs_g: null,
+                fat_g: null,
+                fiber_g: null,
+                sugar_g: null,
+                sodium_mg: null,
+                caffeine_mg: null,
+                created_at: "",
+                updated_at: "",
+            },
+        ];
+        await withTools(null, async (call) => {
+            const t = textOf(
+                await call("manage_recipes", { action: "log", name: "oats" }),
+            );
+            expect(t).toContain("No saved recipe matches");
+            expect(db.inserted).toHaveLength(0);
+        });
+    });
+
+    test("an implausible recipe is refused with the reason", async () => {
+        await withTools(null, async (call) => {
+            const t = textOf(
+                await call("manage_recipes", {
+                    action: "save",
+                    name: "Oops",
+                    calories: 90000,
+                }),
+            );
+            expect(t).toContain("Recipe not saved");
+            expect(db.recipes).toHaveLength(0);
+        });
+    });
+});
+
+describe("get_profile reports unfinished setup", () => {
+    test("lists what is missing, then goes quiet once done", async () => {
+        db.profile = { ...PROFILE_BASE, timezone: null };
+        await withTools(null, async (call) => {
+            const t = textOf(await call("get_profile", {}));
+            expect(t).toContain("Setup not finished");
+            expect(t).toContain("timezone");
+            expect(t).toContain("Water tracking:");
+        });
+        db.profile = {
+            ...PROFILE_BASE,
+            timezone: "Europe/Madrid",
+            locale: "es",
+            preferred_weight_unit: "kg",
+            height_cm: 170,
+            birth_date: "1997-06-27",
+            sex: "male",
+        } as typeof PROFILE_BASE;
+        db.goals = goals();
+        db.ingestToken = "tok";
+        await withTools(null, async (call) => {
+            const t = textOf(await call("get_profile", {}));
+            expect(t).not.toContain("Setup not finished");
+        });
+    });
+});
+
+// ---------- get_eating_review ----------
+
+describe("get_eating_review", () => {
+    // The window is the 7 complete days ending yesterday, resolved against the
+    // real clock (the profile timezone is UTC), so fixtures are dated relative
+    // to it. getMealsInRange in the mock ignores dates; buildDailyBuckets is
+    // what keeps a meal in or out of the window.
+    const daysAgo = (n: number) => {
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() - n);
+        return d.toISOString().slice(0, 10);
+    };
+    const week = (loggedDays: number) =>
+        Array.from({ length: loggedDays }, (_, i) =>
+            meal({
+                id: `er-${i}`,
+                logged_at: `${daysAgo(i + 1)}T13:00:00.000Z`,
+                meal_type: "lunch",
+                calories: 2000,
+                protein_g: 120,
+                fiber_g: 30,
+                sugar_g: 40,
+                alcohol_g: null,
+            }),
+        );
+
+    test("returns the review as text and as schema-valid structured data", async () => {
+        db.meals = week(6);
+        await withTools(null, async (call) => {
+            const r = await call("get_eating_review");
+            expect(r.isError).toBeUndefined();
+            const out = EATING_REVIEW_OUTPUT_SCHEMA.parse(r.structuredContent);
+            expect(out.enough_data).toBe(true);
+            expect(out.logged_days).toBe(6);
+            expect(out.window_days).toBe(7);
+            expect(out.window.end).toBe(daysAgo(1));
+            expect(out.score).toBeGreaterThan(0);
+            expect(out.advice).toBeNull();
+            expect(textOf(r)).toContain("Score:");
+            expect(textOf(r)).toContain("not medical or dietary advice");
+        });
+    });
+
+    test("with too few logged days it says so and gives no score", async () => {
+        db.meals = week(2);
+        await withTools(null, async (call) => {
+            const r = await call("get_eating_review");
+            const out = EATING_REVIEW_OUTPUT_SCHEMA.parse(r.structuredContent);
+            expect(out.enough_data).toBe(false);
+            expect(out.score).toBeNull();
+            expect(out.verdict).toBeNull();
+            expect(textOf(r)).toContain("Only 2 of the last 7 days");
+        });
+    });
+
+    test("an impossible end_date is refused with a message, not a crash", async () => {
+        await withTools(null, async (call) => {
+            for (const bad of ["tomorrow", "2026-02-30", "26-01-01"]) {
+                const r = await call("get_eating_review", { end_date: bad });
+                expect(r.isError).toBe(true);
+                expect(textOf(r)).toContain("end_date must be a real calendar");
+            }
+        });
+    });
+
+    test("analytics counts a good call as a success and a refused date as a failure", async () => {
+        db.meals = week(5);
+        await withTools(null, async (call) => {
+            await call("get_eating_review");
+            await call("get_eating_review", { end_date: "2026-02-30" });
+        });
+        const rows = db.analyticsRows.filter(
+            (row) => row.tool_name === "get_eating_review",
+        );
+        expect(rows.map((row) => row.success)).toEqual([true, false]);
+    });
+});
+
+// ---------- Audit 2 batch: recipes are discoverable (vault 020) ----------
+
+describe("saved recipes are discoverable", () => {
+    test("the model is told to check and offer recipes where it looks", async () => {
+        const { SERVER_INSTRUCTIONS } = await import("./mcp.js");
+        expect(SERVER_INSTRUCTIONS).toContain("manage_recipes");
+        expect(SERVER_INSTRUCTIONS).toContain(
+            "offer once to save it as a recipe",
+        );
+        const server = new McpServer(
+            { name: "t", version: "0" },
+            { capabilities: { tools: {}, resources: {} } },
+        );
+        registerTools(server, "u1", true, null);
+        const [ct, st] = InMemoryTransport.createLinkedPair();
+        const client = new Client({ name: "c", version: "0" });
+        await Promise.all([server.connect(st), client.connect(ct)]);
+        const { tools } = await client.listTools();
+        await client.close();
+        const logMeal = tools.find((t) => t.name === "log_meal")!;
+        expect(logMeal.description).toContain("manage_recipes");
+    });
+
+    test("recipeFromMeal drops the trailing amount and keeps unknowns unknown", () => {
+        const r = recipeFromMeal(
+            meal({
+                description: "Overnight oats (1 serving)",
+                calories: 420,
+                protein_g: 18,
+                fiber_g: null,
+                sugar_g: null,
+            }),
+        );
+        expect(r.ok && r.value.name).toBe("Overnight oats");
+        expect(r.ok && r.value.servings).toBe(1);
+        expect(r.ok && r.value.fiber_g).toBeNull();
+    });
+
+    test("Save as recipe stores the meal's figures and reports a re-save as an update", async () => {
+        const m = meal({
+            id: "00000000-0000-4000-8000-000000000abc",
+            description: "Lentil stew (1 bowl)",
+            calories: 450,
+            protein_g: 27.5,
+        });
+        db.meals = [m];
+        const first = await saveRecipeFromMeal("u1", m.id, {});
+        expect(first.status).toBe(200);
+        expect(db.recipes).toHaveLength(1);
+        expect(db.recipes[0]!.name).toBe("Lentil stew");
+        expect(db.recipes[0]!.calories).toBe(450);
+        const again = await saveRecipeFromMeal("u1", m.id, {});
+        expect((again.json as { updated: boolean }).updated).toBe(true);
+        expect(db.recipes).toHaveLength(1);
+        const missing = await saveRecipeFromMeal(
+            "u1",
+            "00000000-0000-4000-8000-00000000ffff",
+            {},
+        );
+        expect(missing.status).toBe(404);
     });
 });

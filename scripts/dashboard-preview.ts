@@ -13,6 +13,7 @@
 // dev tool, held in memory):
 //
 //   ?scenario=full|over-goal|no-body|no-goals|empty|lb|calibrate|offset
+//             |water-on|onboarding|sodium
 //   ?delay=2000        delay every data response (shows the skeletons)
 //   ?fail=500|401      fail every data response
 //
@@ -38,8 +39,15 @@ import {
     checkWeightPatch,
     checkGoalPlan,
     checkModelSettings,
+    checkWaterEntry,
+    checkTrackingPatch,
+    checkRecipeLog,
+    recipeMealInput,
+    recipeChip,
+    recipeFromMeal,
     DASHBOARD_CSP,
     dashboardFontResponse,
+    dashboardAppAssetResponse,
     parseModelParams,
     whatIf,
 } from "../src/dashboard.js";
@@ -53,12 +61,16 @@ import {
     buildScenario,
     type PreviewEdits,
     type ScenarioName,
+    PREVIEW_RECIPES,
 } from "../src/dashboard-fixture.js";
 import { checkBodyPatch } from "../src/body.js";
 import { listFoods, suggestFood } from "../src/simple-foods.js";
 import { buildFrequentMeals } from "../src/dashboard-stats.js";
-import { dateInTz, todayInTz } from "../src/tz.js";
+import { dateInTz, shiftLocalDate, todayInTz } from "../src/tz.js";
+import { buildAdvisorReport, ADVISOR_DAYS } from "../src/advisor.js";
+import { buildDailyBuckets } from "../src/insights.js";
 import type { Meal, MealInput } from "../src/supabase.js";
+import type { Recipe } from "../src/recipes.js";
 
 // The same CSP production sends for /dashboard (src/dashboard-fixture.test.ts
 // keeps the two in step), so a CSP violation shows up here before prod.
@@ -75,6 +87,8 @@ const state: {
     edits: Partial<Record<ScenarioName, PreviewEdits>>;
 } = { scenario: "full", delay: 0, fail: 0, edits: {} };
 let seq = 0;
+// Recipes saved from the page ("Save as recipe"), on top of PREVIEW_RECIPES.
+const savedRecipes: Recipe[] = [];
 const edits = (): PreviewEdits => (state.edits[state.scenario] ??= {});
 
 const json = (body: unknown, status = 200) =>
@@ -188,6 +202,41 @@ const server = Bun.serve({
             if (!params) return json({ error: "invalid_request" }, 400);
             return json(
                 whatIf(previewInputsFor(state.scenario, 30, edits()), params),
+            );
+        }
+
+        // The Advisor tab: same pure builder as production, fed by the fixture.
+        if (req.method === "GET" && path === "/api/dashboard/advisor") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            if (state.delay) await Bun.sleep(state.delay);
+            if (state.fail === 401)
+                return json({ error: "invalid_token" }, 401);
+            if (state.fail === 500) return json({ error: "server_error" }, 500);
+            const inputs = previewInputsFor(state.scenario, 30, edits());
+            const tz = scenarioTz(state.scenario);
+            const end = shiftLocalDate(inputs.today, -1);
+            const start = shiftLocalDate(end, -(ADVISOR_DAYS - 1));
+            return json(
+                buildAdvisorReport(
+                    buildDailyBuckets(
+                        inputs.meals,
+                        inputs.water,
+                        start,
+                        end,
+                        tz,
+                    ),
+                    inputs.goals,
+                    {
+                        tz,
+                        weightKg: inputs.latestWeight
+                            ? inputs.latestWeight.weight_g / 1000
+                            : null,
+                        alcoholEnabled:
+                            inputs.profile?.alcohol_tracking_enabled ?? false,
+                        waterEnabled:
+                            inputs.profile?.water_tracking_enabled ?? false,
+                    },
+                ),
             );
         }
 
@@ -446,6 +495,8 @@ const server = Bun.serve({
             fat_g: m.fat_g,
             fiber_g: m.fiber_g,
             sugar_g: m.sugar_g,
+            sodium_mg: m.sodium_mg ?? null,
+            source: m.source ?? null,
         });
         // The same idempotency the real insertMeal gives a client_key: the
         // second request with a key returns the first row.
@@ -472,6 +523,8 @@ const server = Bun.serve({
                 sugar_g: fields.sugar_g ?? null,
                 alcohol_g: fields.alcohol_g ?? null,
                 caffeine_mg: fields.caffeine_mg ?? null,
+                sodium_mg: fields.sodium_mg ?? null,
+                source: fields.source ?? null,
                 notes: fields.notes ?? null,
                 logged_at: fields.logged_at ?? new Date().toISOString(),
                 idempotency_key: key ?? null,
@@ -479,6 +532,123 @@ const server = Bun.serve({
             (e.addedMeals ??= []).push(meal);
             return { meal, deduplicated: false };
         };
+        // ---- UX batch 1: water, tracking, recipes (production validators) ----
+        if (req.method === "POST" && path === "/api/dashboard/water") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const b = await readJson(req);
+            if (!b) return json({ error: "invalid_request" }, 400);
+            const checked = checkWaterEntry(b);
+            if (!checked.ok) return invalid(checked.error);
+            const e = edits();
+            const key = checked.value.key;
+            const dup = key
+                ? (e.addedWater ?? []).find((w) => w.idempotency_key === key)
+                : undefined;
+            if (dup) return json({ ok: true, deduplicated: true, entry: dup });
+            const now = new Date().toISOString();
+            const entry = {
+                id: crypto.randomUUID(),
+                user_id: "preview",
+                amount_ml: checked.value.amount_ml,
+                logged_at: now,
+                notes: null,
+                created_at: now,
+                idempotency_key: key ?? null,
+            };
+            (e.addedWater ??= []).push(entry);
+            return json({ ok: true, deduplicated: false, entry });
+        }
+        const waterDel = /^\/api\/dashboard\/water\/([^/]+)$/.exec(path);
+        if (req.method === "DELETE" && waterDel) {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            (edits().deletedWaterIds ??= []).push(
+                decodeURIComponent(waterDel[1]!),
+            );
+            return json({ ok: true });
+        }
+        if (req.method === "POST" && path === "/api/dashboard/tracking") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const b = await readJson(req);
+            if (!b) return json({ error: "invalid_request" }, 400);
+            const checked = checkTrackingPatch(b);
+            if (!checked.ok) return invalid(checked.error);
+            const e = edits();
+            e.tracking = { ...e.tracking, ...checked.value };
+            return json({ ok: true, tracking: e.tracking });
+        }
+        if (req.method === "GET" && path === "/api/dashboard/recipes") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const empty =
+                state.scenario === "empty" || state.scenario === "onboarding";
+            return json({
+                recipes: empty
+                    ? savedRecipes.map(recipeChip)
+                    : [...PREVIEW_RECIPES, ...savedRecipes].map(recipeChip),
+            });
+        }
+        const toRecipe = /^\/api\/dashboard\/meals\/([^/]+)\/recipe$/.exec(
+            path,
+        );
+        if (req.method === "POST" && toRecipe) {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const b = (await readJson(req)) ?? {};
+            const tz = scenarioTz(state.scenario);
+            const fx = scenarioWithEdits(
+                state.scenario,
+                todayInTz(tz),
+                edits(),
+            );
+            const m = fx.meals.find(
+                (x) => x.id === decodeURIComponent(toRecipe[1]!),
+            );
+            if (!m) return json({ error: "not_found" }, 404);
+            const checked = recipeFromMeal(m, b.name);
+            if (!checked.ok) return invalid(checked.error);
+            const all = [...PREVIEW_RECIPES, ...savedRecipes];
+            const prior = all.find(
+                (r) =>
+                    r.name.toLowerCase() === checked.value.name.toLowerCase(),
+            );
+            const recipe: Recipe = {
+                id: prior?.id ?? crypto.randomUUID(),
+                user_id: "preview",
+                created_at: "",
+                updated_at: "",
+                ...checked.value,
+            };
+            const i = savedRecipes.findIndex((r) => r.id === recipe.id);
+            if (i >= 0) savedRecipes[i] = recipe;
+            else if (!prior) savedRecipes.push(recipe);
+            return json({
+                ok: true,
+                updated: !!prior,
+                recipe: recipeChip(recipe),
+            });
+        }
+        const recipeLog = /^\/api\/dashboard\/recipes\/([^/]+)\/log$/.exec(
+            path,
+        );
+        if (req.method === "POST" && recipeLog) {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const b = await readJson(req);
+            if (!b) return json({ error: "invalid_request" }, 400);
+            const checked = checkRecipeLog(b);
+            if (!checked.ok) return invalid(checked.error);
+            const recipe = PREVIEW_RECIPES.find(
+                (r) => r.id === decodeURIComponent(recipeLog[1]!),
+            );
+            if (!recipe) return json({ error: "not_found" }, 404);
+            const r = addMeal(
+                recipeMealInput(recipe, checked.value, new Date().getHours()),
+                "preview",
+            );
+            return json({
+                ok: true,
+                deduplicated: r.deduplicated,
+                meal: mealSummary(r.meal),
+            });
+        }
+
         if (req.method === "POST" && path === "/api/dashboard/meals") {
             if (!authed(req)) return json({ error: "invalid_token" }, 401);
             const b = await readJson(req);
@@ -581,6 +751,11 @@ const server = Bun.serve({
                     sugar_g: saved.sugar_g,
                 },
             });
+        }
+
+        if (req.method === "GET") {
+            const asset = dashboardAppAssetResponse(path);
+            if (asset) return asset;
         }
 
         if (req.method === "GET" && path.startsWith("/dashboard-fonts/"))

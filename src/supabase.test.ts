@@ -168,6 +168,8 @@ function existingMeal(overrides: Partial<Meal> = {}): Meal {
         sugar_g: null,
         alcohol_g: null,
         caffeine_mg: null,
+        sodium_mg: null,
+        source: null,
         notes: "made with milk",
         idempotency_key: key(meal()),
         ...overrides,

@@ -2,17 +2,17 @@ import type { ToolsDoc } from "./tools.js";
 
 export const TOOLS_PL: ToolsDoc = {
     meta: {
-        title: "Katalog narzędzi: wszystkie 39 narzędzi",
+        title: "Katalog narzędzi: wszystkie 42 narzędzi",
         description:
-            "Wszystkie 39 narzędzi, które serwer Nutrition MCP daje Twojemu AI — zapisuj posiłki, skanuj kody kreskowe, importuj historię z innej aplikacji, śledź wodę i wagę, ustawiaj cele i przeglądaj trendy. Pełny opis wraz z przykładowymi poleceniami.",
+            "Wszystkie 42 narzędzi, które serwer Nutrition MCP daje Twojemu AI — zapisuj posiłki, skanuj kody kreskowe, importuj historię z innej aplikacji, śledź wodę i wagę, ustawiaj cele i przeglądaj trendy. Pełny opis wraz z przykładowymi poleceniami.",
         ogDescription:
-            "Wszystkie 39 narzędzi, które serwer Nutrition MCP daje Twojemu AI, w tym importer CSV do przenoszenia historii z innej aplikacji — z opisami i przykładowymi poleceniami.",
+            "Wszystkie 42 narzędzi, które serwer Nutrition MCP daje Twojemu AI, w tym importer CSV do przenoszenia historii z innej aplikacji — z opisami i przykładowymi poleceniami.",
     },
     hero: {
         eyebrow: "Dokumentacja",
         title: "Wszystko, co potrafi Twój AI",
         lead: "Nigdy nie wywołujesz tych narzędzi bezpośrednio — po prostu mówisz, a asystent sam wybiera właściwe. Oto pełny zestaw udostępniany przez serwer Nutrition MCP, wraz z opisem działania i przykładowym poleceniem, które je uruchamia.",
-        countBold: "39 narzędzi",
+        countBold: "42 narzędzi",
         countTail: "w 7 obszarach",
     },
     categories: {
@@ -101,6 +101,21 @@ export const TOOLS_PL: ToolsDoc = {
                 "Zapisz burrito bowl z kurczakiem i dodatkowym guacamole na obiad",
             photoHint:
                 "…albo po prostu zrób zdjęcie swojego talerza — AI nazywa każde danie, szacuje porcje w codziennych miarach (szklanka, garść), sprawdza, jak zapisywałeś/aś to wcześniej, i potwierdza z Tobą przed zapisaniem.",
+        },
+        manage_recipes: {
+            description:
+                "Zapisuj, wyświetlaj, usuwaj lub rejestruj przepisy. Są przechowywane na porcję, więc półtorej porcji owsianki zapiszesz w jednym kroku bez ponownego szacowania.",
+            params: {
+                action: "Działanie",
+                name: "Nazwa przepisu",
+                recipe_id: "ID przepisu",
+                servings: "Porcje",
+                per: "Na porcję lub całość",
+                ingredients: "Składniki",
+                meal_type: "Typ posiłku",
+                logged_at: "Czas posiłku",
+            },
+            example: "Zapisz moją owsiankę jako przepis",
         },
         lookup_barcode: {
             description:
@@ -383,6 +398,16 @@ export const TOOLS_PL: ToolsDoc = {
             example:
                 "Czy widać jakieś wzorce w moim jedzeniu — na przykład późne kolacje albo pomijanie śniadań?",
         },
+        get_eating_review: {
+            description:
+                "Przejrzyj swój ostatni tydzień: wynik 0–100, co poszło dobrze i co warto poprawić — jedzenie głównie wieczorem, dni z nadmiarem (także weekendowe objadanie się), białko, błonnik, cukier, alkohol, śniadanie, woda i kompletność zapisów.",
+            params: {
+                end_date:
+                    "Ostatni dzień 7-dniowego okna (RRRR-MM-DD). Domyślnie: wczoraj.",
+            },
+            example:
+                "Jak wyglądało moje jedzenie w ostatnim tygodniu i co warto poprawić?",
+        },
         get_profile: {
             description:
                 "Zobacz wszystkie swoje aktualne ustawienia naraz: strefę czasową (a także lokalną datę i godzinę), język widżetów, preferowaną jednostkę wagi, czy widżety w czacie są włączone oraz czy śledzenie alkoholu jest włączone.",
@@ -399,7 +424,7 @@ export const TOOLS_PL: ToolsDoc = {
             description:
                 "Ustaw język interfejsu widżetów w czacie — paneli i wykresów, nie treści, które pisze do Ciebie AI.",
             params: {
-                locale: "Kod ISO 639-1, np. <code>de</code>, <code>uk</code>. Obsługiwane języki: angielski, niemiecki, hiszpański, francuski, niderlandzki, polski, włoski, ukraiński.",
+                locale: "Kod ISO 641-1, np. <code>de</code>, <code>uk</code>. Obsługiwane języki: angielski, niemiecki, hiszpański, francuski, niderlandzki, polski, włoski, ukraiński.",
             },
             example: "Pokazuj moje widżety po niemiecku",
         },
@@ -428,6 +453,15 @@ export const TOOLS_PL: ToolsDoc = {
                     "Który standardowy drink pokazywać obok gramów: <code>us</code> (14 g na drinka) lub <code>uk</code> (7,9 g na jednostkę). Domyślnie <code>us</code>; faktycznie przechowywane są gramy czystego etanolu.",
             },
             example: "Zacznij śledzić moje picie, w jednostkach brytyjskich",
+        },
+        set_tracking: {
+            description:
+                "Włączaj lub wyłączaj wodę (wskaźnik nawodnienia, cel i przyciski pulpitu) oraz sód (dzienny limit w mg i wartość w każdym posiłku). Domyślnie oba są wyłączone; włączenie sodu ustawia limit 2300 mg, jeśli go brak.",
+            params: {
+                water: "Woda: true włącz, false wyłącz",
+                sodium: "Sód: true włącz, false wyłącz",
+            },
+            example: "Zacznij śledzić moją wodę",
         },
         delete_account: {
             description:
