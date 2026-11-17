@@ -34,6 +34,31 @@
         />
         <meta name="color-scheme" content="light dark" />
         <meta name="robots" content="noindex, nofollow" />
+        <!-- Installable app (vault 011): manifest + icons + a service
+             worker scoped to /dashboard. iOS 26 opens any Home Screen site
+             as an app; the apple-* metas keep older iOS doing the same.
+             The status bar stays "default" (opaque) so nothing slides
+             under it. theme-color follows the in-page theme toggle too. -->
+        <link rel="manifest" href="/dashboard.webmanifest" />
+        <link rel="icon" type="image/svg+xml" href="/dashboard-app/icon.svg" />
+        <link
+            rel="apple-touch-icon"
+            href="/dashboard-app/apple-touch-icon.png"
+        />
+        <meta
+            name="theme-color"
+            content="#fbfbf9"
+            media="(prefers-color-scheme: light)"
+        />
+        <meta
+            name="theme-color"
+            content="#0d1210"
+            media="(prefers-color-scheme: dark)"
+        />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="Nutrition" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <title>Your nutrition dashboard</title>
         <style>
             /* =============================================================
@@ -2632,6 +2657,54 @@
             .setup {
                 margin: 0 0 var(--gap-block);
             }
+            /* install hint (vault 011): one ruled row, not another card */
+            .install-tip {
+                display: flex;
+                align-items: center;
+                gap: var(--s3);
+                margin: 0 0 var(--gap-block);
+                padding: var(--s3) 0;
+                border-top: 3px solid var(--rule);
+                border-bottom: 1px solid var(--line);
+            }
+            .install-tip img {
+                flex: none;
+                border-radius: 10px;
+            }
+            .install-tip h3 {
+                margin: 0;
+                font-size: 1rem;
+            }
+            .install-tip p {
+                margin: 2px 0 0;
+                color: var(--ink-2);
+                font-size: 0.875rem;
+            }
+            .install-tip .i-share {
+                width: 1em;
+                height: 1em;
+                vertical-align: -0.15em;
+            }
+            .install-acts {
+                margin-left: auto;
+                display: flex;
+                align-items: center;
+                gap: var(--s2);
+                flex: none;
+            }
+            @media (max-width: 600px) {
+                /* icon | text, the buttons under the text */
+                .install-tip {
+                    display: grid;
+                    grid-template-columns: 40px minmax(0, 1fr);
+                    align-items: start;
+                    row-gap: var(--s2);
+                }
+                .install-acts {
+                    grid-column: 2;
+                    margin-left: 0;
+                }
+            }
             .setup-more {
                 display: none;
             }
@@ -4997,7 +5070,27 @@
                         document.documentElement.getAttribute("data-theme");
                     return cur === "dark" || (!cur && mq.matches);
                 }
+                // The browser chrome / iOS status bar colour. The two
+                // media-scoped metas cover the system theme; when the page's
+                // own toggle overrides it, both are pointed at the chosen bg.
+                function syncThemeColor() {
+                    const cur =
+                        document.documentElement.getAttribute("data-theme");
+                    document
+                        .querySelectorAll('meta[name="theme-color"]')
+                        .forEach(function (m) {
+                            const own = /dark/.test(m.media)
+                                ? "#0d1210"
+                                : "#fbfbf9";
+                            m.content = !cur
+                                ? own
+                                : cur === "dark"
+                                  ? "#0d1210"
+                                  : "#fbfbf9";
+                        });
+                }
                 function syncThemeBtn() {
+                    syncThemeColor();
                     const dark = isDark();
                     $("theme-btn").setAttribute(
                         "aria-label",
@@ -5333,7 +5426,11 @@
                         .querySelectorAll(".banner-slot")
                         .forEach(function (s) {
                             s.innerHTML = loadError
-                                ? '<div class="banner" role="alert"><p>Could not load data. Is the server running?</p><button type="button" class="btn" data-retry>Retry</button><button type="button" class="icon-btn" data-dismiss aria-label="Dismiss"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>'
+                                ? '<div class="banner" role="alert"><p>' +
+                                  (navigator.onLine === false
+                                      ? "You are offline. Retry once you reconnect."
+                                      : "Could not load data. Is the server running?") +
+                                  '</p><button type="button" class="btn" data-retry>Retry</button><button type="button" class="icon-btn" data-dismiss aria-label="Dismiss"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>'
                                 : "";
                         });
                 }
@@ -7253,6 +7350,78 @@
                     setTracking(t.dataset.track, t.checked, t);
                 });
 
+                // ---- install hint (vault 011) ------------------------------
+                // Shown on the Today tab until the page runs as an installed
+                // app or the user says "Not now". Chromium hands us a native
+                // prompt (beforeinstallprompt); iOS has none, so it gets the
+                // two taps to do it by hand. Desktop without a prompt: nothing.
+                const INSTALL_KEY = "nm-install-hidden";
+                let installPrompt = null;
+                function isStandalone() {
+                    return (
+                        (window.matchMedia &&
+                            matchMedia("(display-mode: standalone)").matches) ||
+                        navigator.standalone === true
+                    );
+                }
+                function isIos() {
+                    return (
+                        /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+                        (navigator.platform === "MacIntel" &&
+                            navigator.maxTouchPoints > 1)
+                    );
+                }
+                window.addEventListener("beforeinstallprompt", function (e) {
+                    e.preventDefault();
+                    installPrompt = e;
+                    if (data) {
+                        contentDirty.today = true;
+                        paint();
+                    }
+                });
+                window.addEventListener("appinstalled", function () {
+                    installPrompt = null;
+                    if (data) {
+                        contentDirty.today = true;
+                        paint();
+                    }
+                });
+                function installCardHtml() {
+                    if (isStandalone() || load(INSTALL_KEY) === "1") return "";
+                    const ios = isIos();
+                    if (!ios && !installPrompt) return "";
+                    return (
+                        '<section class="install-tip rv" aria-labelledby="h-install"><img src="/dashboard-app/icon-192.png" alt="" width="40" height="40" /><div><h3 id="h-install">Add Nutrition to your Home Screen</h3><p>' +
+                        (ios
+                            ? 'Tap <b>Share</b> <svg class="i-share" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5v8M5 4.5l3-3 3 3M3.5 7.5v6h9v-6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>, then <b>Add to Home Screen</b>. It opens full screen and stays signed in.'
+                            : "It opens in its own window, one tap from your dock or home screen.") +
+                        '</p></div><div class="install-acts">' +
+                        (installPrompt
+                            ? '<button type="button" class="btn primary" data-install>Install</button>'
+                            : "") +
+                        '<button type="button" class="link-btn" data-install-hide>Not now</button></div></section>'
+                    );
+                }
+                document.addEventListener("click", function (ev) {
+                    const t = ev.target;
+                    if (!t.closest) return;
+                    if (t.closest("[data-install]") && installPrompt) {
+                        const p = installPrompt;
+                        installPrompt = null;
+                        p.prompt();
+                        Promise.resolve(p.userChoice).then(function () {
+                            contentDirty.today = true;
+                            paint();
+                        });
+                        return;
+                    }
+                    if (t.closest("[data-install-hide]")) {
+                        store(INSTALL_KEY, "1");
+                        contentDirty.today = true;
+                        paint();
+                    }
+                });
+
                 RENDER.today = function () {
                     const t = data.daily[data.daily.length - 1];
                     const g = data.goals;
@@ -7260,6 +7429,7 @@
                     const eaten = t.calories || 0;
                     const last7 = data.daily.slice(-7);
                     $("today-body").innerHTML =
+                        installCardHtml() +
                         setupCardHtml() +
                         logMealBlock("today") +
                         waterQuickHtml() +
@@ -12863,7 +13033,9 @@
                     sub.classList.toggle("is-error", loadError && !data);
                     if (loadError && !data)
                         sub.textContent =
-                            "Could not load data. Is the server running?";
+                            navigator.onLine === false
+                                ? "You are offline. Your data loads when you reconnect."
+                                : "Could not load data. Is the server running?";
                     else if (data)
                         sub.textContent =
                             longDay(data.endDate) + " · " + data.timezone;
@@ -13495,6 +13667,32 @@
                     showApp();
                     refresh();
                 }
+
+                // An installed app has no reload button and can sit in the
+                // background for days: coming back to it refetches (at most
+                // once a minute), which also rolls "today" over at midnight.
+                let lastShown = Date.now();
+                function resumed() {
+                    if (document.visibilityState !== "visible") return;
+                    if (!token || Date.now() - lastShown < 60000) return;
+                    lastShown = Date.now();
+                    refresh();
+                }
+                document.addEventListener("visibilitychange", function () {
+                    if (document.visibilityState === "hidden")
+                        lastShown = Date.now();
+                    else resumed();
+                });
+                window.addEventListener("online", function () {
+                    if (token && loadError) refresh();
+                });
+
+                // The service worker (public/dashboard-sw.js) makes the page
+                // installable and opens it offline. It never sees /api.
+                if ("serviceWorker" in navigator)
+                    navigator.serviceWorker
+                        .register("/dashboard-sw.js", { scope: "/dashboard" })
+                        .catch(function () {});
             })();
         </script>
     </body>

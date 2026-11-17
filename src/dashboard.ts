@@ -1915,8 +1915,106 @@ export function dashboardFontResponse(file: string): Response | null {
     });
 }
 
+// ---------------------------------------------------------------------------
+// Installable app (vault 011): the page is a PWA. The manifest is built here
+// rather than kept as a file so a test can hold it to what browsers need
+// (start_url inside scope, a 192 and a 512 icon, a maskable one), and the
+// colours are the page's own --bg tokens, so the splash matches the first
+// paint in each theme.
+// ---------------------------------------------------------------------------
+export const DASHBOARD_MANIFEST = {
+    id: "/dashboard",
+    name: "Nutrition dashboard",
+    short_name: "Nutrition",
+    description: "Your meals, goals, weight and trends, one tap away.",
+    start_url: "/dashboard",
+    scope: "/dashboard",
+    display: "standalone",
+    orientation: "portrait",
+    background_color: "#fbfbf9",
+    theme_color: "#fbfbf9",
+    icons: [
+        {
+            src: "/dashboard-app/icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any",
+        },
+        {
+            src: "/dashboard-app/icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any",
+        },
+        {
+            src: "/dashboard-app/icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+        },
+    ],
+} as const;
+
+// Allowlist of the app's static files under public/dashboard-app/.
+export const DASHBOARD_APP_FILES: ReadonlyMap<string, string> = new Map([
+    ["icon-192.png", "image/png"],
+    ["icon-512.png", "image/png"],
+    ["icon-maskable-512.png", "image/png"],
+    ["apple-touch-icon.png", "image/png"],
+    ["icon.svg", "image/svg+xml"],
+]);
+
+/** The manifest, the service worker and the icons, for production and the
+ *  preview alike (like dashboardFontResponse). null = not ours (404). The
+ *  worker is served no-cache so a new version is picked up on the next open
+ *  (browsers also cap a worker's HTTP cache at a day); the icons are
+ *  revalidated daily, since they are not version-named. */
+export function dashboardAppAssetResponse(path: string): Response | null {
+    if (path === "/dashboard.webmanifest")
+        return new Response(JSON.stringify(DASHBOARD_MANIFEST), {
+            headers: {
+                "Content-Type": "application/manifest+json",
+                "Cache-Control": "public, max-age=3600",
+            },
+        });
+    if (path === "/dashboard-sw.js")
+        return new Response(Bun.file("./public/dashboard-sw.js"), {
+            headers: {
+                "Content-Type": "text/javascript; charset=utf-8",
+                "Cache-Control": "no-cache",
+            },
+        });
+    if (path.startsWith("/dashboard-app/")) {
+        const file = path.slice("/dashboard-app/".length);
+        const type = DASHBOARD_APP_FILES.get(file);
+        if (!type) return null;
+        return new Response(Bun.file(`./public/dashboard-app/${file}`), {
+            headers: {
+                "Content-Type": type,
+                "Cache-Control": "public, max-age=86400",
+            },
+        });
+    }
+    return null;
+}
+
 export function createDashboardRouter(): Hono {
     const dash = new Hono();
+
+    // The installable-app files. Unauthenticated like the fonts: the browser
+    // fetches them before anyone signs in, and they hold no user data.
+    dash.get(
+        "/dashboard.webmanifest",
+        (c) => dashboardAppAssetResponse(c.req.path) ?? c.notFound(),
+    );
+    dash.get(
+        "/dashboard-sw.js",
+        (c) => dashboardAppAssetResponse(c.req.path) ?? c.notFound(),
+    );
+    dash.get(
+        "/dashboard-app/:file",
+        (c) => dashboardAppAssetResponse(c.req.path) ?? c.notFound(),
+    );
 
     // Self-hosted fonts for the page. Unauthenticated (the login card needs
     // them, and font fetches carry no bearer); the allowlist lookup is the

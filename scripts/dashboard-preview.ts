@@ -47,6 +47,7 @@ import {
     recipeFromMeal,
     DASHBOARD_CSP,
     dashboardFontResponse,
+    dashboardAppAssetResponse,
     parseModelParams,
     whatIf,
 } from "../src/dashboard.js";
@@ -750,6 +751,11 @@ const server = Bun.serve({
                     sugar_g: saved.sugar_g,
                 },
             });
+        }
+
+        if (req.method === "GET") {
+            const asset = dashboardAppAssetResponse(path);
+            if (asset) return asset;
         }
 
         if (req.method === "GET" && path.startsWith("/dashboard-fonts/"))
