@@ -656,6 +656,15 @@
             .s-fat {
                 background: var(--fat);
             }
+            .s-burn-base {
+                background: var(--cal2-c-base);
+            }
+            .s-burn-digestion {
+                background: var(--cal2-c-digestion);
+            }
+            .s-burn-workout {
+                background: var(--cal2-c-workout);
+            }
             .s-fiber {
                 background: var(--fiber);
             }
@@ -1599,6 +1608,10 @@
             }
             .chart-value.dim {
                 fill: var(--ink);
+            }
+            /* Labels on the Burn chart's pale baseline and digestion tints. */
+            .chart-value.on-tint {
+                fill: var(--ink-2);
             }
             .sec-head .legend {
                 margin-top: var(--s1);
@@ -9023,6 +9036,7 @@
                         goal_protein_g: r.goal_protein_g,
                         bmr_kcal: r.bmr_kcal,
                         active_kcal: r.active_kcal,
+                        tef_kcal: r.tef_kcal,
                         burn_kcal: r.burn_kcal,
                         balance_g: r.balance_g,
                         balance_kcal: r.balance_kcal,
@@ -9065,6 +9079,7 @@
                         goal_protein_g: null,
                         bmr_kcal: b.bmr_kcal,
                         active_kcal: b.active_kcal,
+                        tef_kcal: b.tef_kcal,
                         burn_kcal: b.burn_kcal,
                         balance_g: b.balance_g,
                         balance_kcal: b.balance_kcal,
@@ -9321,6 +9336,37 @@
                         (any
                             ? '<div class="plot" id="macro-plot"></div>'
                             : emptyMsg) +
+                        "</section>" +
+                        '<section class="rv" aria-labelledby="h-burn">' +
+                        secHead({
+                            wide: true,
+                            eyebrow: "Burn",
+                            id: "h-burn",
+                            title:
+                                (g === "day"
+                                    ? "Calories burned per day"
+                                    : "Calories burned · " +
+                                      (g === "week" ? "weekly" : "monthly") +
+                                      " average per logged day") +
+                                ' <span class="est">(estimate)</span>',
+                            note: "The other side of Macros: where the calories went. Baseline is what you burn at rest, digestion is the energy spent processing food, and workout is your watch’s active kcal.",
+                            legend:
+                                any && hasBurn()
+                                    ? legend(
+                                          burnParts().map((b) => [
+                                              LG.bar(b.cls),
+                                              b.name,
+                                          ]),
+                                      )
+                                    : "",
+                        }) +
+                        (!hasBurn()
+                            ? '<p class="empty">Add your height, birth date and sex to estimate your burn.<br>' +
+                              ADD_BODY +
+                              "</p>"
+                            : any
+                              ? '<div class="plot" id="burn-plot"></div>'
+                              : emptyMsg) +
                         "</section></div>";
                 };
 
@@ -10461,11 +10507,180 @@
                         base,
                     );
                 }
+                // Bottom to top: baseline, digestion, workout — the same
+                // order and colours as Eaten vs burned.
+                function burnParts() {
+                    return [
+                        {
+                            key: "bmr_kcal",
+                            name: baselineLabel(),
+                            cls: "cal2-legend-base",
+                            sw: "s-burn-base",
+                        },
+                        {
+                            key: "tef_kcal",
+                            name: "Digestion",
+                            cls: "cal2-legend-digestion",
+                            sw: "s-burn-digestion",
+                        },
+                        {
+                            key: "active_kcal",
+                            name: "Workout / active",
+                            cls: "cal2-legend-workout",
+                            sw: "s-burn-workout",
+                        },
+                    ];
+                }
+                function burnChart() {
+                    const host = $("burn-plot");
+                    if (!host || !host.clientWidth) return;
+                    const parts = burnParts();
+                    const rows = chartRows().filter(keepToday);
+                    const total = (r) =>
+                        parts.reduce((a, p) => a + (r[p.key] || 0), 0);
+                    const shown = rows.filter(
+                        (r) => r.calories != null && r.burn_kcal != null,
+                    );
+                    const avg = (k) =>
+                        shown.length
+                            ? shown.reduce((a, r) => a + (r[k] || 0), 0) /
+                              shown.length
+                            : 0;
+                    const c = chartSvg(
+                        host,
+                        innerWidth <= 480 ? 240 : 280,
+                        "Estimated calories burned, " +
+                            rangeText() +
+                            (gran() === "day"
+                                ? ", per day"
+                                : ", average per logged day by " + perWord()) +
+                            ", split into " +
+                            parts
+                                .map(
+                                    (p) =>
+                                        p.name.toLowerCase() +
+                                        " " +
+                                        fmt(avg(p.key)) +
+                                        " kcal",
+                                )
+                                .join(", ") +
+                            " on average. Use the arrow keys to read each " +
+                            stepWord() +
+                            ".",
+                    );
+                    const svg = c.svg;
+                    const base = c.h - PAD.b;
+                    const plotH = base - PAD.t;
+                    const maxY = tickMax(
+                        Math.max.apply(null, shown.map(total).concat([1])) *
+                            1.05,
+                        4,
+                    );
+                    const L = gutter(yLabels(maxY, 4));
+                    const plotW = c.w - L - PAD.r;
+                    const yAt = (v) => base - (v / maxY) * plotH;
+                    yAxis(svg, maxY, L, L + plotW, yAt, 4);
+                    const lay = bandLayout(rows.length, plotW);
+                    const gapPx = lay.barW >= 4 ? 2 : 0;
+                    rows.forEach(function (r, i) {
+                        // Same days as Macros: a bar only where food was
+                        // logged, so the two charts line up bar for bar.
+                        if (r.calories == null || r.burn_kcal == null) return;
+                        const x = L + lay.bw * i + (lay.bw - lay.barW) / 2;
+                        const w = lay.barW;
+                        let acc = 0;
+                        parts.forEach(function (p) {
+                            const val = r[p.key] || 0;
+                            if (val <= 0) return;
+                            const yTop = yAt(acc + val);
+                            const segH = Math.max(
+                                0,
+                                yAt(acc) - yTop - (acc > 0 ? gapPx : 0),
+                            );
+                            svg.appendChild(
+                                svgEl("path", {
+                                    d: rectPath(x, yTop, w, segH),
+                                    class:
+                                        p.cls + (r.dim ? " dim" : "") + " grow",
+                                    style: growDelay(i),
+                                }),
+                            );
+                            // Each part's kcal inside it, like Macros'
+                            // segment grams, where the bar has room.
+                            if (segH >= 16 && lay.barW >= 28)
+                                svgText(
+                                    svg,
+                                    x + w / 2,
+                                    yTop + segH / 2 + 3,
+                                    fmt(val),
+                                    "chart-value" +
+                                        (p.key === "active_kcal"
+                                            ? r.dim
+                                                ? " dim"
+                                                : ""
+                                            : " on-tint"),
+                                    "middle",
+                                );
+                            acc += val;
+                        });
+                        if (lay.barW >= 16)
+                            svgText(
+                                svg,
+                                x + w / 2,
+                                yAt(total(r)) - 5,
+                                fmt(total(r)),
+                                "lbl",
+                                "middle",
+                            );
+                    });
+                    baseline(svg, L, L + plotW, base);
+                    xAxis(svg, rows, lay, L, c.h - 8);
+                    inspect(
+                        svg,
+                        rows.map(function (r, i) {
+                            const per = r.avg ? " (avg/day)" : "";
+                            const lines =
+                                r.calories == null || r.burn_kcal == null
+                                    ? [[null, "Nothing logged", ""]]
+                                    : parts
+                                          .slice()
+                                          .reverse()
+                                          .map((p) => [
+                                              p.sw,
+                                              p.name + per,
+                                              fmt(r[p.key] || 0) + " kcal",
+                                          ])
+                                          .concat([
+                                              [
+                                                  null,
+                                                  "Total burn" + per,
+                                                  fmt(total(r)) + " kcal",
+                                              ],
+                                              [
+                                                  null,
+                                                  "Eaten" + per,
+                                                  fmt(r.calories) + " kcal",
+                                              ],
+                                          ]);
+                            if (r.avg)
+                                lines.push([null, "Logged", loggedText(r)]);
+                            const t = tipContent(r.title, lines);
+                            return {
+                                x: L + lay.bw * (i + 0.5),
+                                html: t.html,
+                                text: t.text,
+                            };
+                        }),
+                        PAD.t,
+                        base,
+                    );
+                }
                 CHARTS.trends = function () {
                     if (!barsView) calories2Chart();
                     else caloriesChart();
                     balanceChart();
                     macroChart();
+                    burnChart();
                 };
 
                 /* ================= BODY ================= */

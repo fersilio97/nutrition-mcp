@@ -349,8 +349,9 @@ describe("groupDays", () => {
         fiber_g: eaten == null ? 0 : 25,
         mealCount: eaten == null ? 0 : 3,
         goal_calories: 2000,
-        bmr_kcal: 1700,
+        bmr_kcal: 1500,
         active_kcal: 300,
+        tef_kcal: 200,
         burn_kcal: 2000,
         balance_g:
             eaten == null || inProgress
@@ -414,7 +415,11 @@ describe("groupDays", () => {
         expect(b[1]!.calories).toBeNull();
         expect(b[1]!.balance_g_sum).toBeNull();
         expect(b[1]!.burn_kcal).toBe(2000);
-        expect(b[1]!.bmr_kcal! + b[1]!.active_kcal!).toBe(b[1]!.burn_kcal!);
+        // The Burn chart stacks these three, so they must add up.
+        expect(b[1]!.tef_kcal).toBe(200);
+        expect(b[1]!.bmr_kcal! + b[1]!.tef_kcal! + b[1]!.active_kcal!).toBe(
+            b[1]!.burn_kcal!,
+        );
         // The current week: today's 500 kcal does not drag the average.
         expect(b[3]!.partial).toBe(true);
         expect(b[3]!.logged_days).toBe(6);
