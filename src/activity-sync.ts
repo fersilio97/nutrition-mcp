@@ -20,7 +20,12 @@ import {
     touchIngestToken,
 } from "./supabase.js";
 import { shiftLocalDate, todayInTz } from "./tz.js";
-import { mergeByDay, parseSampleLines } from "./health-merge.js";
+import {
+    GARMIN_MODES,
+    mergeByDay,
+    parseSampleLines,
+    type GarminMode,
+} from "./health-merge.js";
 import {
     adjustGoalsForActivity,
     checkActiveKcal,
@@ -49,7 +54,8 @@ const MAX_LOOKBACK_DAYS = 14;
 
 /**
  * The raw-samples body: `{"samples": "source|start|end|kcal\n…",
- * "lookback_days": 7}` (an array of lines is accepted too). Every day from
+ * "lookback_days": 7, "garmin_mode": "workouts"}` (an array of lines is
+ * accepted too; garmin_mode is optional, see GarminMode). Every day from
  * today back `lookback_days - 1` days that has samples is rebuilt with the
  * Health-style merge (src/health-merge.ts) and overwritten. Older days in the
  * payload are ignored: the Shortcut's "last N days" filter is a rolling window,
@@ -88,13 +94,25 @@ async function ingestSamples(
     const lookback = Number.isFinite(n)
         ? Math.min(MAX_LOOKBACK_DAYS, Math.max(1, Math.round(n)))
         : 7;
+    if (
+        body.garmin_mode !== undefined &&
+        !GARMIN_MODES.includes(body.garmin_mode as GarminMode)
+    )
+        return [
+            {
+                error: "invalid_request",
+                error_description: `garmin_mode must be one of ${GARMIN_MODES.join(", ")}.`,
+            },
+            400,
+        ];
+    const mode = (body.garmin_mode as GarminMode | undefined) ?? "workouts";
 
     const profile = await getProfile(userId);
     const tz = timezoneFromProfile(profile) ?? "UTC";
     const today = todayInTz(tz);
     const earliest = shiftLocalDate(today, -(lookback - 1));
     const { samples, rejected } = parseSampleLines(raw);
-    const merged = mergeByDay(samples, tz);
+    const merged = mergeByDay(samples, tz, mode);
     // Belt and braces for a client whose fetch window equals lookback_days:
     // the oldest day in any payload is assumed cut off by the rolling window
     // and never written, unless it is today (a window shorter than a day is
@@ -130,6 +148,7 @@ async function ingestSamples(
             ok: true,
             days: written,
             samples: samples.length,
+            garmin_mode: mode,
             rejected_lines: rejected,
             message:
                 samples.length === 0

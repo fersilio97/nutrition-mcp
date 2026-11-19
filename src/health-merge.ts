@@ -12,7 +12,9 @@
 // sample covering it wins. A lower-ranked sample counts only for the share of
 // its duration that no higher-ranked sample covers. Garmin writes a few long
 // blocks (a whole day, or before/during/after a workout) and leaves the time
-// after its last sync uncovered, so the iPhone fills exactly that gap.
+// after its last sync uncovered, so the iPhone fills exactly that gap. By
+// default Garmin's low-rate padding blocks are demoted (see GarminMode), which
+// is where this deliberately departs from Health.
 //
 // Pure: no Supabase, so it unit-tests with fixtures.
 
@@ -121,9 +123,44 @@ export interface MergedDay {
     bySource: Record<string, number>;
 }
 
+/**
+ * How a Garmin's samples rank against the phone.
+ *
+ * - `workouts` (default): Garmin wins only inside its activity blocks. Garmin
+ *   Connect pads every day with "before" and "after" blocks (and a 24 h block
+ *   on a day with no workout) at 1–10 kcal/h — the watch's estimate while it
+ *   sits off the wrist. Under Health's rule those blocks cover the whole day
+ *   and hide every iPhone sample, so a user who wears the watch only to train
+ *   loses all their walking. Here a block under GARMIN_ACTIVITY_KCAL_PER_HOUR
+ *   is filler: it is dropped on any day another source recorded, and counts
+ *   (below every source) only on a day with no other data at all.
+ * - `all_day`: Health's own rule — Garmin wins wherever it has a sample. Right
+ *   for someone who wears the watch around the clock.
+ */
+export type GarminMode = "workouts" | "all_day";
+export const GARMIN_MODES: readonly GarminMode[] = ["workouts", "all_day"];
+
+/** Observed filler blocks run 1–10.5 kcal/h and workouts 217–672 kcal/h; a
+ *  slow walk is ~150. 60 sits well clear of both. */
+export const GARMIN_ACTIVITY_KCAL_PER_HOUR = 60;
+
+const FILLER_RANK = 9;
+
+function rankOf(s: HealthSample, mode: GarminMode): number {
+    const r = sourceRank(s.source);
+    if (r !== 0 || mode === "all_day") return r;
+    const hours = (s.end.getTime() - s.start.getTime()) / 3_600_000;
+    if (hours <= 0) return r;
+    return s.kcal / hours < GARMIN_ACTIVITY_KCAL_PER_HOUR ? FILLER_RANK : r;
+}
+
 /** One total per local day (the sample's start date in `tz`), oldest first. */
-export function mergeByDay(samples: HealthSample[], tz: string): MergedDay[] {
-    const ranked = samples.map((s) => ({ ...s, rank: sourceRank(s.source) }));
+export function mergeByDay(
+    samples: HealthSample[],
+    tz: string,
+    mode: GarminMode = "workouts",
+): MergedDay[] {
+    const ranked = samples.map((s) => ({ ...s, rank: rankOf(s, mode) }));
     const higher = new Map<number, Span[]>();
     for (const r of new Set(ranked.map((s) => s.rank))) {
         higher.set(
@@ -135,8 +172,19 @@ export function mergeByDay(samples: HealthSample[], tz: string): MergedDay[] {
             ),
         );
     }
+    // A gap between iPhone samples is the phone at rest (~0 kcal), not missing
+    // data: the phone writes only while you move. So filler must not fill those
+    // gaps — it counts only on a day no other source recorded at all (phone
+    // left at home).
+    const otherDays = new Set(
+        ranked
+            .filter((s) => s.rank !== 0 && s.rank !== FILLER_RANK)
+            .map((s) => dateInTz(s.start, tz)),
+    );
     const days = new Map<string, MergedDay>();
     for (const s of ranked) {
+        if (s.rank === FILLER_RANK && otherDays.has(dateInTz(s.start, tz)))
+            continue;
         const share =
             1 -
             coveredShare(
