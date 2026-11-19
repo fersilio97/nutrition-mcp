@@ -15,6 +15,7 @@ import {
     bodyOf,
     buildDashboardPayload,
     dashboardWindow,
+    clampEnd,
     type DashboardInputs,
     type GoalPlanPatch,
 } from "./dashboard.js";
@@ -626,33 +627,31 @@ export function previewInputs(
     fx: FixtureData,
     days: number,
     today: string,
+    end?: string,
 ): DashboardInputs {
     const tz = fx.profile.timezone ?? "UTC";
-    const { endDate, weightFetchStart, fetchStart } = dashboardWindow(
-        today,
-        days,
-    );
-    const inRange = (iso: string, from: string) => {
-        const d = dateInTz(iso, tz);
-        return d >= from && d <= endDate;
-    };
+    const { fetchSpans, weightFetchSpans } = dashboardWindow(today, days, end);
+    // The same spans production fetches: a moved range plus today's own.
+    const within = (d: string, spans: [string, string][]) =>
+        spans.some(([f, t]) => d >= f && d <= t);
+    const inSpans = (iso: string, spans: [string, string][]) =>
+        within(dateInTz(iso, tz), spans);
     const sortedWeight = fx.weight
         .slice()
         .sort((a, b) => a.logged_at.localeCompare(b.logged_at));
     return {
         profile: fx.profile,
-        meals: fx.meals.filter((m) => inRange(m.logged_at, fetchStart)),
-        water: fx.water.filter((w) => inRange(w.logged_at, fetchStart)),
+        meals: fx.meals.filter((m) => inSpans(m.logged_at, fetchSpans)),
+        water: fx.water.filter((w) => inSpans(w.logged_at, fetchSpans)),
         weight: sortedWeight.filter((w) =>
-            inRange(w.logged_at, weightFetchStart),
+            inSpans(w.logged_at, weightFetchSpans),
         ),
         goals: fx.goals,
         latestWeight: sortedWeight.at(-1) ?? null,
-        activityRows: fx.activity.filter(
-            (a) => a.date >= fetchStart && a.date <= endDate,
-        ),
+        activityRows: fx.activity.filter((a) => within(a.date, fetchSpans)),
         days,
         today,
+        end,
     };
 }
 
@@ -804,12 +803,13 @@ export function previewInputsFor(
     name: ScenarioName,
     days: number,
     edits: PreviewEdits = {},
+    rawEnd?: string,
 ): DashboardInputs {
     const tz = scenarioTz(name);
     const today = todayInTz(tz);
     const fx = scenarioWithEdits(name, today, edits);
     return {
-        ...previewInputs(fx, days, today),
+        ...previewInputs(fx, days, today, clampEnd(rawEnd, today)),
         dayOverrides: edits.dayOverrides,
         activityConnected: name !== "onboarding" && name !== "empty",
     };
@@ -820,6 +820,7 @@ export function previewPayload(
     name: ScenarioName,
     days: number,
     edits: PreviewEdits = {},
+    end?: string,
 ) {
-    return buildDashboardPayload(previewInputsFor(name, days, edits));
+    return buildDashboardPayload(previewInputsFor(name, days, edits, end));
 }

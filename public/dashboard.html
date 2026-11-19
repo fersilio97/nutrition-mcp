@@ -1173,6 +1173,43 @@
                 color: var(--accent-text);
                 line-height: 1.3;
             }
+            /* Earlier / date / later under the range label (Trends, Meals). */
+            .range-title {
+                display: grid;
+                gap: var(--s3);
+                min-width: 0;
+            }
+            .range-nav {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: var(--s2);
+            }
+            .range-step {
+                border: 1px solid var(--line);
+                background: var(--surface-2);
+                color: var(--ink);
+            }
+            .range-step:disabled {
+                opacity: 0.4;
+                cursor: default;
+            }
+            .range-step:disabled:hover {
+                background: var(--surface-2);
+            }
+            .range-pick .input {
+                width: auto;
+                min-width: 9.5rem;
+                height: 44px;
+                border-radius: var(--r-pill);
+                border-color: var(--line);
+                background: var(--surface-2);
+                font-family: var(--font-mono);
+                font-variant-numeric: tabular-nums;
+            }
+            .range-today {
+                min-height: 44px;
+            }
             /* Calorie goal: the mode switch, and the working under the form. */
             .goal-seg {
                 margin: var(--s2) 0 var(--s3);
@@ -4540,6 +4577,11 @@
                 let loadError = false;
                 let active = "today";
                 let range = 30;
+                // The range's last day once the arrows, the date picker or
+                // the arrow keys moved it back; null = today. Not stored: the
+                // page always opens on today.
+                let rangeEnd = null;
+                let pickTimer = 0;
                 // Content is rebuilt when data changes; charts also redraw
                 // on resize. Only the visible panel is ever painted.
                 const contentDirty = {};
@@ -4604,6 +4646,25 @@
                     });
                 const dayDiff = (a, b) =>
                     Math.round((parseDay(b) - parseDay(a)) / 864e5);
+                // YYYY-MM-DD n calendar days from iso (local dates, so a DST
+                // change never skips or repeats a day).
+                function shiftDay(iso, n) {
+                    const d = parseDay(iso);
+                    d.setDate(d.getDate() + n);
+                    return (
+                        d.getFullYear() +
+                        "-" +
+                        String(d.getMonth() + 1).padStart(2, "0") +
+                        "-" +
+                        String(d.getDate()).padStart(2, "0")
+                    );
+                }
+                // The plotted range's last day (today unless moved back), and
+                // the Today tab's own rows, which never move with the range.
+                const rEnd = () => data.rangeEnd || data.endDate;
+                const recent = () => data.recentDays || data.daily;
+                // How far back the arrows go (MAX_LOOKBACK_DAYS on the server).
+                const LOOKBACK_DAYS = 3650;
                 function esc(s) {
                     return String(s == null ? "" : s).replace(
                         /[&<>"']/g,
@@ -5180,30 +5241,108 @@
                 });
 
                 /* ---------- range control (Trends + Meals) ---------- */
+                const CHEV = (d) =>
+                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' +
+                    d +
+                    '"/></svg>';
+                const rangeName = () =>
+                    RANGES.filter((r) => r[0] === range)[0][1];
+                // Back to today, a step of the range's own length (a week on
+                // 7 days, a month on 30, a year on 1 year), or a picked day.
+                // A moved range is N complete days ending on its day; today's
+                // is the N days before today plus today. So a day from
+                // yesterday on is today's range, and the page before it ends
+                // on today − N − 1 — the pages tile with no day twice.
+                function setRangeEnd(v) {
+                    if (!data) return;
+                    if (v && v >= shiftDay(data.endDate, -1)) v = null;
+                    if (v && v < shiftDay(data.endDate, -LOOKBACK_DAYS))
+                        v = shiftDay(data.endDate, -LOOKBACK_DAYS);
+                    if (v === rangeEnd) return;
+                    rangeEnd = v;
+                    refresh();
+                }
+                function moveRange(dir) {
+                    if (!data) return;
+                    if (dir > 0 && !rangeEnd) return;
+                    setRangeEnd(
+                        rangeEnd
+                            ? shiftDay(rangeEnd, dir * range)
+                            : shiftDay(data.endDate, -1 - range),
+                    );
+                }
+                function rangeNavHtml() {
+                    const today = data.endDate;
+                    const end = rangeEnd || today;
+                    const n = rangeName();
+                    return (
+                        '<div class="range-nav" role="group" aria-label="Move the date range">' +
+                        '<button type="button" class="icon-btn range-step" data-step="-1" aria-label="Earlier ' +
+                        n +
+                        '" title="Earlier ' +
+                        n +
+                        ' (←)">' +
+                        CHEV("M15 6l-6 6 6 6") +
+                        '</button><label class="range-pick"><span class="sr-only">Range ends on</span><input class="input" type="date" data-range-end value="' +
+                        end +
+                        '" min="' +
+                        shiftDay(today, -LOOKBACK_DAYS) +
+                        '" max="' +
+                        today +
+                        '" /></label><button type="button" class="icon-btn range-step" data-step="1" aria-label="Later ' +
+                        n +
+                        '" title="Later ' +
+                        n +
+                        ' (→)"' +
+                        (rangeEnd ? "" : " disabled") +
+                        ">" +
+                        CHEV("M9 6l6 6-6 6") +
+                        "</button>" +
+                        (rangeEnd
+                            ? '<button type="button" class="link-btn range-today" data-range-today>Today <span class="chev" aria-hidden="true">›</span></button>'
+                            : "") +
+                        "</div>"
+                    );
+                }
                 function renderRangeHeads() {
+                    // From the page's own state, not the last payload, so the
+                    // dates change the moment an arrow is pressed.
+                    const end = data ? rangeEnd || data.endDate : null;
                     const label = data
-                        ? esc(shortDay(data.startDate)) +
-                          " – " +
-                          esc(shortDay(data.endDate)) +
-                          "<small>" +
-                          esc(
-                              RANGES.filter((r) => r[0] === range)[0][1] +
-                                  " · " +
-                                  data.timezone,
+                        ? esc(
+                              shortDay(
+                                  shiftDay(end, rangeEnd ? 1 - range : -range),
+                              ),
                           ) +
+                          " – " +
+                          esc(shortDay(end)) +
+                          "<small>" +
+                          esc(rangeName() + " · " + data.timezone) +
                           "</small>"
                         : "&nbsp;<small>&nbsp;</small>";
-                    // Keep keyboard focus on a segment across the rebuild.
+                    // Keep keyboard focus on a segment, an arrow or the date
+                    // field across the rebuild.
                     const fe = document.activeElement;
                     const focusDays =
                         fe && fe.closest && fe.closest(".seg") ? range : null;
+                    const focusStep =
+                        fe && fe.dataset && fe.dataset.step
+                            ? fe.dataset.step
+                            : null;
+                    const focusPick = !!(
+                        fe &&
+                        fe.matches &&
+                        fe.matches("[data-range-end]")
+                    );
                     document
                         .querySelectorAll("[data-range-head]")
                         .forEach(function (h) {
                             h.innerHTML =
-                                '<p class="range-label">' +
+                                '<div class="range-title"><p class="range-label" aria-live="polite">' +
                                 label +
-                                '</p><div class="seg" role="group" aria-label="Date range"' +
+                                "</p>" +
+                                (data ? rangeNavHtml() : "") +
+                                '</div><div class="seg" role="group" aria-label="Date range"' +
                                 (loading ? ' aria-disabled="true"' : "") +
                                 ">" +
                                 RANGES.map(function (r) {
@@ -5225,7 +5364,7 @@
                                 // One Today switch for every per-day chart
                                 // on Trends; Meals shares this head but has
                                 // no running-day column to hide.
-                                (h.closest("#panel-trends")
+                                (h.closest("#panel-trends") && !rangeEnd
                                     ? chartPref(
                                           "calories-today",
                                           "Today",
@@ -5247,7 +5386,66 @@
                         );
                         if (b) b.focus();
                     }
+                    if (focusStep || focusPick) {
+                        const panel = "#panel-" + active + " ";
+                        const want = document.querySelector(
+                            panel +
+                                (focusPick
+                                    ? "[data-range-end]"
+                                    : '[data-step="' + focusStep + '"]'),
+                        );
+                        // "Later" turns off on reaching today: Earlier then.
+                        const el =
+                            want && !want.disabled
+                                ? want
+                                : document.querySelector(
+                                      panel + '[data-step="-1"]',
+                                  );
+                        if (el) el.focus();
+                    }
                 }
+                document.addEventListener("change", function (ev) {
+                    const i =
+                        ev.target.matches &&
+                        ev.target.matches("[data-range-end]")
+                            ? ev.target
+                            : null;
+                    if (!i || !data) return;
+                    // Typing a date fires change per segment; wait for a
+                    // pause so a half-typed year does not fetch.
+                    clearTimeout(pickTimer);
+                    pickTimer = setTimeout(function () {
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(i.value))
+                            setRangeEnd(i.value);
+                    }, 450);
+                });
+                // The arrow keys step the range on Trends and Meals, except
+                // where they already mean something (tabs, charts, fields).
+                document.addEventListener("keydown", function (ev) {
+                    if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight")
+                        return;
+                    if (
+                        ev.defaultPrevented ||
+                        ev.altKey ||
+                        ev.ctrlKey ||
+                        ev.metaKey ||
+                        ev.shiftKey
+                    )
+                        return;
+                    if (!data || (active !== "trends" && active !== "meals"))
+                        return;
+                    const t = ev.target;
+                    if (
+                        t &&
+                        t.closest &&
+                        t.closest(
+                            'input, select, textarea, [contenteditable], [role="tablist"], svg, .seg, dialog',
+                        )
+                    )
+                        return;
+                    ev.preventDefault();
+                    moveRange(ev.key === "ArrowLeft" ? -1 : 1);
+                });
                 document.addEventListener("click", function (ev) {
                     const prefButton =
                         ev.target.closest &&
@@ -5278,6 +5476,19 @@
                         else if (key.startsWith("macro-")) macroChart();
                         else if (!barsView) calories2Chart();
                         else caloriesChart();
+                        return;
+                    }
+                    const step =
+                        ev.target.closest && ev.target.closest("[data-step]");
+                    if (step) {
+                        if (!step.disabled) moveRange(+step.dataset.step);
+                        return;
+                    }
+                    if (
+                        ev.target.closest &&
+                        ev.target.closest("[data-range-today]")
+                    ) {
+                        setRangeEnd(null);
                         return;
                     }
                     const b =
@@ -6226,7 +6437,7 @@
                     );
                 }
                 function todayMeals() {
-                    return data.meals
+                    return (data.todayMeals || data.meals)
                         .filter(function (m) {
                             try {
                                 return localDate(m.logged_at) === data.endDate;
@@ -6540,7 +6751,7 @@
                 function goalReadoutHtml() {
                     const p = data.goalPlan;
                     if (!p || p.mode === "fixed") return "";
-                    const t = data.daily[data.daily.length - 1];
+                    const t = recent()[recent().length - 1];
                     const u = data.weightUnit;
                     let h = '<div class="plan-readout">';
                     if (p.goal_kcal != null) {
@@ -7427,11 +7638,11 @@
                 });
 
                 RENDER.today = function () {
-                    const t = data.daily[data.daily.length - 1];
+                    const t = recent()[recent().length - 1];
                     const g = data.goals;
                     const meals = todayMeals();
                     const eaten = t.calories || 0;
-                    const last7 = data.daily.slice(-7);
+                    const last7 = recent().slice(-7);
                     $("today-body").innerHTML =
                         installCardHtml() +
                         setupCardHtml() +
@@ -7745,7 +7956,7 @@
                     const host = $("strip-plot");
                     if (!host || !host.clientWidth) return;
                     const mode = weekMode();
-                    const rows = data.daily.slice(-7).map(dayRow);
+                    const rows = recent().slice(-7).map(dayRow);
                     const logged = rows.filter((r) => r.mealCount > 0).length;
                     const over = rows.filter(function (r) {
                         const ref = weekRef(r, mode);
@@ -8647,11 +8858,9 @@
                     // it — like the Today tab's last7. Not estimateVsScale:
                     // that is the 6-week calibration window, which put a
                     // 6-week scale change next to a 6-day estimate.
-                    const inRange = (data.weights || [])
+                    const inRange = (data.rangeWeights || data.weights || [])
                         .filter(
-                            (w) =>
-                                w.date >= data.startDate &&
-                                w.date <= data.endDate,
+                            (w) => w.date >= data.startDate && w.date <= rEnd(),
                         )
                         .sort((a, b) => a.logged_at.localeCompare(b.logged_at));
                     const wFirst = inRange[0],
@@ -9307,7 +9516,7 @@
                             : shortDay(r.start);
                     if (g === "month") {
                         const d = parseDay(r.start);
-                        const yr = parseDay(data.endDate).getFullYear();
+                        const yr = parseDay(rEnd()).getFullYear();
                         return (
                             d.toLocaleDateString(undefined, {
                                 month: "short",
@@ -9349,11 +9558,7 @@
                     );
                 }
                 function rangeText() {
-                    return (
-                        shortDay(data.startDate) +
-                        " to " +
-                        shortDay(data.endDate)
-                    );
+                    return shortDay(data.startDate) + " to " + shortDay(rEnd());
                 }
                 const stepWord = () => (gran() === "day" ? "day" : perWord());
 
@@ -13046,9 +13251,12 @@
                     else sub.textContent = "Loading…";
                 }
                 function fetchData() {
-                    return fetch("/api/dashboard/data?days=" + range, {
-                        headers: { Authorization: "Bearer " + token },
-                    }).then(function (r) {
+                    return fetch(
+                        "/api/dashboard/data?days=" +
+                            range +
+                            (rangeEnd ? "&end=" + rangeEnd : ""),
+                        { headers: { Authorization: "Bearer " + token } },
+                    ).then(function (r) {
                         if (r.status === 401) {
                             signOut();
                             throw new Error("unauthorized");

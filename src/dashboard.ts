@@ -204,54 +204,142 @@ function clampDays(raw: string | undefined): number {
     return Math.min(MAX_DAYS, Math.max(MIN_DAYS, n));
 }
 
+// How far back the Trends arrows and date picker may move the range's last
+// day. Each request still fetches only the range plus today's own windows
+// (dashboardWindow's two spans), never everything in between, so the bound
+// is about plausibility, not cost.
+export const MAX_LOOKBACK_DAYS = 3650;
+
+/** `?end=` as a local date, or undefined for "today": anything malformed,
+ *  in the future or past the lookback reads as today. */
+export function clampEnd(
+    raw: string | undefined,
+    today: string,
+): string | undefined {
+    if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return undefined;
+    // Round-trip so "2026-02-30" is refused rather than rolled into March.
+    const d = new Date(raw + "T00:00:00Z");
+    if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== raw)
+        return undefined;
+    if (raw >= today) return undefined;
+    if (raw < shiftLocalDate(today, -MAX_LOOKBACK_DAYS)) return undefined;
+    return raw;
+}
+
+type Span = [from: string, to: string];
+
+/** Sorted, with spans that overlap or touch merged into one. */
+function mergeSpans(spans: Span[]): Span[] {
+    const sorted = spans.slice().sort((a, b) => a[0].localeCompare(b[0]));
+    const out: Span[] = [];
+    for (const s of sorted) {
+        const last = out.at(-1);
+        if (last && s[0] <= shiftLocalDate(last[1], 1)) {
+            if (s[1] > last[1]) last[1] = s[1];
+        } else out.push([s[0], s[1]]);
+    }
+    return out;
+}
+
 /**
- * The local-date windows one request covers: the charts' [startDate, endDate],
- * the weight tracker's longer [weightStart, endDate], and [fetchStart,
- * endDate] for meals/water/activity — the chart range widened to cover the
- * Today tab's fixed 7-day figures (`last7`), so those never depend on the
+ * The local-date windows one request covers: the charts' [startDate,
+ * rangeEnd], the weight tracker's longer [weightStart, endDate], and the
+ * spans fetched for meals/water/activity — the chart range widened to cover
+ * the Today tab's fixed 7-day figures (`last7`), so those never depend on the
  * range the Trends tab shows. One helper so the fetch, the payload and the
  * dev preview's fixture filter cannot disagree.
+ *
+ * `end` moves only the plotted range (the Trends arrows and date picker).
+ * `endDate` is always today: the calibration, the goal, `last7`, today's
+ * meals and water and the weight tracker are computed exactly as for an
+ * unshifted request, from a second span ending today. When the two spans
+ * are far apart they are fetched separately, so going back two years does
+ * not scan the two years in between.
  */
 export function dashboardWindow(
     today: string,
     days: number,
+    end?: string,
 ): {
     startDate: string;
+    rangeEnd: string;
     endDate: string;
     weightStart: string;
     fetchStart: string;
     weightFetchStart: string;
+    fetchSpans: Span[];
+    weightFetchSpans: Span[];
 } {
-    // N complete days plus today: "7 days" on Trends is the 7 finished days
-    // before today — the same days as the Today tab's `last7` — and today
-    // rides along as the running column the Today switch shows or hides.
-    // Starting at today − (N − 1) left a 7-day range one complete day short,
-    // so its Net est. change disagreed with the Today tab's for no reason.
-    const startDate = shiftLocalDate(today, -days);
+    const rangeEnd = end && end < today ? end : today;
+    // Today's range is N complete days plus today: "7 days" on Trends is the 7
+    // finished days before today — the same days as the Today tab's `last7` —
+    // and today rides along as the running column the Today switch shows or
+    // hides. Starting at today − (N − 1) left a 7-day range one complete day
+    // short, so its Net est. change disagreed with the Today tab's for no
+    // reason.
+    // A range moved back has no running day, so it is exactly N complete
+    // days ending on rangeEnd. The page steps it to tile with today's
+    // [today − N, today − 1]: the page before today ends on today − N − 1.
+    const startDate =
+        rangeEnd === today
+            ? shiftLocalDate(today, -days)
+            : shiftLocalDate(rangeEnd, -(days - 1));
+    // The range as it would be unshifted: today's own windows are built from
+    // it, so moving the range cannot change a figure on the Today tab.
+    const homeStart = shiftLocalDate(today, -days);
     const last7Start = shiftLocalDate(today, -LAST7_DAYS);
+    const trackerStart = shiftLocalDate(today, -(WEIGHT_WINDOW_DAYS - 1));
+    // Also the calibration days before the range's first day: every plotted
+    // day of the metabolism chart is calibrated from the days before it, and
+    // the latest of those windows is the Body tab's figure, so neither
+    // depends on the chart range picked.
+    const rangeSpan: Span = [
+        shiftLocalDate(startDate, -MAX_WINDOW_DAYS),
+        rangeEnd,
+    ];
+    const fetchSpans = mergeSpans([
+        rangeSpan,
+        [
+            [
+                homeStart,
+                last7Start,
+                shiftLocalDate(homeStart, -MAX_WINDOW_DAYS),
+            ].sort()[0]!,
+            today,
+        ],
+    ]);
+    // Weigh-ins for the same calibration windows, and the weight tracker.
+    const weightFetchSpans = mergeSpans([
+        rangeSpan,
+        [
+            [
+                homeStart,
+                trackerStart,
+                shiftLocalDate(homeStart, -MAX_WINDOW_DAYS),
+            ].sort()[0]!,
+            today,
+        ],
+    ]);
     return {
         startDate,
+        rangeEnd,
         endDate: today,
-        weightStart: [
-            startDate,
-            shiftLocalDate(today, -(WEIGHT_WINDOW_DAYS - 1)),
-        ].sort()[0]!,
-        // Also the 28 calibration days before the range's first day: every
-        // plotted day of the metabolism chart is calibrated from the 28 days
-        // before it, and the latest of those windows is the Body tab's
-        // figure, so neither depends on the chart range picked.
-        fetchStart: [
-            startDate,
-            last7Start,
-            shiftLocalDate(startDate, -MAX_WINDOW_DAYS),
-        ].sort()[0]!,
-        // Weigh-ins for the same calibration windows, and the weight tracker.
-        weightFetchStart: [
-            startDate,
-            shiftLocalDate(today, -(WEIGHT_WINDOW_DAYS - 1)),
-            shiftLocalDate(startDate, -MAX_WINDOW_DAYS),
-        ].sort()[0]!,
+        weightStart: [homeStart, trackerStart].sort()[0]!,
+        fetchStart: fetchSpans[0]![0],
+        weightFetchStart: weightFetchSpans[0]![0],
+        fetchSpans,
+        weightFetchSpans,
     };
+}
+
+/** Run `fetch` once per span and concatenate. The spans are disjoint whole
+ *  local days, so no row comes back twice. */
+async function fetchSpans<T>(
+    spans: Span[],
+    fetch: (from: string, to: string) => Promise<T[]>,
+): Promise<T[]> {
+    const parts = await Promise.all(spans.map(([f, t]) => fetch(f, t)));
+    return parts.flat();
 }
 
 /** What dashboardPayload fetches, already filtered to dashboardWindow. */
@@ -271,6 +359,9 @@ export interface DashboardInputs {
     days: number;
     /** The user's local today, YYYY-MM-DD. */
     today: string;
+    /** The plotted range's last day, before today; omitted = today (see
+     *  dashboardWindow). Already validated by clampEnd. */
+    end?: string;
     /** Whether an activity-sync token exists (setup checklist). Optional:
      *  absent falls back to "any activity row in the window". */
     activityConnected?: boolean;
@@ -281,41 +372,58 @@ export interface DashboardInputs {
  * so it is testable without a bearer token (src/mcp.test.ts drives it through
  * the shared Supabase mock).
  */
-export async function dashboardPayload(userId: string, days: number) {
-    return buildDashboardPayload(await loadDashboardInputs(userId, days));
+export async function dashboardPayload(
+    userId: string,
+    days: number,
+    end?: string,
+) {
+    return buildDashboardPayload(await loadDashboardInputs(userId, days, end));
 }
 
 /** Fetch everything one dashboard request needs (see dashboardWindow). */
 export async function loadDashboardInputs(
     userId: string,
     days: number,
+    rawEnd?: string,
 ): Promise<DashboardInputs> {
     const profile = await getProfile(userId);
     const tz = timezoneFromProfile(profile) ?? "UTC";
     const today = todayInTz(tz);
-    const { endDate, weightFetchStart, fetchStart } = dashboardWindow(
+    const end = clampEnd(rawEnd, today);
+    const { fetchSpans: spans, weightFetchSpans } = dashboardWindow(
         today,
         days,
+        end,
     );
 
     const [meals, water, weight, goals, latestWeight, activityRows] =
         await Promise.all([
-            getMealsInRange(userId, fetchStart, endDate, tz),
-            getWaterInRange(userId, fetchStart, endDate, tz),
-            getWeightInRange(userId, weightFetchStart, endDate, tz),
+            fetchSpans(spans, (f, t) => getMealsInRange(userId, f, t, tz)),
+            fetchSpans(spans, (f, t) => getWaterInRange(userId, f, t, tz)),
+            fetchSpans(weightFetchSpans, (f, t) =>
+                getWeightInRange(userId, f, t, tz),
+            ),
             getNutritionGoals(userId),
             getLatestWeight(userId),
             // Optional enrichment: a missing activity table must not take
             // the whole dashboard down with it.
-            getActivityInRange(userId, fetchStart, endDate).catch(() => []),
+            fetchSpans(spans, (f, t) => getActivityInRange(userId, f, t)).catch(
+                () => [],
+            ),
         ]);
 
-    const [dayOverrides, sync] = await Promise.all([
-        getCalibrationDayOverrides(userId, fetchStart, endDate).catch(
-            () => ({}),
+    const [overrideParts, sync] = await Promise.all([
+        Promise.all(
+            spans.map(([f, t]) =>
+                getCalibrationDayOverrides(userId, f, t).catch(() => ({})),
+            ),
         ),
         getIngestTokenStatus(userId).catch(() => null),
     ]);
+    const dayOverrides: Record<string, boolean> = Object.assign(
+        {},
+        ...overrideParts,
+    );
 
     return {
         profile,
@@ -328,6 +436,7 @@ export async function loadDashboardInputs(
         dayOverrides,
         days,
         today,
+        end,
         activityConnected: sync != null,
     };
 }
@@ -349,15 +458,15 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         dayOverrides = {},
         days,
         today,
+        end,
         activityConnected,
     } = inputs;
     const model = inputs.model ?? modelFromProfile(profile);
     const tz = timezoneFromProfile(profile) ?? "UTC";
     const weightUnit = preferredWeightUnitFromProfile(profile) ?? "kg";
-    const { startDate, endDate, weightStart, fetchStart } = dashboardWindow(
-        today,
-        days,
-    );
+    const { startDate, rangeEnd, endDate, weightStart, fetchStart } =
+        dashboardWindow(today, days, end);
+    const inRangeDay = (d: string) => d >= startDate && d <= rangeEnd;
 
     // The same bucketing the MCP trend tools use, so a figure here and a
     // figure the assistant quotes cannot disagree. Bucketed from fetchStart
@@ -426,7 +535,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
     const metabolism = metabolismSeries(
         energyDays,
         allWeighIns,
-        allRows.filter((r) => r.date >= startDate).map((r) => r.date),
+        allRows.filter((r) => inRangeDay(r.date)).map((r) => r.date),
     );
     if (calibration.applied && calibration.implied_kcal_per_day != null) {
         for (const row of allRows) {
@@ -468,17 +577,31 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
                 row.balance_g = Math.round(
                     row.balance_kcal / model.kcalPerGram,
                 );
-    const dayRows = allRows.filter((r) => r.date >= startDate);
-    const inRange = (iso: string) => {
-        const d = dateInTz(iso, tz);
-        return d >= startDate && d <= endDate;
-    };
+    const dayRows = allRows.filter((r) => inRangeDay(r.date));
+    const inRange = (iso: string) => inRangeDay(dateInTz(iso, tz));
+    const mealView = (m: Meal) => ({
+        id: m.id,
+        logged_at: m.logged_at,
+        meal_type: m.meal_type,
+        description: m.description,
+        calories: m.calories,
+        protein_g: m.protein_g,
+        carbs_g: m.carbs_g,
+        fat_g: m.fat_g,
+        fiber_g: m.fiber_g,
+        sugar_g: m.sugar_g,
+        sodium_mg: m.sodium_mg ?? null,
+        source: m.source ?? null,
+    });
 
     return {
         timezone: tz,
         weightUnit,
         startDate,
         endDate,
+        // The plotted range's last day: endDate (today) unless the Trends
+        // arrows moved the range back. Everything else here stays on today.
+        rangeEnd,
         days,
         calibration,
         // Everything the "How this is calculated" panel shows: the rules,
@@ -611,6 +734,11 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         // Built field by field (dashboard-stats.ts), so the bucket's
         // mealTypes Set — which JSON.stringify renders as {} — never ships.
         daily: dayRows,
+        // The Today tab's own rows (today and the 7 days before it), which
+        // do not move with the range: `daily` above does.
+        recentDays: allRows.filter(
+            (r) => r.date >= shiftLocalDate(endDate, -LAST7_DAYS),
+        ),
         // The calibration window (28 days ending yesterday) as the
         // Estimate-vs-reality card shows it: the same days, trend and offset
         // as `calibration`, so the card and the Body tab cannot disagree.
@@ -636,25 +764,26 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
                 logged_at: w.logged_at,
                 weight_g: w.weight_g,
             })),
+        // The range's weigh-ins for the Trends scale tile, which `weights`
+        // (the tracker's window, on today) misses once the range moves back.
+        rangeWeights: weight
+            .filter((w) => inRangeDay(dateInTz(w.logged_at, tz)))
+            .map((w) => ({
+                date: dateInTz(w.logged_at, tz),
+                logged_at: w.logged_at,
+                weight_g: w.weight_g,
+            })),
         // Only the range's meals: the fetch reaches back further for last7.
         meals: meals
             .filter((m) => inRange(m.logged_at))
             .sort((a, b) => b.logged_at.localeCompare(a.logged_at))
             .slice(0, 50)
-            .map((m) => ({
-                id: m.id,
-                logged_at: m.logged_at,
-                meal_type: m.meal_type,
-                description: m.description,
-                calories: m.calories,
-                protein_g: m.protein_g,
-                carbs_g: m.carbs_g,
-                fat_g: m.fat_g,
-                fiber_g: m.fiber_g,
-                sugar_g: m.sugar_g,
-                sodium_mg: m.sodium_mg ?? null,
-                source: m.source ?? null,
-            })),
+            .map(mealView),
+        // Today's meals for the Today tab, whichever range is shown.
+        todayMeals: meals
+            .filter((m) => dateInTz(m.logged_at, tz) === endDate)
+            .sort((a, b) => b.logged_at.localeCompare(a.logged_at))
+            .map(mealView),
     };
 }
 
@@ -2065,7 +2194,11 @@ export function createDashboardRouter(): Hono {
     dash.get("/api/dashboard/data", authenticateBearer, async (c) => {
         const userId = c.get("userId") as string;
         return c.json(
-            await dashboardPayload(userId, clampDays(c.req.query("days"))),
+            await dashboardPayload(
+                userId,
+                clampDays(c.req.query("days")),
+                c.req.query("end"),
+            ),
         );
     });
 

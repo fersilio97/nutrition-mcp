@@ -252,7 +252,14 @@ const server = Bun.serve({
             const days = Number.isFinite(n)
                 ? Math.min(365, Math.max(1, n))
                 : 30;
-            return json(previewPayload(state.scenario, days, edits()));
+            return json(
+                previewPayload(
+                    state.scenario,
+                    days,
+                    edits(),
+                    url.searchParams.get("end") ?? undefined,
+                ),
+            );
         }
 
         if (req.method === "POST" && path === "/api/dashboard/body") {
