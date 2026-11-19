@@ -296,11 +296,14 @@ export interface MetabolismPoint {
 }
 
 /** One point per date: the formula BMR next to the calibrated baseline the
- *  WINDOW_DAYS before it imply. The last point is exactly the Body tab figure. */
+ *  `params.windowDays` before it imply. Takes the same params as
+ *  buildCalibration, so the last point is exactly the Body tab figure even
+ *  when the user has changed their trend lookback or kcal per gram. */
 export function metabolismSeries(
     days: EnergyDay[],
     weighIns: WeighIn[],
     dates: string[],
+    params: ModelParams = DEFAULT_PARAMS,
 ): MetabolismPoint[] {
     const bmrOn = new Map(days.map((d) => [d.date, d.bmr_kcal]));
     return dates.map((date) => {
@@ -308,8 +311,9 @@ export function metabolismSeries(
         const w = energyWindow(
             days,
             weighIns,
-            shiftDate(date, -WINDOW_DAYS),
+            shiftDate(date, -params.windowDays),
             shiftDate(date, -1),
+            params,
         );
         const cal =
             w.status === "ok" && formula != null

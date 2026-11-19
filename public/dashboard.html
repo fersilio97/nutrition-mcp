@@ -3272,6 +3272,16 @@
             }
 
             /* ================= Body ================= */
+            /* The two calibration cards: stacked on a phone, side by side
+               from 1024px (the scale check beside the metabolism chart). */
+            .calib-cols {
+                display: grid;
+                gap: var(--gap-section) clamp(2rem, 4vw, 3.5rem);
+                align-items: start;
+            }
+            .calib-cols > * {
+                min-width: 0;
+            }
             .body-grid {
                 display: grid;
                 gap: var(--gap-section);
@@ -3290,6 +3300,7 @@
                         "panel chart"
                         "goal goal"
                         "details details"
+                        "calib calib"
                         "lab lab";
                     column-gap: clamp(2rem, 4vw, 3.5rem);
                     align-items: start;
@@ -3308,6 +3319,12 @@
                 }
                 .body-grid > .lab-sec {
                     grid-area: lab;
+                }
+                .body-grid > .calib-sec {
+                    grid-area: calib;
+                }
+                .calib-cols {
+                    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
                 }
                 /* Inside a full-width box: what you set on the left, what it
                    works out to on the right. The DOM order is the phone's
@@ -7928,11 +7945,23 @@
                         .reverse()
                         .find((p) => p.data_kcal != null);
                     const head = secHead({
-                        wide: true,
-                        eyebrow: "Calibration",
+                        eyebrow: "Baseline burn",
                         id: "h-met",
                         title: 'Resting metabolism <span class="est">(estimate)</span>',
-                        note: "Your baseline burn without exercise: the Mifflin-St Jeor formula next to what your meals and weight trend imply, each day calibrated from the days before it (your trend lookback, 42 by default). Watch activity and digestion are added on top every day.",
+                        aside: points.length
+                            ? '<span class="aside">' +
+                              esc(
+                                  spanLabel(
+                                      points[0].date,
+                                      points[points.length - 1].date,
+                                  ),
+                              ) +
+                              "</span>"
+                            : "",
+                        note:
+                            "Your baseline burn without exercise: the Mifflin-St Jeor formula next to what your meals and weight trend imply, over up to the last 90 days. Each point is worked out from the " +
+                            lookbackDays() +
+                            " days before it, so the line is smooth by design: a drift of 100+ kcal over several weeks means something, a small wiggle does not. Watch activity and digestion are added on top every day.",
                         legend: legend([
                             [
                                 '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="met-est"/></svg>',
@@ -7947,7 +7976,7 @@
                     if (!hasBurn())
                         return (
                             head +
-                            '<p class="empty">Add your height, birth date and sex under Body › Body details to estimate this.<br>' +
+                            '<p class="empty">Add your height, birth date and sex in Body details to estimate this.<br>' +
                             ADD_BODY +
                             "</p>"
                         );
@@ -8736,20 +8765,61 @@
                             );
                     return '<div class="strip four rv">' + html + "</div>";
                 }
+                // The user's trend lookback: the window both calibration
+                // cards use, whatever the Trends range (src/calibration.ts).
+                function lookbackDays() {
+                    return (
+                        (data.calibration && data.calibration.window_days) || 42
+                    );
+                }
+                // Both cards describe the user's own burn model, not a chosen
+                // period, so they sit on Body beside the calibrated baseline
+                // and ignore the Trends range: under ~3 weeks, water and
+                // glycogen swings on the scale outweigh the energy signal.
+                function calibrationSecHtml() {
+                    return (
+                        '<section class="calib-sec rv" aria-labelledby="h-calib">' +
+                        secHead({
+                            wide: true,
+                            eyebrow: "Calibration",
+                            id: "h-calib",
+                            title: "Your estimate vs your scale",
+                            note:
+                                "Both cards use a fixed window, your trend lookback of " +
+                                lookbackDays() +
+                                " days, not a 7- or 30-day range: over a shorter stretch, weigh-ins swing with water and stored carbs more than with fat, so the comparison would be mostly noise.",
+                        }) +
+                        '<div class="calib-cols"><div class="calib-card">' +
+                        evsHtml() +
+                        '</div><div class="calib-card">' +
+                        metabolismHtml() +
+                        "</div></div></section>"
+                    );
+                }
                 function evsHtml() {
                     const e = data.estimateVsScale;
                     const unit = data.weightUnit;
                     const head = secHead({
-                        wide: true,
-                        eyebrow: "Calibration",
+                        eyebrow: "Scale check",
                         id: "h-evs",
                         title: 'Estimate vs reality <span class="est">(estimate)</span>',
-                        note: "What the estimate predicted from eating vs estimated burn, next to what your weight trend did (a line through all your weigh-ins, so one watery morning does not swing it) over the last 6 weeks. Only days that count are used — see “Count this day in analysis” on the Meals tab.",
+                        aside:
+                            e && e.first_date && e.last_date
+                                ? '<span class="aside">' +
+                                  esc(spanLabel(e.first_date, e.last_date)) +
+                                  "</span>"
+                                : "",
+                        note:
+                            "What your eating and estimated burn predicted your weight would do, next to what your weight trend (a line through all your weigh-ins) actually did over the last " +
+                            lookbackDays() +
+                            " days. Only days that count are used — see “Count this day in analysis” on the Meals tab.",
                     });
                     if (!e || e.status === "no_weighins")
                         return (
                             head +
-                            '<p class="empty">Needs weigh-ins on different days in the last 6 weeks — ask Claude to log a weigh-in.</p>'
+                            '<p class="empty">Needs weigh-ins on different days in the last ' +
+                            lookbackDays() +
+                            " days — ask Claude to log a weigh-in.</p>"
                         );
                     const bars = [];
                     if (e.est_logged_g != null)
@@ -8827,7 +8897,9 @@
                                     ? "Calibration needs counted days between weigh-ins (2+ entries and at least half your typical day, or marked on the Meals tab)."
                                     : e.quality === "too_few_days"
                                       ? "Calibration needs 3+ weeks between first and last weigh-in, with 70% of those days counted."
-                                      : "Calibration needs weigh-ins on at least 4 different days in the last 42 days.";
+                                      : "Calibration needs weigh-ins on at least 4 different days in the last " +
+                                        lookbackDays() +
+                                        " days.";
                     else {
                         const est =
                             e.est_scaled_g != null
@@ -9202,12 +9274,6 @@
                             : done.length
                               ? '<div class="plot" id="bal-plot"></div>'
                               : '<p class="empty">No complete logged days in this range.</p>') +
-                        "</section>" +
-                        '<section class="rv" aria-labelledby="h-evs">' +
-                        evsHtml() +
-                        "</section>" +
-                        '<section class="rv" aria-labelledby="h-met">' +
-                        metabolismHtml() +
                         "</section>" +
                         '<section class="rv" aria-labelledby="h-mac">' +
                         secHead({
@@ -10398,7 +10464,6 @@
                     else caloriesChart();
                     balanceChart();
                     macroChart();
-                    metabolismChart();
                 };
 
                 /* ================= BODY ================= */
@@ -11345,6 +11410,7 @@
                         "</section>" +
                         goalFormHtml() +
                         bodyFormHtml() +
+                        calibrationSecHtml() +
                         whatIfHtml() +
                         "</div></div>";
                     fillBodyForm();
@@ -11357,6 +11423,10 @@
                 // Time-scaled, not index-scaled: weigh-ins are irregular, and
                 // even spacing would make a two-week gap look like a day.
                 CHARTS.body = function () {
+                    metabolismChart();
+                    weightChart();
+                };
+                function weightChart() {
                     const host = $("weight-plot");
                     if (!host || !host.clientWidth) return;
                     const unit = data.weightUnit;
@@ -11540,7 +11610,7 @@
                         PAD.t,
                         base,
                     );
-                };
+                }
 
                 /* ================= MEALS ================= */
                 /* ---------- meal edit (Meals tab) ---------- */

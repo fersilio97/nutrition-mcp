@@ -10,6 +10,7 @@ import {
 import {
     buildDashboardPayload,
     dashboardWindow,
+    METABOLISM_DAYS,
     parseModelParams,
     whatIf,
 } from "./dashboard.js";
@@ -171,6 +172,19 @@ describe("metabolismSeries", () => {
         expect(series.at(-1)!.data_kcal).toBe(c.resting_kcal);
         expect(series.every((p) => p.formula_kcal === 1700)).toBe(true);
     });
+    test("a custom lookback still lands on the calibration's baseline", () => {
+        // Intake drifts upward, so a 28- and a 42-day window imply
+        // different baselines and a hardcoded 42 would show.
+        const d = days(60).map((x, i) => ({ ...x, calories: 1800 + i * 10 }));
+        const w = weighIns(59, 3, -20);
+        const today = iso(59);
+        const params = { ...DEFAULT_PARAMS, windowDays: 28 };
+        const series = metabolismSeries(d, w, [today], params);
+        const c = buildCalibration(d, w, today, "calibrated", params);
+        const def = buildCalibration(d, w, today, "calibrated");
+        expect(c.resting_kcal).not.toBe(def.resting_kcal);
+        expect(series.at(-1)!.data_kcal).toBe(c.resting_kcal);
+    });
 });
 
 describe("typicalDayKcal", () => {
@@ -271,7 +285,11 @@ describe("dashboard payload", () => {
             p.calibration.implied_kcal_per_day,
         );
         expect(p.metabolism.at(-1)!.data_kcal).toBe(p.calibration.resting_kcal);
-        expect(p.metabolism).toHaveLength(31); // 30 complete days + today
+        // Up to METABOLISM_DAYS, ending today, starting at the first day
+        // with enough history: the fixture's 90 days qualify from day 22.
+        expect(p.metabolism.length).toBeLessThanOrEqual(METABOLISM_DAYS);
+        expect(p.metabolism.length).toBeGreaterThan(31);
+        expect(p.metabolism.at(-1)!.date).toBe(p.endDate);
         expect(p.metabolism.every((m) => m.data_kcal != null)).toBe(true);
     });
 
@@ -280,7 +298,8 @@ describe("dashboard payload", () => {
         const b = at(90);
         expect(a.calibration).toEqual(b.calibration);
         expect(a.estimateVsScale).toEqual(b.estimateVsScale);
-        expect(a.metabolism).toEqual(b.metabolism.slice(-8));
+        // A fixed span, not the range: the same 90 points on 7 days as on 90.
+        expect(a.metabolism).toEqual(b.metabolism);
     });
 
     test("a manual choice moves a day in or out of the calibration", () => {
@@ -317,10 +336,17 @@ describe("dashboard payload", () => {
 });
 
 describe("dashboardWindow", () => {
-    test("fetches the 56 days the what-if lab can look back before the range's first day", () => {
+    test("fetches the 56 days the what-if lab can look back before the earliest plotted day", () => {
         const w = dashboardWindow("2026-11-11", 7);
         expect(w.startDate).toBe("2026-11-04");
-        expect(w.fetchStart).toBe("2026-09-09");
+        // The metabolism chart is 90 days whatever the range, so on a short
+        // range its first day, not the range's, sets how far back to fetch.
+        expect(w.metabolismStart).toBe("2026-08-14");
+        expect(w.fetchStart).toBe("2026-06-19");
+        expect(w.weightFetchStart).toBe("2026-06-19");
+        expect(dashboardWindow("2026-11-11", 365).fetchStart).toBe(
+            "2025-09-16",
+        );
         expect(dashboardWindow("2026-11-11", 365).weightFetchStart).toBe(
             "2025-09-16",
         );
