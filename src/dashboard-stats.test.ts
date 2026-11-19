@@ -6,6 +6,7 @@ import {
     buildWeightStats,
     granularityFor,
     groupDays,
+    mealKcalOf,
 } from "./dashboard-stats.js";
 import { energyWindow } from "./calibration.js";
 import { buildDailyBuckets } from "./insights.js";
@@ -338,12 +339,43 @@ describe("balance_kcal on each day", () => {
     });
 });
 
+describe("mealKcalOf", () => {
+    test("splits by meal type; unknown or missing types go to other", () => {
+        const k = mealKcalOf([
+            { meal_type: "breakfast", calories: 400 },
+            { meal_type: "lunch", calories: 650 },
+            { meal_type: "snack", calories: 150 },
+            { meal_type: "snack", calories: 100 },
+            { meal_type: null, calories: 90 },
+            { meal_type: "brunch", calories: 10 },
+            { meal_type: "dinner", calories: null },
+        ]);
+        expect(k).toEqual({
+            breakfast: 400,
+            lunch: 650,
+            dinner: 0,
+            snack: 250,
+            treat: 0,
+            other: 100,
+        });
+    });
+});
+
 describe("groupDays", () => {
     // A row per day from `start`, the last one today (in progress).
     // `eaten` null = an unlogged day.
     const row = (date: string, eaten: number | null, inProgress = false) => ({
         date,
         calories: eaten ?? 0,
+        // A logged day: a third at lunch, the rest at dinner.
+        meal_kcal: {
+            breakfast: 0,
+            lunch: eaten == null ? 0 : Math.round(eaten / 3),
+            dinner: eaten == null ? 0 : eaten - Math.round(eaten / 3),
+            snack: 0,
+            treat: 0,
+            other: 0,
+        },
         protein_g: eaten == null ? 0 : 100,
         carbs_g: eaten == null ? 0 : 200,
         fat_g: eaten == null ? 0 : 60,
@@ -383,6 +415,8 @@ describe("groupDays", () => {
         );
         expect(b).toHaveLength(7);
         expect(b[1]!.calories).toBeNull(); // unlogged: no bar, not zero
+        expect(Object.values(b[1]!.meal_kcal).every((v) => v === 0)).toBe(true);
+        expect(b[0]!.meal_kcal!.lunch + b[0]!.meal_kcal!.dinner).toBe(1800);
         expect(b[1]!.goal_calories).toBe(2000); // the goal line stays
         expect(b[6]!.calories).toBe(900);
         expect(b[6]!.partial).toBe(true);

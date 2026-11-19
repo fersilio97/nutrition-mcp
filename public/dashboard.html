@@ -656,14 +656,44 @@
             .s-fat {
                 background: var(--fat);
             }
-            .s-burn-base {
-                background: var(--cal2-c-base);
+            /* Calories by meal: the day's three meals as steps of the
+               calorie blue (light → full, morning → evening), snacks amber,
+               treats in the over-goal red, untyped meals neutral. Mixed
+               with --bg, so the steps follow the theme on their own. */
+            .mt-breakfast,
+            .s-mt-breakfast {
+                fill: color-mix(in srgb, var(--kcal) 38%, var(--bg));
+                background: color-mix(in srgb, var(--kcal) 38%, var(--bg));
             }
-            .s-burn-digestion {
-                background: var(--cal2-c-digestion);
+            .mt-lunch,
+            .s-mt-lunch {
+                fill: color-mix(in srgb, var(--kcal) 68%, var(--bg));
+                background: color-mix(in srgb, var(--kcal) 68%, var(--bg));
             }
-            .s-burn-workout {
-                background: var(--cal2-c-workout);
+            .mt-dinner,
+            .s-mt-dinner {
+                fill: var(--kcal);
+                background: var(--kcal);
+            }
+            .mt-snack,
+            .s-mt-snack {
+                fill: var(--wk-burn);
+                background: var(--wk-burn);
+            }
+            .mt-treat,
+            .s-mt-treat {
+                fill: var(--over);
+                background: var(--over);
+            }
+            .mt-other,
+            .s-mt-other {
+                fill: var(--control);
+                background: var(--control);
+            }
+            .stack-note {
+                margin: -8px 0 16px;
+                color: var(--ink-2);
+                font-size: var(--fs-small);
             }
             .s-fiber {
                 background: var(--fiber);
@@ -1662,7 +1692,7 @@
             .chart-value.dim {
                 fill: var(--ink);
             }
-            /* Labels on the Burn chart's pale baseline and digestion tints. */
+            /* Segment labels on pale fills (light meal steps, amber). */
             .chart-value.on-tint {
                 fill: var(--ink-2);
             }
@@ -9499,6 +9529,7 @@
                             (r.in_progress ? " · so far" : ""),
                         label: shortDay(r.date),
                         calories: r.calories,
+                        meal_kcal: r.meal_kcal,
                         protein_g: r.protein_g,
                         carbs_g: r.carbs_g,
                         fat_g: r.fat_g,
@@ -9527,6 +9558,19 @@
                                 : 1,
                     };
                 }
+                function avgTarget(start, end) {
+                    const t = data.daily
+                        .filter(
+                            (r) =>
+                                r.date >= start &&
+                                r.date <= end &&
+                                r.goal_protein_g,
+                        )
+                        .map((r) => r.goal_protein_g);
+                    return t.length
+                        ? t.reduce((a, v) => a + v, 0) / t.length
+                        : null;
+                }
                 function bucketRow(b) {
                     const week = gran() === "week";
                     return {
@@ -9546,7 +9590,10 @@
                         carbs_g: b.carbs_g,
                         fat_g: b.fat_g,
                         goal_calories: b.goal_calories,
-                        goal_protein_g: null,
+                        // The days' own targets, averaged: buckets carry
+                        // none, and Protein vs target needs one per bar.
+                        goal_protein_g: avgTarget(b.start, b.end),
+                        meal_kcal: b.meal_kcal,
                         bmr_kcal: b.bmr_kcal,
                         active_kcal: b.active_kcal,
                         tef_kcal: b.tef_kcal,
@@ -9807,37 +9854,8 @@
                             ? '<div class="plot" id="macro-plot"></div>'
                             : emptyMsg) +
                         "</section>" +
-                        '<section class="rv" aria-labelledby="h-burn">' +
-                        secHead({
-                            wide: true,
-                            eyebrow: "Burn",
-                            id: "h-burn",
-                            title:
-                                (g === "day"
-                                    ? "Calories burned per day"
-                                    : "Calories burned · " +
-                                      (g === "week" ? "weekly" : "monthly") +
-                                      " average per logged day") +
-                                ' <span class="est">(estimate)</span>',
-                            note: "The other side of Macros: where the calories went. Baseline is what you burn at rest, digestion is the energy spent processing food, and workout is your watch’s active kcal.",
-                            legend:
-                                any && hasBurn()
-                                    ? legend(
-                                          burnParts().map((b) => [
-                                              LG.bar(b.cls),
-                                              b.name,
-                                          ]),
-                                      )
-                                    : "",
-                        }) +
-                        (!hasBurn()
-                            ? '<p class="empty">Add your height, birth date and sex to estimate your burn.<br>' +
-                              ADD_BODY +
-                              "</p>"
-                            : any
-                              ? '<div class="plot" id="burn-plot"></div>'
-                              : emptyMsg) +
-                        "</section></div>";
+                        extraTrendsHtml(any, emptyMsg, g) +
+                        "</div>";
                 };
 
                 // Gridlines in --line-2 with mono ticks; no gridline at 0,
@@ -10973,75 +10991,262 @@
                         base,
                     );
                 }
-                // Bottom to top: baseline, digestion, workout — the same
-                // order and colours as Eaten vs burned.
-                function burnParts() {
-                    return [
-                        {
-                            key: "bmr_kcal",
-                            name: baselineLabel(),
-                            cls: "cal2-legend-base",
-                            sw: "s-burn-base",
-                        },
-                        {
-                            key: "tef_kcal",
-                            name: "Digestion",
-                            cls: "cal2-legend-digestion",
-                            sw: "s-burn-digestion",
-                        },
-                        {
-                            key: "active_kcal",
-                            name: "Workout / active",
-                            cls: "cal2-legend-workout",
-                            sw: "s-burn-workout",
-                        },
-                    ];
-                }
-                function burnChart() {
-                    const host = $("burn-plot");
-                    if (!host || !host.clientWidth) return;
-                    const parts = burnParts();
-                    const rows = chartRows().filter(keepToday);
-                    const total = (r) =>
-                        parts.reduce((a, p) => a + (r[p.key] || 0), 0);
-                    const shown = rows.filter(
-                        (r) => r.calories != null && r.burn_kcal != null,
+                /* ---- The stacked-bar charts under Macros ---- */
+                const MACRO_KCAL = [
+                    {
+                        name: "Protein",
+                        cls: "m-protein",
+                        sw: "s-protein",
+                        per: 4,
+                        tef: 0.25,
+                        val: (r) => (r.protein_g || 0) * 4,
+                    },
+                    {
+                        name: "Carbs",
+                        cls: "m-carbs",
+                        sw: "s-carbs",
+                        per: 4,
+                        tef: 0.075,
+                        val: (r) => (r.carbs_g || 0) * 4,
+                    },
+                    {
+                        name: "Fat",
+                        cls: "m-fat",
+                        sw: "s-fat",
+                        per: 9,
+                        tef: 0.02,
+                        val: (r) => (r.fat_g || 0) * 9,
+                    },
+                ];
+                // Bottom to top in eating order; `tint` slots take dark
+                // segment labels.
+                const MEAL_PARTS = [
+                    ["breakfast", "Breakfast", true],
+                    ["lunch", "Lunch", true],
+                    ["dinner", "Dinner", false],
+                    ["snack", "Snacks", true],
+                    ["treat", "Treats", false],
+                    ["other", "Other", false],
+                ].map((m) => ({
+                    key: m[0],
+                    name: m[1],
+                    tint: m[2],
+                    cls: "mt-" + m[0],
+                    sw: "s-mt-" + m[0],
+                    val: (r) => (r.meal_kcal ? r.meal_kcal[m[0]] || 0 : 0),
+                }));
+                const mealPartsIn = (rows) =>
+                    MEAL_PARTS.filter((p) => rows.some((r) => p.val(r) > 0));
+                // Complete logged days: the ones a pattern or a hit rate
+                // can fairly judge (today and partly logged days left out).
+                const completeDays = () =>
+                    data.daily.filter(
+                        (r) =>
+                            !r.in_progress &&
+                            r.mealCount > 0 &&
+                            r.counts_in_calibration !== false,
                     );
-                    const avg = (k) =>
-                        shown.length
-                            ? shown.reduce((a, r) => a + (r[k] || 0), 0) /
-                              shown.length
-                            : 0;
+                const WEEKDAYS = [
+                    "Monday",
+                    "Tuesday",
+                    "Wednesday",
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                ];
+                // One row per weekday, Monday first: the average over the
+                // range's complete logged days that fell on it.
+                function weekdayRows() {
+                    const by = WEEKDAYS.map(() => []);
+                    completeDays().forEach(function (r) {
+                        by[(parseDay(r.date).getDay() + 6) % 7].push(r);
+                    });
+                    const mean = (list, k) => {
+                        const v = list
+                            .map((r) => r[k])
+                            .filter((x) => x != null && x !== 0);
+                        return v.length
+                            ? v.reduce((a, x) => a + x, 0) / v.length
+                            : null;
+                    };
+                    return by.map((list, i) => ({
+                        title: WEEKDAYS[i] + (list.length ? "s" : ""),
+                        label: WEEKDAYS[i].slice(0, 3),
+                        n: list.length,
+                        calories: list.length ? mean(list, "calories") : null,
+                        goal_calories: mean(list, "goal_calories"),
+                        avg: true,
+                    }));
+                }
+                function proteinHit() {
+                    const days = completeDays().filter((r) => r.goal_protein_g);
+                    return {
+                        days: days.length,
+                        met: days.filter((r) => r.protein_g >= r.goal_protein_g)
+                            .length,
+                    };
+                }
+                function extraTrendsHtml(any, emptyMsg, g) {
+                    const per =
+                        g === "day"
+                            ? " per day"
+                            : " · " +
+                              (g === "week" ? "weekly" : "monthly") +
+                              " average per logged day";
+                    const rows = chartRows();
+                    const hit = proteinHit();
+                    const hasProteinGoal = data.daily.some(
+                        (r) => r.goal_protein_g,
+                    );
+                    const meals = mealPartsIn(rows);
+                    const wd = weekdayRows();
+                    const sec = (id, head, body) =>
+                        '<section class="rv" aria-labelledby="' +
+                        id +
+                        '">' +
+                        head +
+                        body +
+                        "</section>";
+                    const plot = (id) =>
+                        any
+                            ? '<div class="plot" id="' + id + '"></div>'
+                            : emptyMsg;
+                    return (
+                        sec(
+                            "h-mkcal",
+                            secHead({
+                                wide: true,
+                                eyebrow: "Macros",
+                                id: "h-mkcal",
+                                title: "Calories from each macro" + per,
+                                note: "The same macros in kcal: protein and carbs carry 4 kcal per gram, fat 9, so fat’s share of your calories is bigger than its grams suggest. Hover a bar for each macro’s share and what digesting it burns (about 25% of protein kcal, 7.5% of carbs, 2% of fat).",
+                                legend: any
+                                    ? legend(
+                                          MACRO_KCAL.map((m) => [
+                                              LG.bar(m.cls),
+                                              m.name,
+                                          ]),
+                                      )
+                                    : "",
+                            }),
+                            plot("mkcal-plot"),
+                        ) +
+                        sec(
+                            "h-prot",
+                            secHead({
+                                wide: true,
+                                eyebrow: "Protein",
+                                id: "h-prot",
+                                title: "Protein vs target" + per,
+                                aside: hit.days
+                                    ? '<span class="aside">Target met ' +
+                                      hit.met +
+                                      " of " +
+                                      plural(hit.days, "day") +
+                                      "</span>"
+                                    : "",
+                                note: hasProteinGoal
+                                    ? "Your protein against your target. It is the one target that holds when your calorie goal moves, and it protects muscle while you lose weight. The count above uses complete logged days only."
+                                    : "Your protein over time. Set a protein target under Body › Calories goal to see it as a line here.",
+                                legend: any
+                                    ? legend(
+                                          [
+                                              [LG.bar("m-protein"), "Protein"],
+                                          ].concat(
+                                              hasProteinGoal
+                                                  ? [[LG.line(), "Target"]]
+                                                  : [],
+                                          ),
+                                      )
+                                    : "",
+                            }),
+                            plot("prot-plot"),
+                        ) +
+                        sec(
+                            "h-meal",
+                            secHead({
+                                wide: true,
+                                eyebrow: "Meals",
+                                id: "h-meal",
+                                title: "Calories by meal" + per,
+                                note: "Where your calories come from across the day, from each meal’s logged type.",
+                                legend:
+                                    any && meals.length
+                                        ? legend(
+                                              meals.map((m) => [
+                                                  LG.bar(m.cls),
+                                                  m.name,
+                                              ]),
+                                          )
+                                        : "",
+                            }),
+                            plot("meal-plot"),
+                        ) +
+                        sec(
+                            "h-dow",
+                            secHead({
+                                wide: true,
+                                eyebrow: "Pattern",
+                                id: "h-dow",
+                                title: "Day of the week",
+                                note:
+                                    "Average calories eaten on each weekday over these " +
+                                    data.days +
+                                    " days, complete logged days only, next to your goal on those days — does the weekend undo the week?",
+                                legend: any
+                                    ? legend([
+                                          [LG.bar("m-kcal"), "Eaten (avg)"],
+                                          [LG.line(), "Goal (avg)"],
+                                      ])
+                                    : "",
+                            }),
+                            (any && data.days < 28
+                                ? '<p class="stack-note">With ' +
+                                  data.days +
+                                  " days, each weekday is one or two days at most. Pick 30 days or 1 year for a real pattern.</p>"
+                                : "") +
+                                (any && wd.some((r) => r.n)
+                                    ? '<div class="plot" id="dow-plot"></div>'
+                                    : emptyMsg),
+                        )
+                    );
+                }
+
+                // A stacked bar per row, with an optional step line (a
+                // target) across each bar's column. One drawing routine for
+                // the four charts above, so they share bar width, labels,
+                // the today dimming and the keyboard read-out.
+                function stackChart(o) {
+                    const host = $(o.host);
+                    if (!host || !host.clientWidth) return;
+                    const rows = o.rows;
+                    const parts = o.parts;
+                    const unit = o.unit === "g" ? "g" : "";
+                    // A bar only where food was logged: daily rows carry
+                    // calories 0 on an empty day, buckets carry null.
+                    const has =
+                        o.has ||
+                        ((r) =>
+                            r.calories != null &&
+                            (r.mealCount == null || r.mealCount > 0));
+                    const total = (r) =>
+                        parts.reduce((a, p) => a + (p.val(r) || 0), 0);
+                    const lineOf = (r) => (o.line ? o.line(r) || null : null);
                     const c = chartSvg(
                         host,
                         innerWidth <= 480 ? 240 : 280,
-                        "Estimated calories burned, " +
-                            rangeText() +
-                            (gran() === "day"
-                                ? ", per day"
-                                : ", average per logged day by " + perWord()) +
-                            ", split into " +
-                            parts
-                                .map(
-                                    (p) =>
-                                        p.name.toLowerCase() +
-                                        " " +
-                                        fmt(avg(p.key)) +
-                                        " kcal",
-                                )
-                                .join(", ") +
-                            " on average. Use the arrow keys to read each " +
-                            stepWord() +
-                            ".",
+                        o.aria + " Use the arrow keys to read each bar.",
                     );
                     const svg = c.svg;
                     const base = c.h - PAD.b;
                     const plotH = base - PAD.t;
-                    const maxY = tickMax(
-                        Math.max.apply(null, shown.map(total).concat([1])) *
-                            1.05,
-                        4,
-                    );
+                    const peaks = rows
+                        .filter(has)
+                        .map(total)
+                        .concat(rows.map(lineOf).filter((v) => v != null))
+                        .concat([1]);
+                    const maxY = tickMax(Math.max.apply(null, peaks) * 1.08, 4);
                     const L = gutter(yLabels(maxY, 4));
                     const plotW = c.w - L - PAD.r;
                     const yAt = (v) => base - (v / maxY) * plotH;
@@ -11049,14 +11254,12 @@
                     const lay = bandLayout(rows.length, plotW);
                     const gapPx = lay.barW >= 4 ? 2 : 0;
                     rows.forEach(function (r, i) {
-                        // Same days as Macros: a bar only where food was
-                        // logged, so the two charts line up bar for bar.
-                        if (r.calories == null || r.burn_kcal == null) return;
+                        if (!has(r)) return;
                         const x = L + lay.bw * i + (lay.bw - lay.barW) / 2;
                         const w = lay.barW;
                         let acc = 0;
                         parts.forEach(function (p) {
-                            const val = r[p.key] || 0;
+                            const val = p.val(r) || 0;
                             if (val <= 0) return;
                             const yTop = yAt(acc + val);
                             const segH = Math.max(
@@ -11071,20 +11274,23 @@
                                     style: growDelay(i),
                                 }),
                             );
-                            // Each part's kcal inside it, like Macros'
-                            // segment grams, where the bar has room.
-                            if (segH >= 16 && lay.barW >= 28)
+                            if (
+                                o.segLabels &&
+                                parts.length > 1 &&
+                                segH >= 16 &&
+                                lay.barW >= 28
+                            )
                                 svgText(
                                     svg,
                                     x + w / 2,
                                     yTop + segH / 2 + 3,
-                                    fmt(val),
+                                    fmt(val) + unit,
                                     "chart-value" +
-                                        (p.key === "active_kcal"
-                                            ? r.dim
-                                                ? " dim"
-                                                : ""
-                                            : " on-tint"),
+                                        (p.tint
+                                            ? " on-tint"
+                                            : r.dim
+                                              ? " dim"
+                                              : ""),
                                     "middle",
                                 );
                             acc += val;
@@ -11094,43 +11300,53 @@
                                 svg,
                                 x + w / 2,
                                 yAt(total(r)) - 5,
-                                fmt(total(r)),
+                                fmt(total(r)) + unit,
                                 "lbl",
                                 "middle",
                             );
                     });
+                    // The target as a step line, as on the Calories chart.
+                    let d = "";
+                    rows.forEach(function (r, i) {
+                        const v = lineOf(r);
+                        if (v == null) return;
+                        const x0 = L + lay.bw * i;
+                        d +=
+                            (i && lineOf(rows[i - 1]) != null ? "L" : "M") +
+                            x0 +
+                            "," +
+                            yAt(v) +
+                            "L" +
+                            (x0 + lay.bw) +
+                            "," +
+                            yAt(v);
+                    });
+                    if (d)
+                        svg.appendChild(
+                            svgEl("path", { d: d, class: "goal-line" }),
+                        );
                     baseline(svg, L, L + plotW, base);
-                    xAxis(svg, rows, lay, L, c.h - 8);
+                    if (o.labels)
+                        rows.forEach(function (r, i) {
+                            svgText(
+                                svg,
+                                L + lay.bw * (i + 0.5),
+                                c.h - 8,
+                                r.label,
+                                "xl",
+                                "middle",
+                            );
+                        });
+                    else xAxis(svg, rows, lay, L, c.h - 8);
                     inspect(
                         svg,
                         rows.map(function (r, i) {
-                            const per = r.avg ? " (avg/day)" : "";
-                            const lines =
-                                r.calories == null || r.burn_kcal == null
-                                    ? [[null, "Nothing logged", ""]]
-                                    : parts
-                                          .slice()
-                                          .reverse()
-                                          .map((p) => [
-                                              p.sw,
-                                              p.name + per,
-                                              fmt(r[p.key] || 0) + " kcal",
-                                          ])
-                                          .concat([
-                                              [
-                                                  null,
-                                                  "Total burn" + per,
-                                                  fmt(total(r)) + " kcal",
-                                              ],
-                                              [
-                                                  null,
-                                                  "Eaten" + per,
-                                                  fmt(r.calories) + " kcal",
-                                              ],
-                                          ]);
-                            if (r.avg)
-                                lines.push([null, "Logged", loggedText(r)]);
-                            const t = tipContent(r.title, lines);
+                            const t = tipContent(
+                                r.title,
+                                has(r)
+                                    ? o.tip(r)
+                                    : [[null, "Nothing logged", ""]],
+                            );
                             return {
                                 x: L + lay.bw * (i + 0.5),
                                 html: t.html,
@@ -11141,12 +11357,193 @@
                         base,
                     );
                 }
+                const perTip = (r) => (r.avg ? " (avg/day)" : "");
+                const loggedLine = (r) =>
+                    r.avg ? [[null, "Logged", loggedText(r)]] : [];
+
+                function macroKcalChart() {
+                    const rows = chartRows().filter(keepToday);
+                    stackChart({
+                        host: "mkcal-plot",
+                        rows: rows,
+                        // Fat at the bottom, protein on top, as on Macros.
+                        parts: MACRO_KCAL.slice().reverse(),
+                        segLabels: true,
+                        aria:
+                            "Calories from protein, carbs and fat, " +
+                            rangeText() +
+                            ".",
+                        tip: function (r) {
+                            const sum = MACRO_KCAL.reduce(
+                                (a, m) => a + m.val(r),
+                                0,
+                            );
+                            const lines = MACRO_KCAL.map((m) => [
+                                m.sw,
+                                m.name + perTip(r),
+                                fmt(m.val(r)) +
+                                    " kcal · " +
+                                    (sum
+                                        ? Math.round((m.val(r) / sum) * 100)
+                                        : 0) +
+                                    "% · burns " +
+                                    fmt(m.val(r) * m.tef),
+                            ]);
+                            lines.push([
+                                null,
+                                "Logged calories" + perTip(r),
+                                fmt(r.calories) + " kcal",
+                            ]);
+                            // Alcohol and rounding: logged kcal the three
+                            // macros do not account for.
+                            if (r.calories - sum >= 30)
+                                lines.push([
+                                    null,
+                                    "Not from macros (alcohol, rounding)",
+                                    fmt(r.calories - sum) + " kcal",
+                                ]);
+                            return lines.concat(loggedLine(r));
+                        },
+                    });
+                }
+                function proteinChart() {
+                    const rows = chartRows().filter(keepToday);
+                    stackChart({
+                        host: "prot-plot",
+                        rows: rows,
+                        unit: "g",
+                        parts: [
+                            {
+                                name: "Protein",
+                                cls: "m-protein",
+                                sw: "s-protein",
+                                val: (r) => r.protein_g,
+                            },
+                        ],
+                        line: (r) => r.goal_protein_g,
+                        aria:
+                            "Protein in grams against your target, " +
+                            rangeText() +
+                            ".",
+                        tip: function (r) {
+                            const lines = [
+                                [
+                                    "s-protein",
+                                    "Protein" + perTip(r),
+                                    fmt(r.protein_g) + " g",
+                                ],
+                            ];
+                            if (r.goal_protein_g)
+                                lines.push(
+                                    [
+                                        null,
+                                        "Target",
+                                        fmt(r.goal_protein_g) + " g",
+                                    ],
+                                    [
+                                        null,
+                                        r.protein_g >= r.goal_protein_g
+                                            ? "Over target"
+                                            : "Short of target",
+                                        fmtSigned(
+                                            r.protein_g - r.goal_protein_g,
+                                        ) + " g",
+                                    ],
+                                );
+                            return lines.concat(loggedLine(r));
+                        },
+                    });
+                }
+                function mealChart() {
+                    const rows = chartRows().filter(keepToday);
+                    const parts = mealPartsIn(rows);
+                    stackChart({
+                        host: "meal-plot",
+                        rows: rows,
+                        parts: parts,
+                        segLabels: true,
+                        aria: "Calories by meal type, " + rangeText() + ".",
+                        tip: (r) =>
+                            parts
+                                .slice()
+                                .reverse()
+                                .filter((p) => p.val(r) > 0)
+                                .map((p) => [
+                                    p.sw,
+                                    p.name + perTip(r),
+                                    fmt(p.val(r)) +
+                                        " kcal · " +
+                                        (r.calories
+                                            ? Math.round(
+                                                  (p.val(r) / r.calories) * 100,
+                                              )
+                                            : 0) +
+                                        "%",
+                                ])
+                                .concat(loggedLine(r)),
+                    });
+                }
+                function weekdayChart() {
+                    const rows = weekdayRows();
+                    stackChart({
+                        host: "dow-plot",
+                        rows: rows,
+                        labels: true,
+                        parts: [
+                            {
+                                name: "Eaten",
+                                cls: "m-kcal",
+                                sw: "s-kcal",
+                                val: (r) => r.calories,
+                            },
+                        ],
+                        line: (r) =>
+                            r.calories != null ? r.goal_calories : null,
+                        aria:
+                            "Average calories eaten on each weekday, " +
+                            rangeText() +
+                            ".",
+                        tip: function (r) {
+                            const lines = [
+                                [
+                                    "s-kcal",
+                                    "Eaten (avg)",
+                                    fmt(r.calories) + " kcal",
+                                ],
+                            ];
+                            if (r.goal_calories)
+                                lines.push(
+                                    [
+                                        null,
+                                        "Goal (avg)",
+                                        fmt(r.goal_calories) + " kcal",
+                                    ],
+                                    [
+                                        null,
+                                        "Vs goal",
+                                        fmtSigned(
+                                            r.calories - r.goal_calories,
+                                        ) + " kcal",
+                                    ],
+                                );
+                            lines.push([
+                                null,
+                                "Based on",
+                                plural(r.n, "complete day"),
+                            ]);
+                            return lines;
+                        },
+                    });
+                }
                 CHARTS.trends = function () {
                     if (!barsView) calories2Chart();
                     else caloriesChart();
                     balanceChart();
                     macroChart();
-                    burnChart();
+                    macroKcalChart();
+                    proteinChart();
+                    mealChart();
+                    weekdayChart();
                 };
 
                 /* ================= BODY ================= */
