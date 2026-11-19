@@ -660,6 +660,15 @@
                calorie blue (light → full, morning → evening), snacks amber,
                treats in the over-goal red, untyped meals neutral. Mixed
                with --bg, so the steps follow the theme on their own. */
+            .s-burn-base {
+                background: var(--cal2-c-base);
+            }
+            .s-burn-digestion {
+                background: var(--cal2-c-digestion);
+            }
+            .s-burn-workout {
+                background: var(--cal2-c-workout);
+            }
             .mt-breakfast,
             .s-mt-breakfast {
                 fill: color-mix(in srgb, var(--kcal) 38%, var(--bg));
@@ -10569,6 +10578,29 @@
                     sw: "s-mt-" + m[0],
                     val: (r) => (r.meal_kcal ? r.meal_kcal[m[0]] || 0 : 0),
                 }));
+                // Est. burn, bottom to top, in Eaten vs burned's colours.
+                const BURN_PARTS = [
+                    {
+                        key: "bmr_kcal",
+                        name: "Baseline",
+                        cls: "cal2-legend-base",
+                        sw: "s-burn-base",
+                        tint: true,
+                    },
+                    {
+                        key: "tef_kcal",
+                        name: "Digestion",
+                        cls: "cal2-legend-digestion",
+                        sw: "s-burn-digestion",
+                        tint: true,
+                    },
+                    {
+                        key: "active_kcal",
+                        name: "Workout / active",
+                        cls: "cal2-legend-workout",
+                        sw: "s-burn-workout",
+                    },
+                ].map((b) => Object.assign(b, { val: (r) => r[b.key] || 0 }));
                 const mealPartsIn = (rows) =>
                     MEAL_PARTS.filter((p) => rows.some((r) => p.val(r) > 0));
                 // Complete logged days: the ones a pattern or a hit rate
@@ -10604,12 +10636,25 @@
                             ? v.reduce((a, x) => a + x, 0) / v.length
                             : null;
                     };
+                    // Burn parts over the days that have a burn, a missing
+                    // part counted as 0 (no workout is a real 0), so the
+                    // three add up to the average burn.
+                    const burnMean = (list, k) => {
+                        const b = list.filter((r) => r.burn_kcal != null);
+                        return b.length
+                            ? b.reduce((a, r) => a + (r[k] || 0), 0) / b.length
+                            : null;
+                    };
                     return by.map((list, i) => ({
                         title: WEEKDAYS[i] + (list.length ? "s" : ""),
                         label: WEEKDAYS[i].slice(0, 3),
                         n: list.length,
                         calories: list.length ? mean(list, "calories") : null,
                         goal_calories: mean(list, "goal_calories"),
+                        bmr_kcal: burnMean(list, "bmr_kcal"),
+                        tef_kcal: burnMean(list, "tef_kcal"),
+                        active_kcal: burnMean(list, "active_kcal"),
+                        burn_kcal: burnMean(list, "burn_kcal"),
                         avg: true,
                     }));
                 }
@@ -10725,14 +10770,24 @@
                                 id: "h-dow",
                                 title: "Day of the week",
                                 note:
-                                    "Average calories eaten on each weekday over these " +
+                                    "Each weekday’s average over these " +
                                     data.days +
-                                    " days, complete logged days only, next to your goal on those days — does the weekend undo the week?",
+                                    " days, complete logged days only: what you ate (left bar) next to what you burned (right bar: baseline, digestion and workout), and your goal on those days. Does the weekend undo the week — through eating, or through moving less?",
                                 legend: any
-                                    ? legend([
-                                          [LG.bar("m-kcal"), "Eaten (avg)"],
-                                          [LG.line(), "Goal (avg)"],
-                                      ])
+                                    ? legend(
+                                          [[LG.bar("m-kcal"), "Eaten"]]
+                                              .concat(
+                                                  hasBurn()
+                                                      ? BURN_PARTS.map((b) => [
+                                                            LG.bar(b.cls),
+                                                            b.key === "bmr_kcal"
+                                                                ? baselineLabel()
+                                                                : b.name,
+                                                        ])
+                                                      : [],
+                                              )
+                                              .concat([[LG.line(), "Goal"]]),
+                                      )
                                     : "",
                             }),
                             (any && data.days < 28
@@ -10755,7 +10810,9 @@
                     const host = $(o.host);
                     if (!host || !host.clientWidth) return;
                     const rows = o.rows;
-                    const parts = o.parts;
+                    // `groups` draws several stacks side by side per row
+                    // (e.g. eaten beside burn); `parts` is one stack.
+                    const groups = o.groups || [o.parts];
                     const unit = o.unit === "g" ? "g" : "";
                     // A bar only where food was logged: daily rows carry
                     // calories 0 on an empty day, buckets carry null.
@@ -10764,7 +10821,7 @@
                         ((r) =>
                             r.calories != null &&
                             (r.mealCount == null || r.mealCount > 0));
-                    const total = (r) =>
+                    const total = (r, parts) =>
                         parts.reduce((a, p) => a + (p.val(r) || 0), 0);
                     const lineOf = (r) => (o.line ? o.line(r) || null : null);
                     const c = chartSvg(
@@ -10777,7 +10834,7 @@
                     const plotH = base - PAD.t;
                     const peaks = rows
                         .filter(has)
-                        .map(total)
+                        .flatMap((r) => groups.map((g) => total(r, g)))
                         .concat(rows.map(lineOf).filter((v) => v != null))
                         .concat([1]);
                     const maxY = tickMax(Math.max.apply(null, peaks) * 1.08, 4);
@@ -10787,57 +10844,76 @@
                     yAxis(svg, maxY, L, L + plotW, yAt, 4);
                     const lay = bandLayout(rows.length, plotW);
                     const gapPx = lay.barW >= 4 ? 2 : 0;
+                    // Side-by-side stacks share the band: each gets an equal
+                    // slice of it, a few px apart.
+                    const G = groups.length;
+                    const pairGap = G > 1 ? 4 : 0;
+                    const w =
+                        G > 1
+                            ? Math.min(
+                                  lay.barW,
+                                  (lay.bw * 0.8 - pairGap * (G - 1)) / G,
+                              )
+                            : lay.barW;
                     rows.forEach(function (r, i) {
                         if (!has(r)) return;
-                        const x = L + lay.bw * i + (lay.bw - lay.barW) / 2;
-                        const w = lay.barW;
-                        let acc = 0;
-                        parts.forEach(function (p) {
-                            const val = p.val(r) || 0;
-                            if (val <= 0) return;
-                            const yTop = yAt(acc + val);
-                            const segH = Math.max(
-                                0,
-                                yAt(acc) - yTop - (acc > 0 ? gapPx : 0),
-                            );
-                            svg.appendChild(
-                                svgEl("path", {
-                                    d: rectPath(x, yTop, w, segH),
-                                    class:
-                                        p.cls + (r.dim ? " dim" : "") + " grow",
-                                    style: growDelay(i),
-                                }),
-                            );
-                            if (
-                                o.segLabels &&
-                                parts.length > 1 &&
-                                segH >= 16 &&
-                                lay.barW >= 28
-                            )
+                        const span = G * w + pairGap * (G - 1);
+                        groups.forEach(function (parts, gi) {
+                            const x =
+                                L +
+                                lay.bw * i +
+                                (lay.bw - span) / 2 +
+                                gi * (w + pairGap);
+                            let acc = 0;
+                            parts.forEach(function (p) {
+                                const val = p.val(r) || 0;
+                                if (val <= 0) return;
+                                const yTop = yAt(acc + val);
+                                const segH = Math.max(
+                                    0,
+                                    yAt(acc) - yTop - (acc > 0 ? gapPx : 0),
+                                );
+                                svg.appendChild(
+                                    svgEl("path", {
+                                        d: rectPath(x, yTop, w, segH),
+                                        class:
+                                            p.cls +
+                                            (r.dim ? " dim" : "") +
+                                            " grow",
+                                        style: growDelay(i),
+                                    }),
+                                );
+                                if (
+                                    o.segLabels &&
+                                    parts.length > 1 &&
+                                    segH >= 16 &&
+                                    w >= 28
+                                )
+                                    svgText(
+                                        svg,
+                                        x + w / 2,
+                                        yTop + segH / 2 + 3,
+                                        fmt(val) + unit,
+                                        "chart-value" +
+                                            (p.tint
+                                                ? " on-tint"
+                                                : r.dim
+                                                  ? " dim"
+                                                  : ""),
+                                        "middle",
+                                    );
+                                acc += val;
+                            });
+                            if (w >= 16 && acc > 0)
                                 svgText(
                                     svg,
                                     x + w / 2,
-                                    yTop + segH / 2 + 3,
-                                    fmt(val) + unit,
-                                    "chart-value" +
-                                        (p.tint
-                                            ? " on-tint"
-                                            : r.dim
-                                              ? " dim"
-                                              : ""),
+                                    yAt(acc) - 5,
+                                    fmt(acc) + unit,
+                                    "lbl",
                                     "middle",
                                 );
-                            acc += val;
                         });
-                        if (lay.barW >= 16)
-                            svgText(
-                                svg,
-                                x + w / 2,
-                                yAt(total(r)) - 5,
-                                fmt(total(r)) + unit,
-                                "lbl",
-                                "middle",
-                            );
                     });
                     // The target as a step line, as on the Calories chart.
                     let d = "";
@@ -11023,18 +11099,21 @@
                         host: "dow-plot",
                         rows: rows,
                         labels: true,
-                        parts: [
-                            {
-                                name: "Eaten",
-                                cls: "m-kcal",
-                                sw: "s-kcal",
-                                val: (r) => r.calories,
-                            },
-                        ],
+                        // Eaten on the left, est. burn on the right.
+                        groups: [
+                            [
+                                {
+                                    name: "Eaten",
+                                    cls: "m-kcal",
+                                    sw: "s-kcal",
+                                    val: (r) => r.calories,
+                                },
+                            ],
+                        ].concat(hasBurn() ? [BURN_PARTS] : []),
                         line: (r) =>
                             r.calories != null ? r.goal_calories : null,
                         aria:
-                            "Average calories eaten on each weekday, " +
+                            "Average calories eaten and burned on each weekday, " +
                             rangeText() +
                             ".",
                         tip: function (r) {
@@ -11045,6 +11124,30 @@
                                     fmt(r.calories) + " kcal",
                                 ],
                             ];
+                            if (r.burn_kcal != null) {
+                                lines.push([
+                                    null,
+                                    "Burned (avg, est.)",
+                                    fmt(r.burn_kcal) + " kcal",
+                                ]);
+                                BURN_PARTS.slice()
+                                    .reverse()
+                                    .forEach((b) =>
+                                        lines.push([
+                                            b.sw,
+                                            b.key === "bmr_kcal"
+                                                ? baselineLabel()
+                                                : b.name,
+                                            fmt(b.val(r)) + " kcal",
+                                        ]),
+                                    );
+                                lines.push([
+                                    null,
+                                    "Eaten − burned",
+                                    fmtSigned(r.calories - r.burn_kcal) +
+                                        " kcal",
+                                ]);
+                            }
                             if (r.goal_calories)
                                 lines.push(
                                     [
