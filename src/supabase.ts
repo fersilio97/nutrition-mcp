@@ -359,16 +359,23 @@ export async function getMealsInRange(
     const startUtc = zonedDayStartUtc(startDate, tz);
     const endUtc = zonedNextDayStartUtc(endDate, tz);
 
-    const { data, error } = await getSupabase()
-        .from("meals")
-        .select("*")
-        .eq("user_id", userId)
-        .gte("logged_at", startUtc.toISOString())
-        .lt("logged_at", endUtc.toISOString())
-        .order("logged_at", { ascending: true });
+    // Paged: a year of a heavy logger's rows passes PostgREST's 1000-row
+    // cap, which silently cut the dashboard's 1-year range short. `id`
+    // breaks logged_at ties so no row straddles a page edge twice.
+    return fetchAllPages<Meal>(async (from, to) => {
+        const { data, error } = await getSupabase()
+            .from("meals")
+            .select("*")
+            .eq("user_id", userId)
+            .gte("logged_at", startUtc.toISOString())
+            .lt("logged_at", endUtc.toISOString())
+            .order("logged_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(from, to);
 
-    if (error) throw new Error(`Failed to get meals: ${error.message}`);
-    return (data as Meal[]) ?? [];
+        if (error) throw new Error(`Failed to get meals: ${error.message}`);
+        return (data as Meal[]) ?? [];
+    });
 }
 
 /**
@@ -1240,16 +1247,23 @@ export async function getWaterInRange(
     const startUtc = zonedDayStartUtc(startDate, tz);
     const endUtc = zonedNextDayStartUtc(endDate, tz);
 
-    const { data, error } = await getSupabase()
-        .from("water_log")
-        .select("*")
-        .eq("user_id", userId)
-        .gte("logged_at", startUtc.toISOString())
-        .lt("logged_at", endUtc.toISOString())
-        .order("logged_at", { ascending: true });
+    // Paged: a year of a heavy logger's rows passes PostgREST's 1000-row
+    // cap, which silently cut the dashboard's 1-year range short. `id`
+    // breaks logged_at ties so no row straddles a page edge twice.
+    return fetchAllPages<WaterEntry>(async (from, to) => {
+        const { data, error } = await getSupabase()
+            .from("water_log")
+            .select("*")
+            .eq("user_id", userId)
+            .gte("logged_at", startUtc.toISOString())
+            .lt("logged_at", endUtc.toISOString())
+            .order("logged_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(from, to);
 
-    if (error) throw new Error(`Failed to get water: ${error.message}`);
-    return (data as WaterEntry[]) ?? [];
+        if (error) throw new Error(`Failed to get water: ${error.message}`);
+        return (data as WaterEntry[]) ?? [];
+    });
 }
 
 /**
@@ -1427,16 +1441,23 @@ export async function getWeightInRange(
     const startUtc = zonedDayStartUtc(startDate, tz);
     const endUtc = zonedNextDayStartUtc(endDate, tz);
 
-    const { data, error } = await getSupabase()
-        .from("weight_log")
-        .select("*")
-        .eq("user_id", userId)
-        .gte("logged_at", startUtc.toISOString())
-        .lt("logged_at", endUtc.toISOString())
-        .order("logged_at", { ascending: true });
+    // Paged: a year of a heavy logger's rows passes PostgREST's 1000-row
+    // cap, which silently cut the dashboard's 1-year range short. `id`
+    // breaks logged_at ties so no row straddles a page edge twice.
+    return fetchAllPages<WeightEntry>(async (from, to) => {
+        const { data, error } = await getSupabase()
+            .from("weight_log")
+            .select("*")
+            .eq("user_id", userId)
+            .gte("logged_at", startUtc.toISOString())
+            .lt("logged_at", endUtc.toISOString())
+            .order("logged_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(from, to);
 
-    if (error) throw new Error(`Failed to get weight: ${error.message}`);
-    return (data as WeightEntry[]) ?? [];
+        if (error) throw new Error(`Failed to get weight: ${error.message}`);
+        return (data as WeightEntry[]) ?? [];
+    });
 }
 
 /**
