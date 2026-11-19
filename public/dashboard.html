@@ -3379,9 +3379,9 @@
                        tall chart, and splits it with .box-cols instead. */
                     grid-template-areas:
                         "panel chart"
+                        "calib calib"
                         "goal goal"
                         "details details"
-                        "calib calib"
                         "lab lab";
                     column-gap: clamp(2rem, 4vw, 3.5rem);
                     align-items: start;
@@ -9243,9 +9243,11 @@
                     );
                 }
                 // Both cards describe the user's own burn model, not a chosen
-                // period, so they sit on Body beside the calibrated baseline
-                // and ignore the Trends range: under ~3 weeks, water and
-                // glycogen swings on the scale outweigh the energy signal.
+                // period, so they sit on Body under the weight chart and
+                // above the goal and Body details boxes (the evidence before
+                // the settings it informs), and ignore the Trends range:
+                // under ~3 weeks, water and glycogen swings on the scale
+                // outweigh the energy signal.
                 function calibrationSecHtml() {
                     return (
                         '<section class="calib-sec rv" aria-labelledby="h-calib">' +
@@ -11895,9 +11897,9 @@
                                   : "No weigh-ins yet. Log one here, or ask Claude to log your weight.") +
                               "</p>") +
                         "</section>" +
+                        calibrationSecHtml() +
                         goalFormHtml() +
                         bodyFormHtml() +
-                        calibrationSecHtml() +
                         whatIfHtml() +
                         "</div></div>";
                     fillBodyForm();
