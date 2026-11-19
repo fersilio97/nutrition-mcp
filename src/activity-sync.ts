@@ -19,7 +19,8 @@ import {
     timezoneFromProfile,
     touchIngestToken,
 } from "./supabase.js";
-import { todayInTz } from "./tz.js";
+import { shiftLocalDate, todayInTz } from "./tz.js";
+import { mergeByDay, parseSampleLines } from "./health-merge.js";
 import {
     adjustGoalsForActivity,
     checkActiveKcal,
@@ -39,6 +40,107 @@ function cleanSource(raw: unknown): string {
         .slice(0, 40)
         .replace(/[^\w .-]/g, "");
     return s || "apple_health";
+}
+
+/** Most lines one request may carry: a week of iPhone samples is a few
+ *  hundred, so this only stops a runaway Shortcut. */
+const MAX_SAMPLE_LINES = 20000;
+const MAX_LOOKBACK_DAYS = 14;
+
+/**
+ * The raw-samples body: `{"samples": "source|start|end|kcal\n…",
+ * "lookback_days": 7}` (an array of lines is accepted too). Every day from
+ * today back `lookback_days - 1` days that has samples is rebuilt with the
+ * Health-style merge (src/health-merge.ts) and overwritten. Older days in the
+ * payload are ignored: the Shortcut's "last N days" filter is a rolling window,
+ * so the oldest day it returns is only partly covered and must not overwrite a
+ * complete total. A day with no samples is left alone — a locked phone (Health
+ * data is unreadable while locked) sends nothing, and that must never zero a day.
+ */
+async function ingestSamples(
+    userId: string,
+    body: Record<string, unknown>,
+): Promise<[Record<string, unknown>, 200 | 400]> {
+    const raw = Array.isArray(body.samples)
+        ? body.samples.map(String).join("\n")
+        : typeof body.samples === "string"
+          ? body.samples
+          : null;
+    if (raw == null)
+        return [
+            {
+                error: "invalid_request",
+                error_description:
+                    "samples must be text with one source|start|end|kcal line per sample.",
+            },
+            400,
+        ];
+    const lineCount = raw.split("\n").length;
+    if (lineCount > MAX_SAMPLE_LINES)
+        return [
+            {
+                error: "invalid_request",
+                error_description: `Too many samples (${lineCount}); send at most ${MAX_SAMPLE_LINES}.`,
+            },
+            400,
+        ];
+    const n = Number(body.lookback_days ?? 7);
+    const lookback = Number.isFinite(n)
+        ? Math.min(MAX_LOOKBACK_DAYS, Math.max(1, Math.round(n)))
+        : 7;
+
+    const profile = await getProfile(userId);
+    const tz = timezoneFromProfile(profile) ?? "UTC";
+    const today = todayInTz(tz);
+    const earliest = shiftLocalDate(today, -(lookback - 1));
+    const { samples, rejected } = parseSampleLines(raw);
+    const merged = mergeByDay(samples, tz);
+    // Belt and braces for a client whose fetch window equals lookback_days:
+    // the oldest day in any payload is assumed cut off by the rolling window
+    // and never written, unless it is today (a window shorter than a day is
+    // not one a Shortcut can express).
+    const oldest = merged[0]?.date;
+    const days = merged.filter(
+        (d) =>
+            d.date >= earliest &&
+            d.date <= today &&
+            (d.date !== oldest || d.date === today),
+    );
+
+    const written: Record<string, unknown>[] = [];
+    for (const d of days) {
+        const kcal = checkActiveKcal(Math.round(d.kcal));
+        if (!kcal.ok) {
+            written.push({ date: d.date, skipped: kcal.error });
+            continue;
+        }
+        await upsertActivity(userId, d.date, kcal.value, "health_merged");
+        written.push({
+            date: d.date,
+            active_kcal: kcal.value,
+            by_source: Object.fromEntries(
+                Object.entries(d.bySource).map(([k, v]) => [k, Math.round(v)]),
+            ),
+        });
+    }
+    await touchIngestToken(userId).catch(() => {});
+    const todayRow = written.find((w) => w.date === today);
+    return [
+        {
+            ok: true,
+            days: written,
+            samples: samples.length,
+            rejected_lines: rejected,
+            message:
+                samples.length === 0
+                    ? "No samples received — Health is unreadable while the phone is locked, so nothing was changed."
+                    : `Synced ${written.length} day(s)` +
+                      (todayRow
+                          ? `; today ${todayRow.active_kcal} active kcal.`
+                          : "."),
+        },
+        200,
+    ];
 }
 
 export function createActivitySyncRouter(): Hono {
@@ -71,6 +173,9 @@ export function createActivitySyncRouter(): Hono {
                     400,
                 );
             }
+
+            if (body.samples !== undefined)
+                return c.json(...(await ingestSamples(userId, body)));
 
             // Shortcuts' "Calculate Statistics" can hand over a bare number or
             // a string like "312.4"; checkActiveKcal accepts both.
