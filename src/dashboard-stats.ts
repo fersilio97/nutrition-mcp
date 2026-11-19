@@ -521,6 +521,9 @@ export interface TrendBucket {
     goal_calories: number | null;
     bmr_kcal: number | null;
     active_kcal: number | null;
+    /** Digestion (thermic effect of food), averaged over the same days as
+     *  active, so baseline + active + digestion adds up to the burn. */
+    tef_kcal: number | null;
     burn_kcal: number | null;
     /** Average daily balance over the logged complete days that have one. */
     balance_kcal: number | null;
@@ -544,6 +547,7 @@ type GroupRow = Pick<
     | "goal_calories"
     | "bmr_kcal"
     | "active_kcal"
+    | "tef_kcal"
     | "burn_kcal"
     | "balance_g"
     | "balance_kcal"
@@ -598,6 +602,7 @@ function bucketOf(
         active_kcal: avgOf(
             pick(ref.filter(withBurn), (r) => r.active_kcal ?? 0),
         ),
+        tef_kcal: avgOf(pick(ref.filter(withBurn), (r) => r.tef_kcal)),
         burn_kcal: avgOf(pick(ref, (r) => r.burn_kcal)),
         balance_kcal: avgOf(pick(balanced, (r) => r.balance_kcal)),
         balance_g: avgOf(pick(balanced, (r) => r.balance_g)),
