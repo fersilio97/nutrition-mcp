@@ -137,7 +137,10 @@ async function ingestSamples(
                     : `Synced ${written.length} day(s)` +
                       (todayRow
                           ? `; today ${todayRow.active_kcal} active kcal.`
-                          : "."),
+                          : ".") +
+                      (rejected
+                          ? ` ${rejected} of ${samples.length + rejected} lines unreadable — the Shortcut's date or value format changed.`
+                          : ""),
         },
         200,
     ];
