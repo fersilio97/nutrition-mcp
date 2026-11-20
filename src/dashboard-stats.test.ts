@@ -379,6 +379,9 @@ describe("groupDays", () => {
         carbs_g: eaten == null ? 0 : 200,
         fat_g: eaten == null ? 0 : 60,
         fiber_g: eaten == null ? 0 : 25,
+        sugar_g: eaten == null ? 0 : 40,
+        // Water is logged apart from meals: 1.5 L on every day.
+        waterMl: 1500,
         mealCount: eaten == null ? 0 : 3,
         goal_calories: 2000,
         bmr_kcal: 1500,
@@ -417,6 +420,8 @@ describe("groupDays", () => {
         expect(Object.values(b[1]!.meal_kcal).every((v) => v === 0)).toBe(true);
         expect(b[0]!.meal_kcal!.lunch + b[0]!.meal_kcal!.dinner).toBe(1800);
         expect(b[1]!.goal_calories).toBe(2000); // the goal line stays
+        expect(b[1]!.sugar_g).toBeNull(); // like the macros
+        expect(b[1]!.water_ml).toBe(1500); // water counts without meals
         expect(b[6]!.calories).toBe(900);
         expect(b[6]!.partial).toBe(true);
         // Today's balance is never counted while it runs.

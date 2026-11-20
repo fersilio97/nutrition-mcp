@@ -552,6 +552,11 @@ export interface TrendBucket {
     carbs_g: number | null;
     fat_g: number | null;
     fiber_g: number | null;
+    /** Averaged over the same logged days as the macros. */
+    sugar_g: number | null;
+    /** Averaged over the days with any water logged (drinking is logged
+     *  apart from meals, so a day without meals can still count). */
+    water_ml: number | null;
     /** Reference levels: averaged over the logged days; with none logged,
      *  over every day that has one, so the goal and burn lines stay
      *  continuous across an empty week. */
@@ -581,6 +586,8 @@ type GroupRow = Pick<
     | "carbs_g"
     | "fat_g"
     | "fiber_g"
+    | "sugar_g"
+    | "waterMl"
     | "mealCount"
     | "goal_calories"
     | "bmr_kcal"
@@ -639,6 +646,13 @@ function bucketOf(
         carbs_g: avgOf(pick(counted, (r) => r.carbs_g)),
         fat_g: avgOf(pick(counted, (r) => r.fat_g)),
         fiber_g: avgOf(pick(counted, (r) => r.fiber_g)),
+        sugar_g: avgOf(pick(counted, (r) => r.sugar_g)),
+        water_ml: avgOf(
+            pick(
+                rows.filter((r) => r.waterMl > 0),
+                (r) => r.waterMl,
+            ),
+        ),
         goal_calories: avgOf(pick(ref, (r) => r.goal_calories)),
         bmr_kcal: avgOf(pick(ref, (r) => r.bmr_kcal)),
         // Active averaged over the same days as burn (no record = 0), so
