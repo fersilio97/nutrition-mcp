@@ -22,6 +22,14 @@ different version in UI or tool text without the user's explicit approval.
 When a change is approved, update this file in the same commit, and ask the
 `nutritionist` agent to check both.
 
+**Editing surface.** The user edits these rules on the "Nutrition formula map"
+whiteboard (https://claude.ai/artifact/HWzhayZqT3JSKmczLTdLZ8), where each
+section carries the same § number as below. Diamonds are choices and each
+arrow out of one is a branch. When asked to sync, read the whole board and
+compare each § section with this file. Ask the `nutritionist` agent to check
+any change, update this file, and say which board edits changed which
+sections. This file stays the source the code is held to.
+
 Read it top-down: the calorie goal first, then each term it uses, with a link
 to where that term is defined. "Known deviations" at the end lists the places
 where the code does not yet follow these rules; fix the code, never the rule,
