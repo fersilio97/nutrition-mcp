@@ -2595,16 +2595,27 @@
             .lm.compact .facts-title h3 {
                 font-size: 1.25rem;
             }
+            /* Today: the two log buttons, the old "+ Log meal" size. */
             .log-row {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: var(--s3);
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+                gap: var(--s2);
                 margin: 0 0 var(--s5);
             }
-            .log-row .log-btn {
-                width: 100%;
-                min-height: 44px;
-                justify-content: center;
+            /* The range head inside the weight chart: the pills stay on the
+               right; a moved range's "Today" link wraps under the arrows
+               instead of pushing the pills onto their own line. */
+            .w-chart .panel-head {
+                flex-wrap: nowrap;
+                align-items: flex-start;
+            }
+            .w-chart .range-title {
+                flex: 1;
+                min-width: 0;
+            }
+            .w-chart .seg {
+                flex-shrink: 0;
             }
             .w-chart .panel-head {
                 margin-bottom: var(--s5);
@@ -7487,8 +7498,8 @@
                 }
                 function logButtonsHtml() {
                     return (
-                        '<div class="log-row rv"><button type="button" class="btn log-btn" data-lm-open>+ Log meal</button>' +
-                        '<button type="button" class="btn log-btn" data-go="log-weight">+ Log weight</button></div>' +
+                        '<div class="log-row rv"><button type="button" class="btn btn-sm log-btn" data-lm-open>+ Log meal</button>' +
+                        '<button type="button" class="btn btn-sm log-btn" data-go="log-weight">+ Log weight</button></div>' +
                         lmFlashHtml()
                     );
                 }
