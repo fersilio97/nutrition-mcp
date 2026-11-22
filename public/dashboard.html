@@ -3923,6 +3923,15 @@
             .item-amount {
                 width: 5em;
             }
+            .item-name-content {
+                display: inline;
+            }
+            .item-label {
+                min-width: 0;
+            }
+            .item-quantity {
+                white-space: nowrap;
+            }
             .item-unit {
                 margin-left: 4px;
             }
@@ -3999,6 +4008,35 @@
                 }
                 .meals-table tr.meal td {
                     border-bottom: 1px solid var(--line);
+                }
+                .meals-table tr.item-row td.item-name {
+                    display: flex;
+                    align-items: baseline;
+                    min-width: 0;
+                }
+                .meals-table tr.item-row .item-name-content {
+                    display: flex;
+                    align-items: baseline;
+                    gap: var(--s2);
+                    flex: 1;
+                    min-width: 0;
+                }
+                .meals-table tr.item-row .item-label {
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    flex: 1;
+                }
+                .meals-table tr.item-row .item-quantity {
+                    flex: 0 0 6em;
+                    width: 6em;
+                    text-align: right;
+                    color: var(--ink-3);
+                    font-family: var(--font-mono);
+                    font-variant-numeric: tabular-nums;
+                }
+                .meals-table tr.item-row .item-amount {
+                    width: 4em;
                 }
                 .meals-table tr.meal.last td {
                     border-bottom: 0;
@@ -11972,9 +12010,11 @@
                                     ? ' id="meal-items-' + esc(m.id) + '"'
                                     : "") +
                                 '><td class="item-empty"></td><td class="item-empty"></td><td class="d item-name">' +
+                                '<span class="item-name-content"><span class="item-label">' +
                                 esc(itemName(item)) +
+                                '</span><span class="item-quantity">' +
                                 (editing
-                                    ? ' <input class="input item-amount" type="number" min="0" step="any" value="' +
+                                    ? '<input class="input item-amount" type="number" min="0" step="any" value="' +
                                       esc(item.amount) +
                                       '" data-item-amount="' +
                                       esc(m.id) +
@@ -11989,6 +12029,7 @@
                                       esc(item.amount) +
                                       " " +
                                       esc(item.unit)) +
+                                "</span></span>" +
                                 '</td><td class="n k item-num" data-l="kcal">' +
                                 nz(item.calories) +
                                 "</td>" +
