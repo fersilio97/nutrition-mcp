@@ -57,7 +57,7 @@ import {
     type WeightEntry,
 } from "./supabase.js";
 import { buildDailyBuckets } from "./insights.js";
-import { removeItem, scaleItem } from "./meal-items.js";
+import { describeItems, removeItem, scaleItem } from "./meal-items.js";
 import { setupChecklist } from "./onboarding.js";
 import {
     checkLoggedServings,
@@ -1529,7 +1529,10 @@ export async function patchMealItemFromDashboard(
     const items = meal.items.map((item, i) =>
         i === index ? scaleItem(item, amount.value) : item,
     );
-    const saved = await updateMeal(userId, id, { items });
+    const saved = await updateMeal(userId, id, {
+        items,
+        description: describeItems(items),
+    });
     return { status: 200, json: { ok: true, meal: mealViewOf(saved) } };
 }
 
@@ -1551,7 +1554,10 @@ export async function deleteMealItemFromDashboard(
             ? { status: 200, json: { ok: true, deleted: true } }
             : deleted;
     }
-    const saved = await updateMeal(userId, id, { items });
+    const saved = await updateMeal(userId, id, {
+        items,
+        description: describeItems(items),
+    });
     return { status: 200, json: { ok: true, meal: mealViewOf(saved) } };
 }
 

@@ -11920,6 +11920,7 @@
                 // a range change) so a half-finished edit is not lost.
                 let mealEditId = null;
                 let mealDraft = null;
+                let mealItemEdit = null;
                 let mealFlash = "";
                 let mealFlashTimer = 0;
                 const openMealItems = new Set();
@@ -11961,24 +11962,34 @@
                 function renderMealItems(m, index, sod) {
                     return (m.items || [])
                         .map(function (item, itemIndex) {
+                            const editing =
+                                mealItemEdit &&
+                                mealItemEdit.mealId === m.id &&
+                                mealItemEdit.index === itemIndex;
                             return (
                                 '<tr class="item-row"' +
                                 (itemIndex === 0
                                     ? ' id="meal-items-' + esc(m.id) + '"'
                                     : "") +
-                                '><td class="item-empty"></td><td class="item-empty"></td><td class="item-name">' +
+                                '><td class="item-empty"></td><td class="item-empty"></td><td class="d item-name">' +
                                 esc(itemName(item)) +
-                                ' <input class="input item-amount" type="number" min="0" step="any" value="' +
-                                esc(item.amount) +
-                                '" data-item-amount="' +
-                                esc(m.id) +
-                                '" data-item-index="' +
-                                itemIndex +
-                                '" aria-label="Amount of ' +
-                                esc(itemName(item)) +
-                                '"><span class="item-unit">' +
-                                esc(item.unit) +
-                                '</span></td><td class="n k item-num" data-l="kcal">' +
+                                (editing
+                                    ? ' <input class="input item-amount" type="number" min="0" step="any" value="' +
+                                      esc(item.amount) +
+                                      '" data-item-amount="' +
+                                      esc(m.id) +
+                                      '" data-item-index="' +
+                                      itemIndex +
+                                      '" aria-label="Amount of ' +
+                                      esc(itemName(item)) +
+                                      '"><span class="item-unit">' +
+                                      esc(item.unit) +
+                                      "</span>"
+                                    : " · " +
+                                      esc(item.amount) +
+                                      " " +
+                                      esc(item.unit)) +
+                                '</td><td class="n k item-num" data-l="kcal">' +
                                 nz(item.calories) +
                                 "</td>" +
                                 [
@@ -12003,13 +12014,27 @@
                                       nz(item.sodium_mg) +
                                       "</td>"
                                     : "") +
-                                '<td class="e item-actions"><button type="button" class="btn-edit" data-remove-item="' +
-                                esc(m.id) +
-                                '" data-item-index="' +
-                                itemIndex +
-                                '" aria-label="Remove ' +
-                                esc(itemName(item)) +
-                                '">Remove</button></td></tr>'
+                                '<td class="e item-actions">' +
+                                (editing
+                                    ? '<button type="button" class="btn-edit" data-save-item="' +
+                                      esc(m.id) +
+                                      '" data-item-index="' +
+                                      itemIndex +
+                                      '">Save</button><button type="button" class="btn-edit" data-cancel-item>Cancel</button><button type="button" class="btn-edit" data-remove-item="' +
+                                      esc(m.id) +
+                                      '" data-item-index="' +
+                                      itemIndex +
+                                      '">' +
+                                      (mealItemEdit.confirm
+                                          ? "Confirm remove"
+                                          : "Remove") +
+                                      "</button>"
+                                    : '<button type="button" class="btn-edit" data-edit-item="' +
+                                      esc(m.id) +
+                                      '" data-item-index="' +
+                                      itemIndex +
+                                      '">Edit</button>') +
+                                "</td></tr>"
                             );
                         })
                         .join("");
@@ -12043,11 +12068,63 @@
                         paint();
                         return;
                     }
+                    const editItem = ev.target.closest("[data-edit-item]");
+                    if (editItem) {
+                        mealItemEdit = {
+                            mealId: editItem.dataset.editItem,
+                            index: Number(editItem.dataset.itemIndex),
+                            confirm: false,
+                        };
+                        contentDirty.meals = true;
+                        paint();
+                        return;
+                    }
+                    if (ev.target.closest("[data-cancel-item]")) {
+                        mealItemEdit = null;
+                        contentDirty.meals = true;
+                        paint();
+                        return;
+                    }
+                    const saveItem = ev.target.closest("[data-save-item]");
+                    if (saveItem) {
+                        const input =
+                            $("meals-body").querySelector("[data-item-amount]");
+                        if (!input || !input.value || Number(input.value) <= 0)
+                            return;
+                        const id = saveItem.dataset.saveItem,
+                            index = Number(saveItem.dataset.itemIndex);
+                        saveItem.disabled = true;
+                        writeItemChange(id, index, "PATCH", {
+                            amount: Number(input.value),
+                        })
+                            .then(function (res) {
+                                if (!res.ok) return showItemError(res);
+                                mealItemEdit = null;
+                                replaceMealEverywhere(id, res.body.meal);
+                                openMealItems.add(id);
+                                contentDirty.meals = true;
+                                paint();
+                                refresh();
+                            })
+                            .catch(function () {
+                                setMealFlash("Could not reach the server.");
+                                contentDirty.meals = true;
+                                paint();
+                            });
+                        return;
+                    }
                     const remove = ev.target.closest("[data-remove-item]");
                     if (!remove) return;
-                    if (remove.dataset.confirm !== "1") {
-                        remove.dataset.confirm = "1";
-                        remove.textContent = "Confirm remove";
+                    if (!mealItemEdit || !mealItemEdit.confirm) {
+                        if (mealItemEdit) mealItemEdit.confirm = true;
+                        else
+                            mealItemEdit = {
+                                mealId: remove.dataset.removeItem,
+                                index: Number(remove.dataset.itemIndex),
+                                confirm: true,
+                            };
+                        contentDirty.meals = true;
+                        paint();
                         return;
                     }
                     const id = remove.dataset.removeItem,
@@ -12057,11 +12134,15 @@
                         .then(function (res) {
                             if (!res.ok) return showItemError(res);
                             if (res.body.deleted) {
+                                mealItemEdit = null;
                                 dropMealEverywhere(id);
                                 setMealFlash(
                                     "Meal deleted — it had no foods left.",
                                 );
-                            } else replaceMealEverywhere(id, res.body.meal);
+                            } else {
+                                mealItemEdit = null;
+                                replaceMealEverywhere(id, res.body.meal);
+                            }
                             contentDirty.meals = true;
                             paint();
                             refresh();
@@ -13318,6 +13399,12 @@
                 // Enter in the amount / count boxes commits them; it must not
                 // submit (log) the form half-way through choosing.
                 $("meals-body").addEventListener("keydown", function (ev) {
+                    if (ev.key === "Escape" && mealItemEdit) {
+                        mealItemEdit = null;
+                        contentDirty.meals = true;
+                        paint();
+                        return;
+                    }
                     if (
                         ev.key === "Enter" &&
                         ev.target.closest &&

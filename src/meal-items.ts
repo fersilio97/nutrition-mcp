@@ -168,3 +168,14 @@ export function removeItem(items: MealItem[], index: number): MealItem[] {
         throw new RangeError("Item index is out of range.");
     return items.filter((_, i) => i !== index);
 }
+
+export function describeItems(items: MealItem[]): string {
+    return items
+        .map((item) => {
+            const amount = Number.isInteger(item.amount)
+                ? String(item.amount)
+                : String(item.amount).replace(/\.0+$/, "");
+            return `${item.name} (${amount}${item.unit === "piece" ? "" : ` ${item.unit}`})`;
+        })
+        .join(" + ");
+}

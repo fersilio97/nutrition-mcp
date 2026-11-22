@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
     checkMealItems,
+    describeItems,
     removeItem,
     scaleItem,
     totalsFromItems,
@@ -20,6 +21,15 @@ const item = (name: string, extras: Partial<MealItem> = {}): MealItem => ({
 });
 
 describe("meal items", () => {
+    test("describes items with compact amounts and piece counts", () => {
+        expect(
+            describeItems([
+                item("Rolled oats", { amount: 70, unit: "g" }),
+                item("Clif Bar", { amount: 1, unit: "piece" }),
+                item("Milk", { amount: 1.5, unit: "cup" }),
+            ]),
+        ).toBe("Rolled oats (70 g) + Clif Bar (1) + Milk (1.5 cup)");
+    });
     test("sums totals, optional values, and common source", () => {
         expect(
             totalsFromItems([

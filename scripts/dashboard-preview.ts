@@ -72,7 +72,12 @@ import { buildAdvisorReport, ADVISOR_DAYS } from "../src/advisor.js";
 import { buildDailyBuckets } from "../src/insights.js";
 import type { Meal, MealInput } from "../src/supabase.js";
 import type { Recipe } from "../src/recipes.js";
-import { removeItem, scaleItem, totalsFromItems } from "../src/meal-items.js";
+import {
+    describeItems,
+    removeItem,
+    scaleItem,
+    totalsFromItems,
+} from "../src/meal-items.js";
 
 // The same CSP production sends for /dashboard (src/dashboard-fixture.test.ts
 // keeps the two in step), so a CSP violation shows up here before prod.
@@ -750,6 +755,7 @@ const server = Bun.serve({
             e.mealPatches[id] = {
                 ...e.mealPatches[id],
                 items,
+                description: describeItems(items),
                 ...totalsFromItems(items),
             };
             return json({
