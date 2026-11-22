@@ -360,13 +360,14 @@ sections above.
   `EA = mean(intake − active) ÷ FFM` over the counted watch days of the
   last 14 (needs 7+). FFM by Boer (male `0.407 × kg + 0.267 × cm − 19.2`,
   female `0.252 × kg + 0.473 × cm − 48.3`, kg = trend weight). Fires below
-  25 (male) / 30 (female) kcal/kg FFM/day; the message says it reads low
+  20 (male) / 30 (female) kcal/kg FFM/day (male cutoff 20 because watch
+  active includes everyday movement; IOC 2023); the message says it reads low
   because watch active includes everyday movement.
 - **A6 Fixed mode aligned (§1, invariant 5).** `typed + A_d ÷ (1 − f)`,
   macros by A1 with protein held. Removes the Fixed exception.
 - **A7 Protein per kg (new §11).** `protein_g = p × ref_kg`, rounded to 1 g;
   `p` = `profiles.protein_g_per_kg` (null = typed grams), default 1.6,
-  allowed 1.2–2.4. `ref_kg` = trend weight, or the weight at BMI 25 when
+  allowed 1.2–2.4 (this user: 1.8, ≈ 144 g at 80 kg). `ref_kg` = trend weight, or the weight at BMI 25 when
   BMI > 30. Recomputed daily; held by A1 and A6. Info flag if protein kcal
   exceed 40% of `base_d`.
 
