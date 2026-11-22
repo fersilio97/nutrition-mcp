@@ -1159,7 +1159,7 @@
                 }
             }
 
-            /* ---------- range head (Trends, Meals) ---------- */
+            /* ---------- range head (Trends, Body, Meals) ---------- */
             .panel-head {
                 display: flex;
                 flex-wrap: wrap;
@@ -2609,6 +2609,34 @@
                 margin-bottom: var(--s5);
             }
             .lm.compact .facts-title h3 {
+                font-size: 1.25rem;
+            }
+            /* Today: the two log buttons, the old "+ Log meal" size. */
+            .log-row {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+                gap: var(--s2);
+                margin: 0 0 var(--s5);
+            }
+            /* The range head inside the weight chart: the pills stay on the
+               right; a moved range's "Today" link wraps under the arrows
+               instead of pushing the pills onto their own line. */
+            .w-chart .panel-head {
+                flex-wrap: nowrap;
+                align-items: flex-start;
+            }
+            .w-chart .range-title {
+                flex: 1;
+                min-width: 0;
+            }
+            .w-chart .seg {
+                flex-shrink: 0;
+            }
+            .w-chart .panel-head {
+                margin-bottom: var(--s5);
+            }
+            .w-chart .range-label {
                 font-size: 1.25rem;
             }
             .lm .lw-flash {
@@ -4574,11 +4602,14 @@
                     "weighins",
                     "advisor",
                 ];
-                // 7 days → daily bars, 30 → weekly, a year → monthly (the
-                // server's groupDays). 90 was dropped (§0c).
+                // 1 week → daily bars, 1 month → weekly, 1 year → monthly
+                // (the server's groupDays). 90 was dropped (§0c). The labels
+                // are the windows' common names; each is still a rolling
+                // N-day window (7 / 30 / 365), not a calendar week or month,
+                // so the arrows tile pages of equal length.
                 const RANGES = [
-                    [7, "7 days"],
-                    [30, "30 days"],
+                    [7, "1 week"],
+                    [30, "1 month"],
                     [365, "1 year"],
                 ];
 
@@ -4654,6 +4685,19 @@
                         month: "short",
                         day: "numeric",
                     });
+                // "Nov 21, 2025 – Nov 21, 2026" when the ends fall in
+                // different years (a 1-year range), else "Nov 14 – Nov 21".
+                const yearDay = (iso) =>
+                    parseDay(iso).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                    });
+                const crossYear = (a, b) => a.slice(0, 4) !== b.slice(0, 4);
+                const rangeSpanLabel = (a, b) =>
+                    crossYear(a, b)
+                        ? yearDay(a) + " – " + yearDay(b)
+                        : shortDay(a) + " – " + shortDay(b);
                 const longDay = (iso) =>
                     parseDay(iso).toLocaleDateString(undefined, {
                         weekday: "short",
@@ -5256,7 +5300,7 @@
                     });
                 });
 
-                /* ---------- range control (Trends + Meals) ---------- */
+                /* ---------- range control (Trends, Body, Meals) ---------- */
                 const CHEV = (d) =>
                     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' +
                     d +
@@ -5326,12 +5370,11 @@
                     const end = data ? rangeEnd || data.endDate : null;
                     const label = data
                         ? esc(
-                              shortDay(
+                              rangeSpanLabel(
                                   shiftDay(end, rangeEnd ? 1 - range : -range),
+                                  end,
                               ),
                           ) +
-                          " – " +
-                          esc(shortDay(end)) +
                           "<small>" +
                           esc(rangeName() + " · " + data.timezone) +
                           "</small>"
@@ -5435,7 +5478,7 @@
                             setRangeEnd(i.value);
                     }, 450);
                 });
-                // The arrow keys step the range on Trends and Meals, except
+                // The arrow keys step the range on Trends, Body and Meals, except
                 // where they already mean something (tabs, charts, fields).
                 document.addEventListener("keydown", function (ev) {
                     if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight")
@@ -5448,7 +5491,12 @@
                         ev.shiftKey
                     )
                         return;
-                    if (!data || (active !== "trends" && active !== "meals"))
+                    if (
+                        !data ||
+                        (active !== "trends" &&
+                            active !== "body" &&
+                            active !== "meals")
+                    )
                         return;
                     const t = ev.target;
                     if (
@@ -5903,6 +5951,10 @@
                     }
                 }
                 document.addEventListener("click", function (ev) {
+                    const lw =
+                        ev.target.closest &&
+                        ev.target.closest("[data-lw-open]");
+                    if (lw) return openLogWeight(lw.dataset.lwOpen || "body");
                     const t =
                         ev.target.closest && ev.target.closest("[data-go]");
                     if (!t) return;
@@ -7473,6 +7525,13 @@
                         '<span class="b-status" id="setup-status" role="status"></span></div></section>'
                     );
                 }
+                function logButtonsHtml() {
+                    return (
+                        '<div class="log-row rv"><button type="button" class="btn btn-sm log-btn" data-lm-open>+ Log meal</button>' +
+                        '<button type="button" class="btn btn-sm log-btn" data-go="log-weight">+ Log weight</button></div>' +
+                        lmFlashHtml()
+                    );
+                }
                 // ---- one-tap water (vault features 004/005) ------------------
                 // Only for users who turned water tracking on; nobody else sees a
                 // water figure anywhere on the page.
@@ -7700,7 +7759,7 @@
                     $("today-body").innerHTML =
                         installCardHtml() +
                         setupCardHtml() +
-                        logMealBlock("today") +
+                        logButtonsHtml() +
                         waterQuickHtml() +
                         '<div class="today-grid"><div class="col">' +
                         '<section class="facts rv" aria-labelledby="h-today"><div class="facts-title"><h3 id="h-today">Today</h3><span class="tag">' +
@@ -10859,13 +10918,14 @@
                     );
                 }
                 function weightHeadHtml(title) {
+                    const bodyOpen = lwOpen === "body";
                     return (
                         '<div class="facts-title"><h3 id="h-w">' +
                         title +
-                        '</h3><button type="button" class="btn btn-sm" id="lw-open" aria-expanded="' +
-                        lwOpen +
+                        '</h3><button type="button" class="btn btn-sm" id="lw-open" data-lw-open="body" aria-expanded="' +
+                        bodyOpen +
                         '" aria-controls="lw-form"' +
-                        (lwOpen ? " hidden" : "") +
+                        (bodyOpen ? " hidden" : "") +
                         ">+ Log weight</button></div>" +
                         (lwFlash
                             ? '<p class="lw-flash" role="status">' +
@@ -10874,10 +10934,11 @@
                             : "")
                     );
                 }
-                function openLogWeight() {
-                    lwOpen = true;
-                    selectTab("body");
-                    contentDirty.body = true;
+                function openLogWeight(where) {
+                    where = where || "body";
+                    lwOpen = where;
+                    selectTab(where);
+                    contentDirty[where] = true;
                     paint();
                     const box = $("lw-weight");
                     if (box) {
@@ -10886,8 +10947,6 @@
                     }
                 }
                 function wireLogWeight() {
-                    const open = $("lw-open");
-                    if (open) open.addEventListener("click", openLogWeight);
                     const form = $("lw-form");
                     if (!form) return;
                     const read = () => ({
@@ -10903,8 +10962,12 @@
                         lwOpen = false;
                         lwDraft = null;
                         contentDirty.body = true;
+                        contentDirty.weighins = true;
                         paint();
-                        if ($("lw-open")) $("lw-open").focus();
+                        const focusOpen = document.querySelector(
+                            '#weighins-body [data-lw-open="weighins"]:not([hidden]), #lw-open:not([hidden])',
+                        );
+                        if (focusOpen) focusOpen.focus();
                     });
                     form.addEventListener("submit", function (ev) {
                         ev.preventDefault();
@@ -10942,6 +11005,9 @@
                                 const e = res.body.entry;
                                 lwOpen = false;
                                 lwDraft = null;
+                                wl = null;
+                                contentDirty.body = true;
+                                contentDirty.weighins = true;
                                 lwFlash =
                                     "Logged " +
                                     wfmt(e.weight_g, data.weightUnit) +
@@ -10961,6 +11027,7 @@
                                         document.querySelector(".lw-flash");
                                     if (f) f.remove();
                                 }, 6000);
+                                loadWeights();
                                 refresh();
                             })
                             .catch(function (err) {
@@ -10991,7 +11058,7 @@
                               "</span>"
                             : "") +
                         "</p>" +
-                        (lwOpen ? logWeightHtml() : "") +
+                        (lwOpen === "body" ? logWeightHtml() : "") +
                         (has
                             ? '<div class="facts-cal w-now"><p class="label">Current<small>logged ' +
                               esc(longDay(s.latest_date)) +
@@ -11551,12 +11618,18 @@
                     });
                 }
 
+                // The Body chart plots the shared range (the head above it);
+                // the Weight panel, rate and goal stay on today's tracker
+                // window, like the Today tab.
+                const bodyWeights = () =>
+                    (data.rangeWeights || data.weights).filter(
+                        (w) => w.date >= data.startDate && w.date <= rEnd(),
+                    );
+                const rangeNoun = () => rangeName().replace(/^1 /, "");
                 RENDER.body = function () {
                     const s = data.weightStats;
                     const unit = data.weightUnit;
-                    const pts = data.weights.length;
-                    const windowDays =
-                        dayDiff(data.weightWindowStart, data.endDate) + 1;
+                    const pts = bodyWeights().length;
                     $("body-body").innerHTML =
                         '<div class="stack">' +
                         (detailsMissing()
@@ -11565,22 +11638,21 @@
                         '<div class="body-grid">' +
                         weightHero(s, unit) +
                         '<section class="w-chart rv" aria-labelledby="h-wchart">' +
+                        '<div class="panel-head" data-range-head></div>' +
                         secHead({
                             eyebrow: "Trend",
                             id: "h-wchart",
-                            title:
-                                "Weight · since " +
-                                esc(shortDay(data.weightWindowStart)),
+                            title: "Weight",
                             note: pts
                                 ? plural(pts, "weigh-in") +
-                                  " since " +
-                                  esc(longDay(data.weightWindowStart)) +
+                                  " in this " +
+                                  esc(rangeNoun()) +
                                   ", in " +
                                   unit +
                                   "."
-                                : "No weigh-ins in the last " +
-                                  windowDays +
-                                  " days.",
+                                : "No weigh-ins in this " +
+                                  esc(rangeNoun()) +
+                                  ".",
                             legend: pts
                                 ? legend(
                                       [[LG.dotline(), "Weight"]]
@@ -11604,7 +11676,11 @@
                         }) +
                         (pts
                             ? '<div class="plot" id="weight-plot"></div>'
-                            : '<p class="empty">No weigh-ins yet. Ask Claude to log your weight.</p>') +
+                            : '<p class="empty">' +
+                              (s.latest_g != null
+                                  ? "Pick a longer range, or step back, to see other weigh-ins."
+                                  : "No weigh-ins yet. Log one here, or ask Claude to log your weight.") +
+                              "</p>") +
                         "</section>" +
                         goalFormHtml() +
                         bodyFormHtml() +
@@ -11615,6 +11691,7 @@
                     wireLab();
                     wireGoalForm();
                     wireLogWeight();
+                    renderRangeHeads();
                 };
 
                 // Time-scaled, not index-scaled: weigh-ins are irregular, and
@@ -11624,7 +11701,7 @@
                     if (!host || !host.clientWidth) return;
                     const unit = data.weightUnit;
                     const s = data.weightStats;
-                    const pts = data.weights
+                    const pts = bodyWeights()
                         .map((w) => ({
                             date: w.date,
                             v: toUnit(w.weight_g, unit),
@@ -11635,8 +11712,8 @@
                     const c = chartSvg(
                         host,
                         innerWidth <= 480 ? 220 : 280,
-                        "Body weight since " +
-                            shortDay(data.weightWindowStart) +
+                        "Body weight " +
+                            rangeSpanLabel(data.startDate, rEnd()) +
                             ": " +
                             first.v.toFixed(1) +
                             " " +
@@ -11669,8 +11746,8 @@
                     hi += padY;
                     const L = gutter([hi.toFixed(1), lo.toFixed(1)]);
                     const plotW = c.w - L - PAD.r;
-                    const t0 = parseDay(data.weightWindowStart).getTime();
-                    const t1 = parseDay(data.endDate).getTime();
+                    const t0 = parseDay(data.startDate).getTime();
+                    const t1 = parseDay(rEnd()).getTime();
                     const xAt = (iso) =>
                         L +
                         (t1 === t0
@@ -11759,18 +11836,18 @@
                             }),
                         );
                     });
-                    [data.weightWindowStart, data.endDate].forEach(
-                        function (iso, k) {
-                            svgText(
-                                svg,
-                                k ? L + plotW : L,
-                                c.h - 8,
-                                shortDay(iso),
-                                "xl",
-                                k ? "end" : "start",
-                            );
-                        },
-                    );
+                    [data.startDate, rEnd()].forEach(function (iso, k) {
+                        svgText(
+                            svg,
+                            k ? L + plotW : L,
+                            c.h - 8,
+                            crossYear(data.startDate, rEnd())
+                                ? yearDay(iso)
+                                : shortDay(iso),
+                            "xl",
+                            k ? "end" : "start",
+                        );
+                    });
                     inspect(
                         svg,
                         pts.map(function (p) {
@@ -13702,8 +13779,20 @@
                 RENDER.weighins = function () {
                     const host = $("weighins-body");
                     if (wl === null) {
-                        host.innerHTML = SKELETON.weighins;
+                        host.innerHTML =
+                            '<section class="rv"><div class="facts-title"><h3>Weigh-ins</h3>' +
+                            weighinsLogButtonHtml() +
+                            "</div>" +
+                            (lwOpen === "weighins" ? logWeightHtml() : "") +
+                            (lwFlash
+                                ? '<p class="lw-flash" role="status">' +
+                                  esc(lwFlash) +
+                                  "</p>"
+                                : "") +
+                            SKELETON.weighins +
+                            "</section>";
                         loadWeights();
+                        if (lwOpen === "weighins") wireLogWeight();
                         return;
                     }
                     const unit = data.weightUnit;
@@ -13711,6 +13800,7 @@
                         eyebrow: "Log",
                         id: "h-wl",
                         title: "Weigh-ins",
+                        aside: weighinsLogButtonHtml(),
                         note: wl.length
                             ? plural(wl.length, "entry", "entries") +
                               ", newest first, in " +
@@ -13730,9 +13820,16 @@
                         host.innerHTML =
                             '<section class="rv" aria-labelledby="h-wl">' +
                             head +
+                            (lwOpen === "weighins" ? logWeightHtml() : "") +
+                            (lwFlash
+                                ? '<p class="lw-flash" role="status">' +
+                                  esc(lwFlash) +
+                                  "</p>"
+                                : "") +
                             flash +
                             err +
-                            '<p class="empty">No weigh-ins yet. Log one from the Body tab, or ask Claude to log your weight.</p></section>';
+                            '<p class="empty">No weigh-ins yet. Log one here, or ask Claude to log your weight.</p></section>';
+                        if (lwOpen === "weighins") wireLogWeight();
                         return;
                     }
                     const rows = wl
@@ -13769,13 +13866,30 @@
                     host.innerHTML =
                         '<section class="rv" aria-labelledby="h-wl">' +
                         head +
+                        (lwOpen === "weighins" ? logWeightHtml() : "") +
+                        (lwFlash
+                            ? '<p class="lw-flash" role="status">' +
+                              esc(lwFlash) +
+                              "</p>"
+                            : "") +
                         flash +
                         err +
                         '<div class="scroll-x"><table class="wl-table"><thead><tr><th>When</th><th class="n">Weight</th><th class="wl-hide-sm">Note</th><th></th></tr></thead><tbody>' +
                         rows +
                         "</tbody></table></div></section>";
                     if (weEditId && $("we-weight")) $("we-weight").focus();
+                    if (lwOpen === "weighins") wireLogWeight();
                 };
+                function weighinsLogButtonHtml() {
+                    const open = lwOpen === "weighins";
+                    return (
+                        '<button type="button" class="btn btn-sm" data-lw-open="weighins" aria-controls="lw-form" aria-expanded="' +
+                        open +
+                        '"' +
+                        (open ? " hidden" : "") +
+                        ">+ Log weight</button>"
+                    );
+                }
                 function weFlashSet(text) {
                     weFlash = text;
                     clearTimeout(weFlashTimer);
