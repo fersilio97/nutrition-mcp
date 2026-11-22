@@ -271,11 +271,13 @@ const server = Bun.serve({
                 resting_basis,
                 energy_kcal_per_gram,
                 trend_window_days,
+                active_outlier_filter,
                 ...bodyInput
             } = b;
             const model = checkModelSettings({
                 energy_kcal_per_gram,
                 trend_window_days,
+                active_outlier_filter,
             });
             if (!model.ok) return invalid(model.error);
             if (
