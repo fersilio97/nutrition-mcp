@@ -144,3 +144,14 @@ describe("page wiring", () => {
         expect(page).toContain("if (midEntry()) return;");
     });
 });
+
+// Every inline <script> must parse: a duplicate `const` (two helpers sharing a
+// name) is an early SyntaxError that kills the whole page, sign-in included,
+// and nothing else here runs the page's code.
+test("every inline script in dashboard.html parses", () => {
+    const scripts = [...page.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(
+        (m) => m[1]!,
+    );
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const src of scripts) expect(() => new Function(src)).not.toThrow();
+});

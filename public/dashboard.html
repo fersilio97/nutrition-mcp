@@ -1143,7 +1143,7 @@
                 }
             }
 
-            /* ---------- range head (Trends, Meals) ---------- */
+            /* ---------- range head (Trends, Body, Meals) ---------- */
             .panel-head {
                 display: flex;
                 flex-wrap: wrap;
@@ -4490,6 +4490,7 @@
                 >
                     <h2 class="sr-only">Body</h2>
                     <div class="banner-slot"></div>
+                    <div class="panel-head" data-range-head></div>
                     <div class="panel-body" id="body-body"></div>
                 </section>
                 <section
@@ -4558,11 +4559,14 @@
                     "weighins",
                     "advisor",
                 ];
-                // 7 days → daily bars, 30 → weekly, a year → monthly (the
-                // server's groupDays). 90 was dropped (§0c).
+                // 1 week → daily bars, 1 month → weekly, 1 year → monthly
+                // (the server's groupDays). 90 was dropped (§0c). The labels
+                // are the windows' common names; each is still a rolling
+                // N-day window (7 / 30 / 365), not a calendar week or month,
+                // so the arrows tile pages of equal length.
                 const RANGES = [
-                    [7, "7 days"],
-                    [30, "30 days"],
+                    [7, "1 week"],
+                    [30, "1 month"],
                     [365, "1 year"],
                 ];
 
@@ -4638,6 +4642,19 @@
                         month: "short",
                         day: "numeric",
                     });
+                // "Nov 21, 2025 – Nov 21, 2026" when the ends fall in
+                // different years (a 1-year range), else "Nov 14 – Nov 21".
+                const yearDay = (iso) =>
+                    parseDay(iso).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                    });
+                const crossYear = (a, b) => a.slice(0, 4) !== b.slice(0, 4);
+                const rangeSpanLabel = (a, b) =>
+                    crossYear(a, b)
+                        ? yearDay(a) + " – " + yearDay(b)
+                        : shortDay(a) + " – " + shortDay(b);
                 const longDay = (iso) =>
                     parseDay(iso).toLocaleDateString(undefined, {
                         weekday: "short",
@@ -5240,7 +5257,7 @@
                     });
                 });
 
-                /* ---------- range control (Trends + Meals) ---------- */
+                /* ---------- range control (Trends, Body, Meals) ---------- */
                 const CHEV = (d) =>
                     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' +
                     d +
@@ -5310,12 +5327,11 @@
                     const end = data ? rangeEnd || data.endDate : null;
                     const label = data
                         ? esc(
-                              shortDay(
+                              rangeSpanLabel(
                                   shiftDay(end, rangeEnd ? 1 - range : -range),
+                                  end,
                               ),
                           ) +
-                          " – " +
-                          esc(shortDay(end)) +
                           "<small>" +
                           esc(rangeName() + " · " + data.timezone) +
                           "</small>"
@@ -5419,7 +5435,7 @@
                             setRangeEnd(i.value);
                     }, 450);
                 });
-                // The arrow keys step the range on Trends and Meals, except
+                // The arrow keys step the range on Trends, Body and Meals, except
                 // where they already mean something (tabs, charts, fields).
                 document.addEventListener("keydown", function (ev) {
                     if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight")
@@ -5432,7 +5448,12 @@
                         ev.shiftKey
                     )
                         return;
-                    if (!data || (active !== "trends" && active !== "meals"))
+                    if (
+                        !data ||
+                        (active !== "trends" &&
+                            active !== "body" &&
+                            active !== "meals")
+                    )
                         return;
                     const t = ev.target;
                     if (
@@ -7444,6 +7465,25 @@
                         '<span class="b-status" id="setup-status" role="status"></span></div></section>'
                     );
                 }
+                // Today's "Log weight" strip, the twin of "Log a meal" above
+                // it: the button opens the Body tab's weigh-in form.
+                function logWeightStripHtml() {
+                    const s = data.weightStats || {};
+                    return (
+                        '<section class="lm compact rv" aria-labelledby="h-lw-today"><div class="facts-title"><h3 id="h-lw-today">Log weight</h3>' +
+                        '<button type="button" class="btn btn-sm" data-go="log-weight">+ Log weight</button></div>' +
+                        (s.latest_g != null
+                            ? '<p class="form-hint">Last ' +
+                              wfmt(s.latest_g, data.weightUnit) +
+                              " " +
+                              esc(data.weightUnit) +
+                              " · " +
+                              esc(longDay(s.latest_date)) +
+                              "</p>"
+                            : "") +
+                        "</section>"
+                    );
+                }
                 // ---- one-tap water (vault features 004/005) ------------------
                 // Only for users who turned water tracking on; nobody else sees a
                 // water figure anywhere on the page.
@@ -7672,6 +7712,7 @@
                         installCardHtml() +
                         setupCardHtml() +
                         logMealBlock("today") +
+                        logWeightStripHtml() +
                         waterQuickHtml() +
                         '<div class="today-grid"><div class="col">' +
                         '<section class="facts rv" aria-labelledby="h-today"><div class="facts-title"><h3 id="h-today">Today</h3><span class="tag">' +
@@ -11518,12 +11559,18 @@
                     });
                 }
 
+                // The Body chart plots the shared range (the head above it);
+                // the Weight panel, rate and goal stay on today's tracker
+                // window, like the Today tab.
+                const bodyWeights = () =>
+                    (data.rangeWeights || data.weights).filter(
+                        (w) => w.date >= data.startDate && w.date <= rEnd(),
+                    );
+                const rangeNoun = () => rangeName().replace(/^1 /, "");
                 RENDER.body = function () {
                     const s = data.weightStats;
                     const unit = data.weightUnit;
-                    const pts = data.weights.length;
-                    const windowDays =
-                        dayDiff(data.weightWindowStart, data.endDate) + 1;
+                    const pts = bodyWeights().length;
                     $("body-body").innerHTML =
                         '<div class="stack">' +
                         (detailsMissing()
@@ -11536,18 +11583,18 @@
                             eyebrow: "Trend",
                             id: "h-wchart",
                             title:
-                                "Weight · since " +
-                                esc(shortDay(data.weightWindowStart)),
+                                "Weight · " +
+                                esc(rangeSpanLabel(data.startDate, rEnd())),
                             note: pts
                                 ? plural(pts, "weigh-in") +
-                                  " since " +
-                                  esc(longDay(data.weightWindowStart)) +
+                                  " in this " +
+                                  esc(rangeNoun()) +
                                   ", in " +
                                   unit +
                                   "."
-                                : "No weigh-ins in the last " +
-                                  windowDays +
-                                  " days.",
+                                : "No weigh-ins in this " +
+                                  esc(rangeNoun()) +
+                                  ".",
                             legend: pts
                                 ? legend(
                                       [[LG.dotline(), "Weight"]]
@@ -11571,7 +11618,11 @@
                         }) +
                         (pts
                             ? '<div class="plot" id="weight-plot"></div>'
-                            : '<p class="empty">No weigh-ins yet. Ask Claude to log your weight.</p>') +
+                            : '<p class="empty">' +
+                              (s.latest_g != null
+                                  ? "Pick a longer range, or step back, to see other weigh-ins."
+                                  : "No weigh-ins yet. Log one here, or ask Claude to log your weight.") +
+                              "</p>") +
                         "</section>" +
                         goalFormHtml() +
                         bodyFormHtml() +
@@ -11591,7 +11642,7 @@
                     if (!host || !host.clientWidth) return;
                     const unit = data.weightUnit;
                     const s = data.weightStats;
-                    const pts = data.weights
+                    const pts = bodyWeights()
                         .map((w) => ({
                             date: w.date,
                             v: toUnit(w.weight_g, unit),
@@ -11602,8 +11653,8 @@
                     const c = chartSvg(
                         host,
                         innerWidth <= 480 ? 220 : 280,
-                        "Body weight since " +
-                            shortDay(data.weightWindowStart) +
+                        "Body weight " +
+                            rangeSpanLabel(data.startDate, rEnd()) +
                             ": " +
                             first.v.toFixed(1) +
                             " " +
@@ -11636,8 +11687,8 @@
                     hi += padY;
                     const L = gutter([hi.toFixed(1), lo.toFixed(1)]);
                     const plotW = c.w - L - PAD.r;
-                    const t0 = parseDay(data.weightWindowStart).getTime();
-                    const t1 = parseDay(data.endDate).getTime();
+                    const t0 = parseDay(data.startDate).getTime();
+                    const t1 = parseDay(rEnd()).getTime();
                     const xAt = (iso) =>
                         L +
                         (t1 === t0
@@ -11726,18 +11777,18 @@
                             }),
                         );
                     });
-                    [data.weightWindowStart, data.endDate].forEach(
-                        function (iso, k) {
-                            svgText(
-                                svg,
-                                k ? L + plotW : L,
-                                c.h - 8,
-                                shortDay(iso),
-                                "xl",
-                                k ? "end" : "start",
-                            );
-                        },
-                    );
+                    [data.startDate, rEnd()].forEach(function (iso, k) {
+                        svgText(
+                            svg,
+                            k ? L + plotW : L,
+                            c.h - 8,
+                            crossYear(data.startDate, rEnd())
+                                ? yearDay(iso)
+                                : shortDay(iso),
+                            "xl",
+                            k ? "end" : "start",
+                        );
+                    });
                     inspect(
                         svg,
                         pts.map(function (p) {
