@@ -6628,55 +6628,72 @@
                 }
                 // Why the baseline burn is still the formula BMR, and what is
                 // left before "Calibrated from my data" can differ from it.
-                // Mirrors the gates in src/calibration.ts (8 weigh-in days,
-                // 21-day span, 70% of those days counted).
+                // Mirrors the five gates in src/calibration.ts (8 weigh-in
+                // days, 21-day span, 70% of those days counted, trend noise
+                // ±150 kcal/day, a BMR from body details).
                 function calibrationNeedHtml() {
                     const c = data.calibration;
                     if (!c || c.status === "ok") return "";
                     const w = c.window || {};
+                    // All five gates, always, each judged on its own. The
+                    // server reports only the first gate that fails (in this
+                    // order), so its status alone would hide a later blocker
+                    // such as missing body details behind "not enough data".
                     const rows = [];
                     const add = (label, have, want, hint, sub) =>
                         rows.push({ label, have, want, hint, sub });
-                    if (c.status === "missing_bmr") {
-                        rows.push({
-                            label: "Height, birth date and sex in Body details",
-                            text: "missing",
-                        });
-                    } else {
-                        const span = w.span_days || 0;
-                        add("Weigh-in days", w.weighin_days || 0, 8, "");
-                        const range =
-                            w.first_date && w.last_date
-                                ? shortDay(w.first_date) +
-                                  " to " +
-                                  shortDay(w.last_date)
-                                : "";
-                        add(
-                            "Days between your first and last weigh-in",
-                            span,
-                            21,
-                            "The span ends at your latest weigh-in, not today.",
-                            range,
-                        );
-                        const wantSpan = Math.max(span, 21);
-                        add(
-                            "Days with a full food log",
-                            c.counted_days || 0,
-                            Math.ceil(wantSpan * 0.7),
-                            "Out of the " +
-                                wantSpan +
-                                " days in that period, 70% need a full log. A day is full with 2+ meals and at least half your typical day’s calories. Marking a day on or off in the Meals tab changes this count straight away; a day with no meals can’t count.",
-                            range,
-                        );
-                        if (c.status === "too_noisy")
-                            rows.push({
-                                label:
-                                    "Steadier weigh-ins (same time of day), now ±" +
-                                    fmt(w.uncertainty_kcal) +
-                                    " kcal/day",
-                                text: "too scattered",
-                            });
-                    }
+                    const span = w.span_days || 0;
+                    const weighinDays = w.weighin_days || 0;
+                    add("Weigh-in days", weighinDays, 8, "");
+                    const range =
+                        w.first_date && w.last_date
+                            ? shortDay(w.first_date) +
+                              " to " +
+                              shortDay(w.last_date)
+                            : "";
+                    add(
+                        "Days between your first and last weigh-in",
+                        span,
+                        21,
+                        "The span ends at your latest weigh-in, not today.",
+                        range,
+                    );
+                    const wantSpan = Math.max(span, 21);
+                    add(
+                        "Days with a full food log",
+                        c.counted_days || 0,
+                        Math.ceil(wantSpan * 0.7),
+                        "Out of the " +
+                            wantSpan +
+                            " days in that period, 70% need a full log. A day is full with 2+ meals and at least half your typical day’s calories. Marking a day on or off in the Meals tab changes this count straight away; a day with no meals can’t count.",
+                        range,
+                    );
+                    // The weight-trend noise gate. Two weigh-in days fit a
+                    // line exactly (± 0), so it is only measured from three.
+                    const unc = w.uncertainty_kcal;
+                    const measured = weighinDays >= 3 && unc != null;
+                    rows.push({
+                        label: "Weight trend steady enough",
+                        met: measured && unc <= 150,
+                        fig: measured
+                            ? "±" + fmt(unc) + " kcal/day · needs ±150 or less"
+                            : "not measured yet · needs 3 weigh-in days",
+                        pct: measured
+                            ? Math.min(
+                                  100,
+                                  Math.round((150 / Math.max(unc, 1)) * 100),
+                              )
+                            : 0,
+                        bar: true,
+                        always: true,
+                        hint: "How fast your weight is changing (g/day) is the slope of one straight line fitted through every weigh-in in the period, with several weigh-ins on the same day averaged first. It is not today minus yesterday, and not the change between your first and last weigh-in: a single watery or salty morning only tilts the line a little. The ± is how far that slope could be off, given how much your readings scatter around the line, multiplied by 6 kcal per gram. For example, a slope known to ±10 g/day gives ±60 kcal/day. Above ±150 the line is mostly water noise, so calibration waits. Weighing at the same time each morning, and a longer span, bring it down.",
+                    });
+                    rows.push({
+                        label: "Height, birth date and sex in Body details",
+                        met: c.bmr_kcal != null,
+                        fig: c.bmr_kcal != null ? "set" : "missing",
+                        hint: "Calibration adjusts your formula BMR, so it needs all three.",
+                    });
                     // A checklist, not a table: each gate gets a tick or an
                     // open ring, a bar towards its target, and its count, so
                     // "what is left" reads at a glance. Rows with no count
@@ -6685,10 +6702,13 @@
                     const items = rows
                         .map((r) => {
                             const counted = r.want != null;
-                            const met = counted && r.have >= r.want;
+                            const met =
+                                r.met != null
+                                    ? r.met
+                                    : counted && r.have >= r.want;
                             if (met) metCount++;
-                            const fig = r.text
-                                ? r.text
+                            const fig = r.fig
+                                ? r.fig
                                 : met
                                   ? r.have + " · needs " + r.want
                                   : r.have +
@@ -6697,15 +6717,20 @@
                                     " · " +
                                     (r.want - r.have) +
                                     " to go";
-                            const pct = counted
-                                ? Math.max(
-                                      0,
-                                      Math.min(
-                                          100,
-                                          Math.round((r.have / r.want) * 100),
-                                      ),
-                                  )
-                                : 0;
+                            const pct =
+                                r.pct != null
+                                    ? r.pct
+                                    : counted
+                                      ? Math.max(
+                                            0,
+                                            Math.min(
+                                                100,
+                                                Math.round(
+                                                    (r.have / r.want) * 100,
+                                                ),
+                                            ),
+                                        )
+                                      : 0;
                             return (
                                 '<li class="req' +
                                 (met ? " met" : "") +
@@ -6722,12 +6747,12 @@
                                 '</span><span class="req-fig">' +
                                 esc(fig) +
                                 "</span></p>" +
-                                (counted
+                                (counted || r.bar
                                     ? '<span class="req-bar" aria-hidden="true"><i style="width:' +
                                       pct +
                                       '%"></i></span>'
                                     : "") +
-                                (r.hint && !met
+                                (r.hint && (!met || r.always)
                                     ? '<p class="req-hint">' +
                                       esc(r.hint) +
                                       "</p>"
@@ -6741,7 +6766,7 @@
                         metCount +
                         " of " +
                         rows.length +
-                        ' met</span></summary><div><p class="note">There is not enough data yet for “Calibrated from my data”, so both choices give the same number. Calibration switches on when all of these are met:</p><ol class="req-list">' +
+                        ' met</span></summary><div><p class="note">“Calibrated from my data” is not available yet, so both choices give the same number. Calibration switches on when all of these are met:</p><ol class="req-list">' +
                         items +
                         "</ol></div></details>"
                     );
