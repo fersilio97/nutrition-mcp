@@ -9,8 +9,11 @@ import { buildScenario, previewInputs } from "./dashboard-fixture.js";
 import type { NutritionGoals } from "./supabase.js";
 import type { EnergyDay } from "./calibration.js";
 import {
+    ACTIVE_OUTLIER_Z,
     MIN_ACTIVE_DAYS,
     activeAverage,
+    activeAverageDetail,
+    activeOutliers,
     goalActiveKcal,
     goalFlags,
     goalKcal,
@@ -1005,5 +1008,96 @@ describe("goal active kcal: the usual from the morning, rising with the watch", 
 
     test("a ride above the average raises it by all of the ride", () => {
         expect(goalActiveKcal(250, 1050)).toBe(1050);
+    });
+});
+
+describe("unusual active days (Body details switch)", () => {
+    // The user's own watch days, Nov 8-20 2026, as checked with them on
+    // 2026-11-21: a long ride on Nov 14 and a rest day on Nov 16.
+    const real: [string, number][] = [
+        ["2026-11-08", 452],
+        ["2026-11-09", 495],
+        ["2026-11-10", 287],
+        ["2026-11-11", 408],
+        ["2026-11-12", 254],
+        ["2026-11-13", 397],
+        ["2026-11-14", 1655],
+        ["2026-11-15", 408],
+        ["2026-11-16", 27],
+        ["2026-11-17", 397],
+        ["2026-11-18", 393],
+        ["2026-11-19", 410],
+        ["2026-11-20", 254],
+    ];
+    const e = real.map(([date, active_kcal]) => ({
+        date,
+        counted: true,
+        active_kcal,
+    }));
+
+    test("leaves the ride and the rest day out, and only them", () => {
+        const d = activeAverageDetail(e, "2026-11-21", 42, true)!;
+        expect(d.dropped).toEqual(["2026-11-14", "2026-11-16"]);
+        expect(d.kcal).toBeCloseTo(4155 / 11, 6);
+    });
+
+    test("off by default: the plain mean of every day", () => {
+        expect(activeAverage(e, "2026-11-21", 42)).toBeCloseTo(5837 / 13, 6);
+        expect(activeAverageDetail(e, "2026-11-21", 42)!.dropped).toEqual([]);
+    });
+
+    test("catches a big day that a classic z-score misses", () => {
+        // 36 days around 350 and 6 at 2,000: the rides inflate the mean and
+        // SD so much that each scores z ≈ 2.45, under any usual cut-off.
+        const mixed = [
+            ...Array.from({ length: 36 }, (_, i) => ({
+                active_kcal: 330 + (i % 5) * 10,
+            })),
+            ...Array.from({ length: 6 }, () => ({ active_kcal: 2000 })),
+        ];
+        const out = activeOutliers(mixed);
+        expect(out.size).toBe(6);
+        for (const d of out) expect(d.active_kcal).toBe(2000);
+    });
+
+    test("drops nothing when half the days are identical (MAD of 0)", () => {
+        const same = [
+            ...Array.from({ length: 8 }, () => ({ active_kcal: 300 })),
+            { active_kcal: 1500 },
+        ];
+        expect(activeOutliers(same).size).toBe(0);
+    });
+
+    test("the cut-off is the agreed 3.5", () => {
+        expect(ACTIVE_OUTLIER_Z).toBe(3.5);
+    });
+
+    test("the setting saves as a boolean and nothing else", () => {
+        expect(checkModelSettings({ active_outlier_filter: true })).toEqual({
+            ok: true,
+            patch: { active_outlier_filter: true },
+        });
+        expect(checkModelSettings({ active_outlier_filter: "yes" }).ok).toBe(
+            false,
+        );
+    });
+
+    test("the payload reports the switch and today's left-out days", () => {
+        const fx = buildScenario("full", "2026-11-21");
+        const on = buildDashboardPayload(
+            previewInputs(
+                {
+                    ...fx,
+                    profile: { ...fx.profile, active_outlier_filter: true },
+                },
+                30,
+                "2026-11-21",
+            ),
+        );
+        const off = buildDashboardPayload(previewInputs(fx, 30, "2026-11-21"));
+        expect(on.goalPlan.active_outlier_filter).toBe(true);
+        expect(off.goalPlan.active_outlier_filter).toBe(false);
+        expect(off.goalPlan.active_dropped_days).toEqual([]);
+        expect(on.modelSettings.active_outlier_filter).toBe(true);
     });
 });

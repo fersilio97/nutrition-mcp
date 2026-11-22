@@ -226,11 +226,43 @@ export function goalKcal(
  *  with fewer, the goal falls back to the day's own (live) active kcal. */
 export const MIN_ACTIVE_DAYS = 7;
 
-/** Mean active kcal over the counted days of the `windowDays` before `date`
- *  (the day itself excluded, so a part-finished today never drags it), or
- *  null with fewer than MIN_ACTIVE_DAYS of them. Days the watch never synced
- *  are left out rather than read as 0, which would bias the mean low. */
-export function activeAverage(
+/** The modified z-score beyond which a day's active kcal counts as unusual
+ *  (Iglewicz and Hoaglin's usual cut-off). Agreed with the user 2026-11-21:
+ *  a weekly long ride or hike, and a near-zero rest day, both leave. */
+export const ACTIVE_OUTLIER_Z = 3.5;
+
+/** Days whose active kcal is unusual for this set: |modified z| above
+ *  ACTIVE_OUTLIER_Z, where modified z = 0.6745 × (active − median) ÷ MAD.
+ *  The median and MAD are used rather than the mean and standard deviation
+ *  because one big day a week inflates both of those enough to hide itself
+ *  (z ≈ 2.4 for a 2,000 kcal ride among 350 kcal days). With a MAD of 0
+ *  (half the days identical) nothing is dropped. */
+export function activeOutliers<T extends { active_kcal: number | null }>(
+    days: T[],
+): Set<T> {
+    const values = days.map((d) => d.active_kcal ?? 0);
+    const med = median(values);
+    const mad = median(values.map((v) => Math.abs(v - med)));
+    const out = new Set<T>();
+    if (mad === 0) return out;
+    for (const d of days)
+        if (
+            Math.abs((0.6745 * ((d.active_kcal ?? 0) - med)) / mad) >
+            ACTIVE_OUTLIER_Z
+        )
+            out.add(d);
+    return out;
+}
+
+function median(values: number[]): number {
+    const s = [...values].sort((a, b) => a - b);
+    const mid = s.length >> 1;
+    return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
+}
+
+/** The usual active kcal for `date` and the days left out of it. Null with
+ *  fewer than MIN_ACTIVE_DAYS counted, synced days in the window. */
+export function activeAverageDetail(
     energyDays: Array<{
         date: string;
         counted: boolean;
@@ -238,7 +270,8 @@ export function activeAverage(
     }>,
     date: string,
     windowDays: number,
-): number | null {
+    dropOutliers = false,
+): { kcal: number; dropped: string[] } | null {
     const from = shift(date, -windowDays);
     const days = energyDays.filter(
         (d) =>
@@ -248,7 +281,34 @@ export function activeAverage(
             d.date < date,
     );
     if (days.length < MIN_ACTIVE_DAYS) return null;
-    return days.reduce((s, d) => s + (d.active_kcal ?? 0), 0) / days.length;
+    const out = dropOutliers ? activeOutliers(days) : new Set<never>();
+    const kept = days.filter((d) => !out.has(d));
+    return {
+        kcal: kept.reduce((s, d) => s + (d.active_kcal ?? 0), 0) / kept.length,
+        dropped: days.filter((d) => out.has(d)).map((d) => d.date),
+    };
+}
+
+/** Mean active kcal over the counted days of the `windowDays` before `date`
+ *  (the day itself excluded, so a part-finished today never drags it), or
+ *  null with fewer than MIN_ACTIVE_DAYS of them. Days the watch never synced
+ *  are left out rather than read as 0, which would bias the mean low. With
+ *  `dropOutliers` (the Body details switch), unusual days (activeOutliers)
+ *  are left out of the mean too; they still count everywhere else. */
+export function activeAverage(
+    energyDays: Array<{
+        date: string;
+        counted: boolean;
+        active_kcal: number | null;
+    }>,
+    date: string,
+    windowDays: number,
+    dropOutliers = false,
+): number | null {
+    return (
+        activeAverageDetail(energyDays, date, windowDays, dropOutliers)?.kcal ??
+        null
+    );
 }
 
 /** The active kcal a day's goal is built on: the usual (the average) until
@@ -630,6 +690,10 @@ export interface GoalPlanView extends RatePlan {
     goal_active_kcal: number | null;
     /** Whether goal_active_kcal is today's own figure or the average. */
     goal_active_source: "today" | "average";
+    /** The Body details switch: unusual active days leave the average. */
+    active_outlier_filter: boolean;
+    /** Days left out of today's average by that switch, oldest first. */
+    active_dropped_days: string[];
     flags: GoalFlag[];
 }
 
@@ -643,6 +707,9 @@ export interface DeriveInput {
     body: BodyDetails;
     today: string;
     model: ModelParams;
+    /** profiles.active_outlier_filter: leave unusual active days out of
+     *  the usual-active average (activeOutliers). */
+    dropActiveOutliers?: boolean;
 }
 
 function shift(date: string, n: number): string {
@@ -685,6 +752,7 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
             i.energyDays,
             row.date,
             i.model.windowDays,
+            i.dropActiveOutliers === true,
         );
         row.goal_active_kcal = goalActiveKcal(
             row.active_avg_kcal,
@@ -782,6 +850,14 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
                 ? null
                 : Math.round(row.active_avg_kcal),
         goal_active_kcal: row?.goal_active_kcal ?? null,
+        active_outlier_filter: i.dropActiveOutliers === true,
+        active_dropped_days:
+            activeAverageDetail(
+                i.energyDays,
+                i.today,
+                i.model.windowDays,
+                i.dropActiveOutliers === true,
+            )?.dropped ?? [],
         goal_active_source:
             row?.active_avg_kcal == null || (row?.active_kcal ?? 0) > 0
                 ? "today"

@@ -738,6 +738,22 @@
             .field label {
                 display: block;
             }
+            /* A checkbox field: box and sentence on one line, body type. */
+            .field.check {
+                display: flex;
+                align-items: flex-start;
+                gap: var(--s2);
+                font-family: var(--font-body);
+                font-size: var(--fs-small);
+                font-weight: 400;
+                letter-spacing: 0;
+                text-transform: none;
+                color: var(--ink);
+            }
+            .field.check input {
+                margin-top: 3px;
+                flex: none;
+            }
             .input {
                 width: 100%;
                 min-width: 0;
@@ -6116,7 +6132,20 @@
                     const label =
                         p.goal_active_source !== "average"
                             ? "active today"
-                            : "active (" + p.window_days + "-day avg)";
+                            : "active (" +
+                              p.window_days +
+                              "-day avg" +
+                              (p.active_dropped_days &&
+                              p.active_dropped_days.length
+                                  ? ", " +
+                                    p.active_dropped_days.length +
+                                    " unusual day" +
+                                    (p.active_dropped_days.length === 1
+                                        ? ""
+                                        : "s") +
+                                    " left out"
+                                  : "") +
+                              ")";
                     return { kcal: a, text: fmt(a) + " " + label };
                 }
                 function goalSubText(t, goal) {
@@ -10999,8 +11028,9 @@
                         data.modelSettings.max_window_days +
                         '" placeholder="' +
                         data.modelSettings.default_window_days +
-                        '" /></label></div>' +
-                        '<p class="note">These two drive the calibration, the smoothed trend weight, the balance in grams and any rate or date calorie goal. Leave them blank for the defaults: 6 kcal/g (a few weeks of scale change is fat, lean tissue and water together, so lower than the classic 7.7) and a 42-day lookback.</p>' +
+                        '" /></label>' +
+                        '<label class="field wide check" for="b-outliers"><input type="checkbox" id="b-outliers" /><span>Leave unusual active days out of the usual active, such as a long ride or a near-zero rest day</span></label></div>' +
+                        '<p class="note">These two drive the calibration, the smoothed trend weight, the balance in grams and any rate or date calorie goal. Leave them blank for the defaults: 6 kcal/g (a few weeks of scale change is fat, lean tissue and water together, so lower than the classic 7.7) and a 42-day lookback. The switch leaves days far from your usual active (a modified z-score beyond 3.5, from the median and its typical spread) out of the average your goal starts from each morning; those days still count in the calibration, the burn and their own goal.</p>' +
                         (data.calibration && data.calibration.applied
                             ? '<p class="note">Calibrated from ' +
                               data.calibration.counted_days +
@@ -11404,6 +11434,8 @@
                         data.modelSettings.trend_window_days == null
                             ? ""
                             : String(data.modelSettings.trend_window_days);
+                    $("b-outliers").checked =
+                        data.modelSettings.active_outlier_filter === true;
                     // Open it when something is missing, so the ask is
                     // visible — unless the user has toggled it themselves.
                     if (
@@ -11469,6 +11501,7 @@
                                     $("b-win").value.trim() === ""
                                         ? null
                                         : Number($("b-win").value),
+                                active_outlier_filter: $("b-outliers").checked,
                             }),
                         })
                             .then(function (r) {

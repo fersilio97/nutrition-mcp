@@ -692,6 +692,7 @@ export interface PreviewEdits {
     model?: {
         energy_kcal_per_gram?: number | null;
         trend_window_days?: number | null;
+        active_outlier_filter?: boolean;
     };
 }
 
