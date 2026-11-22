@@ -125,9 +125,33 @@ From Apple Health via the iOS Shortcut (`/api/activity`), capped at 5,000 kcal.
 ### 4.2 Goal active A
 
 `A_d` = the day's own active kcal once it is above 0 (a 0 counts as "not
-synced yet"). Until then, it is the mean active kcal of the counted days with
-a watch figure in `[d − L, d − 1]`. That mean needs 7+ such days; with fewer,
-A is the day's own figure, or 0.
+synced yet"). Until then, it is the **usual active**: the plain mean active
+kcal of the counted days with a watch figure in `[d − L, d − 1]` (L is the
+lookback, 42 by default; day d itself never counts). That mean needs 7+ such
+days; with fewer, A is the day's own figure, or 0.
+
+**Unusual days** (Body details switch "Leave unusual active days out",
+`profiles.active_outlier_filter`, off by default). When on, a day leaves
+that mean when `|0.6745 × (active − median) ÷ MAD| > 3.5`. The median and
+MAD (median absolute deviation from the median) are taken over the same days
+as the mean.
+- It is two-sided: a weekly long ride or hike leaves, and so does a
+  near-zero rest day.
+- Median and MAD, not mean and standard deviation, because one big day a
+  week inflates both of those enough to hide itself: a 2,000 kcal ride among
+  350 kcal days scores a classic z of about 2.4.
+- With a MAD of 0 nothing is dropped. The 7-day minimum is checked before
+  dropping.
+- A dropped day still counts everywhere else: calibration, f, Est. burn, and
+  its own goal once synced. Only the usual-active mean leaves it out.
+- The goal line names how many days were left out ("42-day avg, 1 unusual
+  day left out").
+- A rest day's goal still drops at once when any active above 0 syncs: the
+  day's own figure replaces the usual one.
+
+Agreed with the user on 2026-11-21. On their Nov 8–20 watch data it drops
+Nov 14 (1,655 kcal ride) and Nov 16 (27 kcal rest day); the cut-off band is
+about 110–680 kcal.
 
 ## 5. Calibration (the offset)
 
@@ -195,6 +219,7 @@ By date gives a rate of 0 when any of these holds:
   and pure fat is 9. Allowed range: **5–7.7** (the What-if lab already uses
   it; see Known deviations).
 - `L`, the lookback: default **42** days, allowed 21–56.
+- **Leave unusual active days out**: off by default; see §4.2.
 - One `k` and one `L` drive all of these together: the calibration, `f`, `A`,
   the trend weight, the goal, the gram balance and the Resting metabolism
   chart. Never use one value in one place and another elsewhere.
@@ -223,7 +248,8 @@ By date gives a rate of 0 when any of these holds:
 ## 9. Safety checks (shown, never enforced)
 
 Only Rate and By date goals raise them. A here is the **steady lookback
-mean**, not today's `A_d`: if that mean is missing, the checks use the mean
+mean** (the §4.2 usual active, with unusual days left out when the switch is
+on), not today's `A_d`: if that mean is missing, the checks use the mean
 over counted window days, else today's figure. The floor is compared with the
 goal at that steady A.
 
@@ -285,7 +311,7 @@ Found by the nutritionist review on 2026-11-21 against commit a7d8721.
 
 | Formula | Code |
 | --- | --- |
-| Goal, rate, f, A, trend weight, checks, macros | `src/goal-plan.ts`: `goalKcal`, `planRate`, `tefRatio`, `activeAverage`, `goalActiveKcal`, `trendWeightToday`, `goalFlags`, `recommendedRates`, `scaleDerivedMacros`, `applyDerivedGoals` |
+| Goal, rate, f, A, trend weight, checks, macros | `src/goal-plan.ts`: `goalKcal`, `planRate`, `tefRatio`, `activeAverage`, `activeAverageDetail`, `activeOutliers`, `goalActiveKcal`, `trendWeightToday`, `goalFlags`, `recommendedRates`, `scaleDerivedMacros`, `applyDerivedGoals` |
 | BMR, TEF, burn, balance, weight slope | `src/body.ts`: `bmrMifflin`, `bmrFor`, `foodTef`, `dailyBurn`, `balanceGrams`, `weightSlope` |
 | Calibration | `src/calibration.ts`: `energyWindow`, `calibratedBaseline`, `buildCalibration`, `metabolismSeries` |
 | Day counting, Body-tab stats, default goal | `src/dashboard-stats.ts`: `countDay`, `typicalDayKcal`, `buildWeightStats`, `withBurnDefault`, `buildEstimateVsScale` |

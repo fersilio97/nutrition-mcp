@@ -568,6 +568,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         body,
         today: endDate,
         model,
+        dropActiveOutliers: profile?.active_outlier_filter === true,
     });
     // The balance in grams uses the same kcal per gram as the calibration and
     // the goal, so a user's own setting changes all three together.
@@ -718,6 +719,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
                     ? null
                     : Number(profile.energy_kcal_per_gram),
             trend_window_days: profile?.trend_window_days ?? null,
+            active_outlier_filter: profile?.active_outlier_filter === true,
             default_kcal_per_gram: DEFAULT_PARAMS.kcalPerGram,
             default_window_days: DEFAULT_PARAMS.windowDays,
             min_window_days: MIN_WINDOW_DAYS,
@@ -833,11 +835,13 @@ export async function saveBodyDetails(
         resting_basis,
         energy_kcal_per_gram,
         trend_window_days,
+        active_outlier_filter,
         ...bodyInput
     } = input;
     const model = checkModelSettings({
         energy_kcal_per_gram,
         trend_window_days,
+        active_outlier_filter,
     });
     if (!model.ok)
         return {
@@ -874,25 +878,38 @@ export async function saveBodyDetails(
     return { status: 200, json: { ok: true, body: bodyOf(saved) } };
 }
 
-/** The Body form's two model settings: kcal per gram of weight change (3-9)
- *  and the trend lookback (whole days, 21-56). Undefined leaves a setting
- *  alone; null or "" clears it back to the default (6.0 and 42). */
+/** The Body form's model settings: kcal per gram of weight change (3-9),
+ *  the trend lookback (whole days, 21-56) and whether unusual active days
+ *  leave the usual-active average. Undefined leaves a setting alone; null or
+ *  "" clears kcal/g and the lookback back to their defaults (6.0 and 42). */
 export function checkModelSettings(input: {
     energy_kcal_per_gram?: unknown;
     trend_window_days?: unknown;
+    active_outlier_filter?: unknown;
 }):
     | {
           ok: true;
           patch: {
               energy_kcal_per_gram?: number | null;
               trend_window_days?: number | null;
+              active_outlier_filter?: boolean;
           };
       }
     | { ok: false; error: string } {
     const patch: {
         energy_kcal_per_gram?: number | null;
         trend_window_days?: number | null;
+        active_outlier_filter?: boolean;
     } = {};
+    const o = input.active_outlier_filter;
+    if (o !== undefined) {
+        if (typeof o !== "boolean")
+            return {
+                ok: false,
+                error: "active_outlier_filter must be true or false.",
+            };
+        patch.active_outlier_filter = o;
+    }
     const k = input.energy_kcal_per_gram;
     if (k !== undefined) {
         if (k === null || k === "") patch.energy_kcal_per_gram = null;

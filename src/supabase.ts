@@ -679,6 +679,10 @@ export interface Profile {
     resting_basis?: "formula" | "calibrated";
     energy_kcal_per_gram: number | null;
     trend_window_days: number | null;
+    /** Leave unusual active days out of the usual-active average
+     *  (goal-plan.ts activeOutliers). Optional: rows read before the
+     *  migration carry no such key, which means off. */
+    active_outlier_filter?: boolean | null;
     /** Last 7 days chart: what its red measures. NULL = "surplus". Optional
      *  because rows read before the migration carry no such key. */
     week_chart_mode?: "surplus" | "goal" | null;
@@ -847,6 +851,7 @@ export async function upsertProfile(
         resting_basis?: "formula" | "calibrated";
         energy_kcal_per_gram?: number | null;
         trend_window_days?: number | null;
+        active_outlier_filter?: boolean;
         week_chart_mode?: "surplus" | "goal" | null;
     },
 ): Promise<Profile> {
@@ -880,6 +885,8 @@ export async function upsertProfile(
         payload.energy_kcal_per_gram = patch.energy_kcal_per_gram;
     if (patch.trend_window_days !== undefined)
         payload.trend_window_days = patch.trend_window_days;
+    if (patch.active_outlier_filter !== undefined)
+        payload.active_outlier_filter = patch.active_outlier_filter;
     if (patch.week_chart_mode !== undefined)
         payload.week_chart_mode = patch.week_chart_mode;
 
