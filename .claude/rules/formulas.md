@@ -327,3 +327,49 @@ Found by the nutritionist review on 2026-11-21 against commit a7d8721.
 | Watch merge | `src/health-merge.ts`: `mergeByDay`, `GarminMode` |
 | Settings → model, k/L validation | `src/dashboard.ts`: `modelFromProfile`, `buildDashboardPayload` |
 | MCP goal and fallback | `src/mcp.ts`: `effectiveGoals` |
+
+## Approved changes (not built yet)
+
+Approved by the user on 2026-11-22 after the nutritionist audit. Each one
+replaces the current rule once it ships; until then the code follows the
+sections above.
+
+- **A1 Macros (§1).** `base_d` = the day's goal with `A = 0` (Fixed: the typed
+  goal); `ΔE = goal_d − base_d` (≥ 0). Protein stays at its target.
+  `fat_d = fat_target + 0.20 × ΔE ÷ 9`; `carbs_d = carbs_target + 0.80 × ΔE ÷ 4`.
+  A null target's share goes to the other one. Round to 0.1 g. All modes.
+- **A2 Date goal not reachable (§9).** Red flag `date_unreachable`, shown
+  first, By date only with days left > 0: fires when the needed rate is
+  faster than the fastest safe rate (`recommendedRates`, at the steady A).
+  The goal stays dynamic and is never clamped.
+- **A3 Rest-day goal under the floor (§9).** No per-day floor: a rest day
+  under BMR is the formula working, and intake minus active is the same as
+  on active days. Info flag `rest_day_below_floor` when
+  `goalKcal(R, 0, rate, k, f) < max(R, 1,500 male / 1,200 female)`. The §9
+  checks use the usual-active mean without the §4.2 outlier filter.
+- **A4 Which weigh-ins the line uses (new §6.2).** Fit least squares through
+  daily means; drop days whose residual has
+  `|0.6745 × (r − median r) ÷ MAD| > 3.5`; refit once. MAD = 0 or under 5
+  days: drop nothing. A per-weigh-in "Use in trend" override (auto / always /
+  never) wins. The one kept series feeds the trend weight, the calibration
+  slope, its SE and the steadiness gate, the TDEE day bounds, Estimate vs
+  reality, the metabolism chart and BMR's kg. Span and weigh-in minimums are
+  checked after exclusion. Left-out weigh-ins stay on the chart, hollow, and
+  are listed in "How this is calculated". No trend start date, no method choice.
+- **A5 Energy availability (§9).** Info flag `low_energy_availability`:
+  `EA = mean(intake − active) ÷ FFM` over the counted watch days of the
+  last 14 (needs 7+). FFM by Boer (male `0.407 × kg + 0.267 × cm − 19.2`,
+  female `0.252 × kg + 0.473 × cm − 48.3`, kg = trend weight). Fires below
+  25 (male) / 30 (female) kcal/kg FFM/day; the message says it reads low
+  because watch active includes everyday movement.
+- **A6 Fixed mode aligned (§1, invariant 5).** `typed + A_d ÷ (1 − f)`,
+  macros by A1 with protein held. Removes the Fixed exception.
+- **A7 Protein per kg (new §11).** `protein_g = p × ref_kg`, rounded to 1 g;
+  `p` = `profiles.protein_g_per_kg` (null = typed grams), default 1.6,
+  allowed 1.2–2.4. `ref_kg` = trend weight, or the weight at BMI 25 when
+  BMI > 30. Recomputed daily; held by A1 and A6. Info flag if protein kcal
+  exceed 40% of `base_d`.
+
+Not adopted: a watch discount (active kcal are already net of resting), a
+max(today, forecast) partial-sync rule, a ride-fuel item, and inflating the
+calibration ± for autocorrelation (only a "scale scatter only" label).
