@@ -141,13 +141,21 @@ as the mean.
   week inflates both of those enough to hide itself: a 2,000 kcal ride among
   350 kcal days scores a classic z of about 2.4.
 - With a MAD of 0 nothing is dropped. The 7-day minimum is checked before
-  dropping.
+  dropping, so the mean can rest on fewer than 7 days (never fewer than half
+  of them, because fewer than half can lie beyond the cut-off when MAD > 0).
+- It works while unusual days are a minority, roughly under a quarter of the
+  window. With two or more big days a week they shift the median and MAD and
+  stop being flagged consistently. With few days (under about 20) the band
+  itself moves noticeably from day to day.
 - A dropped day still counts everywhere else: calibration, f, Est. burn, and
   its own goal once synced. Only the usual-active mean leaves it out.
 - The goal line names how many days were left out ("42-day avg, 1 unusual
   day left out").
 - A rest day's goal still drops at once when any active above 0 syncs: the
-  day's own figure replaces the usual one.
+  day's own figure replaces the usual one. A manual placeholder (1–10 kcal)
+  is replaced by the next watch sync, because a sync overwrites the day. If
+  no sync follows, it stays as the day's real active and understates active
+  in calibration, Est. burn and the balance.
 
 Agreed with the user on 2026-11-21. On their Nov 8–20 watch data it drops
 Nov 14 (1,655 kcal ride) and Nov 16 (27 kcal rest day); the cut-off band is
