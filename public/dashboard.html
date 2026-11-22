@@ -2595,6 +2595,23 @@
             .lm.compact .facts-title h3 {
                 font-size: 1.25rem;
             }
+            .log-row {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: var(--s3);
+                margin: 0 0 var(--s5);
+            }
+            .log-row .log-btn {
+                width: 100%;
+                min-height: 44px;
+                justify-content: center;
+            }
+            .w-chart .panel-head {
+                margin-bottom: var(--s5);
+            }
+            .w-chart .range-label {
+                font-size: 1.25rem;
+            }
             .lm .lw-flash {
                 margin-top: var(--s3);
                 animation-duration: 9s;
@@ -4490,7 +4507,6 @@
                 >
                     <h2 class="sr-only">Body</h2>
                     <div class="banner-slot"></div>
-                    <div class="panel-head" data-range-head></div>
                     <div class="panel-body" id="body-body"></div>
                 </section>
                 <section
@@ -5908,6 +5924,10 @@
                     }
                 }
                 document.addEventListener("click", function (ev) {
+                    const lw =
+                        ev.target.closest &&
+                        ev.target.closest("[data-lw-open]");
+                    if (lw) return openLogWeight(lw.dataset.lwOpen || "body");
                     const t =
                         ev.target.closest && ev.target.closest("[data-go]");
                     if (!t) return;
@@ -7465,23 +7485,11 @@
                         '<span class="b-status" id="setup-status" role="status"></span></div></section>'
                     );
                 }
-                // Today's "Log weight" strip, the twin of "Log a meal" above
-                // it: the button opens the Body tab's weigh-in form.
-                function logWeightStripHtml() {
-                    const s = data.weightStats || {};
+                function logButtonsHtml() {
                     return (
-                        '<section class="lm compact rv" aria-labelledby="h-lw-today"><div class="facts-title"><h3 id="h-lw-today">Log weight</h3>' +
-                        '<button type="button" class="btn btn-sm" data-go="log-weight">+ Log weight</button></div>' +
-                        (s.latest_g != null
-                            ? '<p class="form-hint">Last ' +
-                              wfmt(s.latest_g, data.weightUnit) +
-                              " " +
-                              esc(data.weightUnit) +
-                              " · " +
-                              esc(longDay(s.latest_date)) +
-                              "</p>"
-                            : "") +
-                        "</section>"
+                        '<div class="log-row rv"><button type="button" class="btn log-btn" data-lm-open>+ Log meal</button>' +
+                        '<button type="button" class="btn log-btn" data-go="log-weight">+ Log weight</button></div>' +
+                        lmFlashHtml()
                     );
                 }
                 // ---- one-tap water (vault features 004/005) ------------------
@@ -7711,8 +7719,7 @@
                     $("today-body").innerHTML =
                         installCardHtml() +
                         setupCardHtml() +
-                        logMealBlock("today") +
-                        logWeightStripHtml() +
+                        logButtonsHtml() +
                         waterQuickHtml() +
                         '<div class="today-grid"><div class="col">' +
                         '<section class="facts rv" aria-labelledby="h-today"><div class="facts-title"><h3 id="h-today">Today</h3><span class="tag">' +
@@ -10871,13 +10878,14 @@
                     );
                 }
                 function weightHeadHtml(title) {
+                    const bodyOpen = lwOpen === "body";
                     return (
                         '<div class="facts-title"><h3 id="h-w">' +
                         title +
-                        '</h3><button type="button" class="btn btn-sm" id="lw-open" aria-expanded="' +
-                        lwOpen +
+                        '</h3><button type="button" class="btn btn-sm" id="lw-open" data-lw-open="body" aria-expanded="' +
+                        bodyOpen +
                         '" aria-controls="lw-form"' +
-                        (lwOpen ? " hidden" : "") +
+                        (bodyOpen ? " hidden" : "") +
                         ">+ Log weight</button></div>" +
                         (lwFlash
                             ? '<p class="lw-flash" role="status">' +
@@ -10886,10 +10894,11 @@
                             : "")
                     );
                 }
-                function openLogWeight() {
-                    lwOpen = true;
-                    selectTab("body");
-                    contentDirty.body = true;
+                function openLogWeight(where) {
+                    where = where || "body";
+                    lwOpen = where;
+                    selectTab(where);
+                    contentDirty[where] = true;
                     paint();
                     const box = $("lw-weight");
                     if (box) {
@@ -10898,8 +10907,6 @@
                     }
                 }
                 function wireLogWeight() {
-                    const open = $("lw-open");
-                    if (open) open.addEventListener("click", openLogWeight);
                     const form = $("lw-form");
                     if (!form) return;
                     const read = () => ({
@@ -10915,8 +10922,12 @@
                         lwOpen = false;
                         lwDraft = null;
                         contentDirty.body = true;
+                        contentDirty.weighins = true;
                         paint();
-                        if ($("lw-open")) $("lw-open").focus();
+                        const focusOpen = document.querySelector(
+                            '#weighins-body [data-lw-open="weighins"]:not([hidden]), #lw-open:not([hidden])',
+                        );
+                        if (focusOpen) focusOpen.focus();
                     });
                     form.addEventListener("submit", function (ev) {
                         ev.preventDefault();
@@ -10954,6 +10965,9 @@
                                 const e = res.body.entry;
                                 lwOpen = false;
                                 lwDraft = null;
+                                wl = null;
+                                contentDirty.body = true;
+                                contentDirty.weighins = true;
                                 lwFlash =
                                     "Logged " +
                                     wfmt(e.weight_g, data.weightUnit) +
@@ -10973,6 +10987,7 @@
                                         document.querySelector(".lw-flash");
                                     if (f) f.remove();
                                 }, 6000);
+                                loadWeights();
                                 refresh();
                             })
                             .catch(function (err) {
@@ -11003,7 +11018,7 @@
                               "</span>"
                             : "") +
                         "</p>" +
-                        (lwOpen ? logWeightHtml() : "") +
+                        (lwOpen === "body" ? logWeightHtml() : "") +
                         (has
                             ? '<div class="facts-cal w-now"><p class="label">Current<small>logged ' +
                               esc(longDay(s.latest_date)) +
@@ -11579,12 +11594,11 @@
                         '<div class="body-grid">' +
                         weightHero(s, unit) +
                         '<section class="w-chart rv" aria-labelledby="h-wchart">' +
+                        '<div class="panel-head" data-range-head></div>' +
                         secHead({
                             eyebrow: "Trend",
                             id: "h-wchart",
-                            title:
-                                "Weight · " +
-                                esc(rangeSpanLabel(data.startDate, rEnd())),
+                            title: "Weight",
                             note: pts
                                 ? plural(pts, "weigh-in") +
                                   " in this " +
@@ -11633,6 +11647,7 @@
                     wireLab();
                     wireGoalForm();
                     wireLogWeight();
+                    renderRangeHeads();
                 };
 
                 // Time-scaled, not index-scaled: weigh-ins are irregular, and
@@ -13720,8 +13735,20 @@
                 RENDER.weighins = function () {
                     const host = $("weighins-body");
                     if (wl === null) {
-                        host.innerHTML = SKELETON.weighins;
+                        host.innerHTML =
+                            '<section class="rv"><div class="facts-title"><h3>Weigh-ins</h3>' +
+                            weighinsLogButtonHtml() +
+                            "</div>" +
+                            (lwOpen === "weighins" ? logWeightHtml() : "") +
+                            (lwFlash
+                                ? '<p class="lw-flash" role="status">' +
+                                  esc(lwFlash) +
+                                  "</p>"
+                                : "") +
+                            SKELETON.weighins +
+                            "</section>";
                         loadWeights();
+                        if (lwOpen === "weighins") wireLogWeight();
                         return;
                     }
                     const unit = data.weightUnit;
@@ -13729,6 +13756,7 @@
                         eyebrow: "Log",
                         id: "h-wl",
                         title: "Weigh-ins",
+                        aside: weighinsLogButtonHtml(),
                         note: wl.length
                             ? plural(wl.length, "entry", "entries") +
                               ", newest first, in " +
@@ -13748,9 +13776,16 @@
                         host.innerHTML =
                             '<section class="rv" aria-labelledby="h-wl">' +
                             head +
+                            (lwOpen === "weighins" ? logWeightHtml() : "") +
+                            (lwFlash
+                                ? '<p class="lw-flash" role="status">' +
+                                  esc(lwFlash) +
+                                  "</p>"
+                                : "") +
                             flash +
                             err +
-                            '<p class="empty">No weigh-ins yet. Log one from the Body tab, or ask Claude to log your weight.</p></section>';
+                            '<p class="empty">No weigh-ins yet. Log one here, or ask Claude to log your weight.</p></section>';
+                        if (lwOpen === "weighins") wireLogWeight();
                         return;
                     }
                     const rows = wl
@@ -13787,13 +13822,30 @@
                     host.innerHTML =
                         '<section class="rv" aria-labelledby="h-wl">' +
                         head +
+                        (lwOpen === "weighins" ? logWeightHtml() : "") +
+                        (lwFlash
+                            ? '<p class="lw-flash" role="status">' +
+                              esc(lwFlash) +
+                              "</p>"
+                            : "") +
                         flash +
                         err +
                         '<div class="scroll-x"><table class="wl-table"><thead><tr><th>When</th><th class="n">Weight</th><th class="wl-hide-sm">Note</th><th></th></tr></thead><tbody>' +
                         rows +
                         "</tbody></table></div></section>";
                     if (weEditId && $("we-weight")) $("we-weight").focus();
+                    if (lwOpen === "weighins") wireLogWeight();
                 };
+                function weighinsLogButtonHtml() {
+                    const open = lwOpen === "weighins";
+                    return (
+                        '<button type="button" class="btn btn-sm" data-lw-open="weighins" aria-controls="lw-form" aria-expanded="' +
+                        open +
+                        '"' +
+                        (open ? " hidden" : "") +
+                        ">+ Log weight</button>"
+                    );
+                }
                 function weFlashSet(text) {
                     weFlash = text;
                     clearTimeout(weFlashTimer);
