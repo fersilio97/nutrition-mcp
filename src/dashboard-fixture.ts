@@ -43,6 +43,7 @@ import type {
     WaterEntry,
     WeightEntry,
 } from "./supabase.js";
+import { totalsFromItems, type MealItem } from "./meal-items.js";
 
 export const SCENARIOS = [
     "full",
@@ -187,6 +188,7 @@ function makeMeal(
         source: SOURCES[hashOf(id) % SOURCES.length]!,
         notes: null,
         idempotency_key: null,
+        items: null,
     };
 }
 
@@ -724,6 +726,103 @@ export function scenarioWithEdits(
     edits: PreviewEdits = {},
 ): FixtureData {
     const fx = buildScenario(name, today);
+    const tz = scenarioTz(name);
+    const todayMeals = fx.meals.filter(
+        (m) => dateInTz(m.logged_at, tz) === today,
+    );
+    const breakfast = todayMeals.find((m) => m.meal_type === "breakfast");
+    if (breakfast) {
+        const items: MealItem[] = [
+            {
+                name: "Greek yogurt plain",
+                amount: 200,
+                unit: "g",
+                calories: 194,
+                protein_g: 20,
+                carbs_g: 8,
+                fat_g: 10,
+                fiber_g: 0,
+                sugar_g: 8,
+                source: "label",
+            },
+            {
+                name: "Rolled oats",
+                amount: 35,
+                unit: "g",
+                calories: 133,
+                protein_g: 4.6,
+                carbs_g: 23,
+                fat_g: 2.3,
+                fiber_g: 3.5,
+                sugar_g: 0.4,
+                source: "label",
+            },
+            {
+                name: "Clif Bar Crunchy Peanut Butter",
+                amount: 1,
+                unit: "piece",
+                calories: 260,
+                protein_g: 11,
+                carbs_g: 40,
+                fat_g: 7,
+                fiber_g: 4,
+                sugar_g: 18,
+                source: "label",
+            },
+        ];
+        Object.assign(breakfast, totalsFromItems(items), {
+            items,
+            description:
+                "Yogur griego natural (200 g) con avena (35 g) + barrita Clif de cacahuete",
+        });
+    }
+    let snack = todayMeals.find((m) => m.meal_type === "snack");
+    if (!snack && todayMeals.length) {
+        snack = makeMeal(
+            `m-${today}-snack-items`,
+            today,
+            10,
+            18,
+            "snack",
+            480,
+            () => 0.5,
+            tz,
+        );
+        fx.meals.push(snack);
+    }
+    if (snack) {
+        const items: MealItem[] = [
+            {
+                name: "SunChips",
+                amount: 75,
+                unit: "g",
+                calories: 390,
+                protein_g: 5,
+                carbs_g: 51,
+                fat_g: 18,
+                fiber_g: 4,
+                sugar_g: 3,
+                source: "label",
+            },
+            {
+                name: "Modelo Oro",
+                amount: 1,
+                unit: "can",
+                calories: 90,
+                protein_g: 1,
+                carbs_g: 3,
+                fat_g: 0,
+                fiber_g: 0,
+                sugar_g: 0,
+                alcohol_g: 11,
+                source: "label",
+            },
+        ];
+        Object.assign(snack, totalsFromItems(items), {
+            items,
+            description: "SunChips (75 g) + Modelo Oro (1 lata, 355 ml)",
+        });
+    }
     if (edits.body) fx.profile = { ...fx.profile, ...edits.body };
     if (edits.restingBasis)
         fx.profile = { ...fx.profile, resting_basis: edits.restingBasis };

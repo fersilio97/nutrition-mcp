@@ -15,6 +15,7 @@ import {
 import { getBaseUrl } from "./url.js";
 import { formatClientId } from "./client-id.js";
 import { z } from "zod";
+import { checkMealItems } from "./meal-items.js";
 import type { Context } from "hono";
 import {
     insertMeal,
@@ -1830,7 +1831,7 @@ export function registerTools(
                 // surface only one of the two.
                 "Log a meal entry with nutritional information. If the user names one of their saved recipes (manage_recipes action 'list'), log it with manage_recipes action 'log' instead — the figures are already known. If the user doesn't specify the quantity or portion size, ask how much they ate before estimating calories and macros. When the user gives a barcode — typed, or read from a photo of the package (transcribe the digits printed under the barcode) — call lookup_barcode first to get the product's label data, then scale it to the amount eaten. Fall back to web search or estimation only when no product is found. Use web search for branded products when no barcode is available. When logging from a photo of a plated or prepared meal (no package/barcode): first identify each dish, then establish whether it is a restaurant/takeout meal or homemade before anything else. If it is from a restaurant, ask which restaurant and where, then search the web for its menu — chains publish per-item nutrition worth using directly, independent places usually publish ingredient lists that reveal the butter, cream, and oil the photo hides; if you cannot find the menu or cannot tell which dish it is, say so and put your assumption to the user as a question rather than presenting a guess as menu data. Either way, estimate portions in household measures the user can eyeball (a glass of, a handful of, a tablespoon of — NOT grams; for restaurant servings ask how much of it they actually ate), call search_meals to see how similar meals were logged before and to surface ingredients that may be invisible in the photo, then interview the user across multiple turns — one question per message, covering which variation each dish is, how much they ate, and photo-invisible ingredients (oil, sugar, sauce, what a drink was made with) — until nothing is left open. Do NOT call this tool after a single question-and-answer round; a lone confirmation is not enough. Only call it once every open question is resolved and the user has approved a full summary of the meal (or has told you to stop asking and just log it). Write the confirmed household-measure portions into the description itself (e.g. 'Oatmeal (1 glass raw oats, 2 glasses milk) with banana') so future searches are self-describing, and for a restaurant meal name the venue and city too (e.g. 'Pad thai with chicken (1 plate, finished) at Thai Basil, Podil, Kyiv').\n\n" +
                 NUTRIENT_COVERAGE +
-                "\nPutting '180 mg caffeine' or '6 g fiber' in notes or in the description instead of in the field leaves it out of every total, goal and chart.",
+                "\nPutting '180 mg caffeine' or '6 g fiber' in notes or in the description instead of in the field leaves it out of every total, goal and chart.\n\nPer-food items: pass `items` only when the user names separate foods that each have their own amount and could be eaten on their own (e.g. 'Greek yogurt 200 g with oats 35 g + a Clif bar' → 3 items; 'SunChips 75 g + a can of beer' → 2). Do NOT split a mixed dish whose ingredients were not each measured (a pizza, a stew, a salad, a restaurant plate, a photo of one plate) — log it as one meal without items. A saved-recipe portion stays one meal. A drink is its own item. Oil or sauce on a plate of separate foods is its own item. Each item carries its own amount, unit, calories, protein, carbs, fat, fiber and sugar (plus caffeine/alcohol where they apply) and its own source; the meal totals are computed from the items.",
             annotations: {
                 readOnlyHint: false,
                 destructiveHint: false,
@@ -1928,6 +1929,37 @@ export function registerTools(
                             LOGGED_AT_OMIT_IF_NOW,
                     ),
                 notes: z.string().optional().describe("Additional notes"),
+                items: z
+                    .array(
+                        z.object({
+                            name: z.string(),
+                            amount: z.coerce.number(),
+                            unit: z.string(),
+                            calories: z.coerce.number(),
+                            protein_g: z.coerce.number(),
+                            carbs_g: z.coerce.number(),
+                            fat_g: z.coerce.number(),
+                            fiber_g: z.coerce.number().nullable().optional(),
+                            sugar_g: z.coerce.number().nullable().optional(),
+                            alcohol_g: z.coerce.number().nullable().optional(),
+                            caffeine_mg: z.coerce
+                                .number()
+                                .nullable()
+                                .optional(),
+                            sodium_mg: z.coerce.number().nullable().optional(),
+                            source: z
+                                .enum([
+                                    "label",
+                                    "chain",
+                                    "barcode",
+                                    "estimate",
+                                    "recipe",
+                                ])
+                                .nullable()
+                                .optional(),
+                        }),
+                    )
+                    .optional(),
                 idempotency_key: z
                     .string()
                     .min(1)
@@ -1951,8 +1983,25 @@ export function registerTools(
                         userId,
                         args.logged_at,
                     );
+                    const checkedItems =
+                        args.items === undefined
+                            ? undefined
+                            : checkMealItems(args.items);
+                    if (checkedItems && !checkedItems.ok)
+                        return {
+                            content: [
+                                {
+                                    type: "text" as const,
+                                    text: `Error: ${checkedItems.error}`,
+                                },
+                            ],
+                            isError: true,
+                        };
                     const { meal, deduplicated } = await insertMeal(userId, {
                         ...args,
+                        items: checkedItems?.ok
+                            ? checkedItems.value
+                            : undefined,
                         logged_at: iso,
                     });
                     const header = deduplicated
@@ -1971,7 +2020,7 @@ export function registerTools(
                         content: [
                             {
                                 type: "text",
-                                text: `${header}\n${formatMeal(meal, alcohol)}${progressSection}${alcoholHiddenNote(
+                                text: `${header}\n${formatMeal(meal, alcohol)}${meal.items?.map((item) => `\n${item.name} ${item.amount} ${item.unit} — ${item.calories} kcal`).join("") ?? ""}${progressSection}${alcoholHiddenNote(
                                     (meal.alcohol_g ?? 0) > 0,
                                     alcohol,
                                     "Alcohol saved with this meal",
@@ -3782,6 +3831,37 @@ export function registerTools(
                     .optional()
                     .describe("When the meal was eaten. " + LOGGED_AT_FORMS),
                 notes: z.string().optional(),
+                items: z
+                    .array(
+                        z.object({
+                            name: z.string(),
+                            amount: z.coerce.number(),
+                            unit: z.string(),
+                            calories: z.coerce.number(),
+                            protein_g: z.coerce.number(),
+                            carbs_g: z.coerce.number(),
+                            fat_g: z.coerce.number(),
+                            fiber_g: z.coerce.number().nullable().optional(),
+                            sugar_g: z.coerce.number().nullable().optional(),
+                            alcohol_g: z.coerce.number().nullable().optional(),
+                            caffeine_mg: z.coerce
+                                .number()
+                                .nullable()
+                                .optional(),
+                            sodium_mg: z.coerce.number().nullable().optional(),
+                            source: z
+                                .enum([
+                                    "label",
+                                    "chain",
+                                    "barcode",
+                                    "estimate",
+                                    "recipe",
+                                ])
+                                .nullable()
+                                .optional(),
+                        }),
+                    )
+                    .optional(),
             }),
             outputSchema: MEAL_PROGRESS_OUTPUT_SCHEMA,
             // Reuses the SAME meal-logged widget as log_meal (see
@@ -3797,8 +3877,25 @@ export function registerTools(
                         userId,
                         fields.logged_at,
                     );
+                    const checkedItems =
+                        fields.items === undefined
+                            ? undefined
+                            : checkMealItems(fields.items);
+                    if (checkedItems && !checkedItems.ok)
+                        return {
+                            content: [
+                                {
+                                    type: "text" as const,
+                                    text: `Error: ${checkedItems.error}`,
+                                },
+                            ],
+                            isError: true,
+                        };
                     const meal = await updateMeal(userId, id, {
                         ...fields,
+                        items: checkedItems?.ok
+                            ? checkedItems.value
+                            : undefined,
                         logged_at: iso,
                     });
                     const { progressSection, structuredContent } =
@@ -3812,7 +3909,7 @@ export function registerTools(
                         content: [
                             {
                                 type: "text",
-                                text: `Meal updated:\n${formatMeal(meal, alcohol)}${progressSection}${alcoholHiddenNote(
+                                text: `Meal updated:\n${formatMeal(meal, alcohol)}${meal.items?.map((item) => `\n${item.name} ${item.amount} ${item.unit} — ${item.calories} kcal`).join("") ?? ""}${progressSection}${alcoholHiddenNote(
                                     (meal.alcohol_g ?? 0) > 0,
                                     alcohol,
                                     "Alcohol saved with this meal",

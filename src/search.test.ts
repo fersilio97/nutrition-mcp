@@ -26,6 +26,7 @@ function meal(overrides: Partial<Meal> = {}): Meal {
         source: null,
         notes: null,
         idempotency_key: null,
+        items: null,
         ...overrides,
     };
 }

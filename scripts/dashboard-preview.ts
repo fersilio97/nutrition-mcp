@@ -32,6 +32,7 @@ process.env.SUPABASE_SECRET_KEY = "";
 import {
     bodyOf,
     checkMealPatch,
+    checkItemAmount,
     checkMealEntry,
     repeatFields,
     checkRepeat,
@@ -71,6 +72,7 @@ import { buildAdvisorReport, ADVISOR_DAYS } from "../src/advisor.js";
 import { buildDailyBuckets } from "../src/insights.js";
 import type { Meal, MealInput } from "../src/supabase.js";
 import type { Recipe } from "../src/recipes.js";
+import { removeItem, scaleItem, totalsFromItems } from "../src/meal-items.js";
 
 // The same CSP production sends for /dashboard (src/dashboard-fixture.test.ts
 // keeps the two in step), so a CSP violation shows up here before prod.
@@ -506,6 +508,7 @@ const server = Bun.serve({
             sugar_g: m.sugar_g,
             sodium_mg: m.sodium_mg ?? null,
             source: m.source ?? null,
+            items: m.items ?? null,
         });
         // The same idempotency the real insertMeal gives a client_key: the
         // second request with a key returns the first row.
@@ -537,6 +540,7 @@ const server = Bun.serve({
                 notes: fields.notes ?? null,
                 logged_at: fields.logged_at ?? new Date().toISOString(),
                 idempotency_key: key ?? null,
+                items: fields.items ?? null,
             } as Meal;
             (e.addedMeals ??= []).push(meal);
             return { meal, deduplicated: false };
@@ -705,6 +709,54 @@ const server = Bun.serve({
                 meal: mealSummary(r.meal),
             });
         }
+        const itemMatch =
+            /^\/api\/dashboard\/meals\/([^/]+)\/items\/([^/]+)$/.exec(path);
+        if (itemMatch && (req.method === "PATCH" || req.method === "DELETE")) {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const id = decodeURIComponent(itemMatch[1]!);
+            const index = /^\d+$/.test(itemMatch[2]!)
+                ? Number(itemMatch[2])
+                : -1;
+            const tz = scenarioTz(state.scenario);
+            const fx = scenarioWithEdits(
+                state.scenario,
+                todayInTz(tz),
+                edits(),
+            );
+            const meal = fx.meals.find((m) => m.id === id);
+            if (!meal?.items) return json({ error: "not_found" }, 404);
+            if (
+                !Number.isInteger(index) ||
+                index < 0 ||
+                index >= meal.items.length
+            )
+                return invalid("Item index is out of range.");
+            let items = meal.items;
+            if (req.method === "PATCH") {
+                const b = await readJson(req);
+                if (!b) return json({ error: "invalid_request" }, 400);
+                const checked = checkItemAmount(b);
+                if (!checked.ok) return invalid(checked.error);
+                items = items.map((item, i) =>
+                    i === index ? scaleItem(item, checked.value) : item,
+                );
+            } else items = removeItem(items, index);
+            if (req.method === "DELETE" && items.length === 0) {
+                (edits().deletedMealIds ??= []).push(id);
+                return json({ ok: true, deleted: true });
+            }
+            const e = edits();
+            e.mealPatches ??= {};
+            e.mealPatches[id] = {
+                ...e.mealPatches[id],
+                items,
+                ...totalsFromItems(items),
+            };
+            return json({
+                ok: true,
+                meal: mealSummary({ ...meal, ...e.mealPatches[id] }),
+            });
+        }
         const delMatch = /^\/api\/dashboard\/meals\/([^/]+)$/.exec(path);
         if (req.method === "DELETE" && delMatch) {
             if (!authed(req)) return json({ error: "invalid_token" }, 401);
@@ -758,6 +810,9 @@ const server = Bun.serve({
                     fat_g: saved.fat_g,
                     fiber_g: saved.fiber_g,
                     sugar_g: saved.sugar_g,
+                    sodium_mg: saved.sodium_mg ?? null,
+                    source: saved.source ?? null,
+                    items: saved.items ?? null,
                 },
             });
         }

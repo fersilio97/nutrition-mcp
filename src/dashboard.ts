@@ -57,6 +57,7 @@ import {
     type WeightEntry,
 } from "./supabase.js";
 import { buildDailyBuckets } from "./insights.js";
+import { removeItem, scaleItem } from "./meal-items.js";
 import { setupChecklist } from "./onboarding.js";
 import {
     checkLoggedServings,
@@ -580,20 +581,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
                 );
     const dayRows = allRows.filter((r) => inRangeDay(r.date));
     const inRange = (iso: string) => inRangeDay(dateInTz(iso, tz));
-    const mealView = (m: Meal) => ({
-        id: m.id,
-        logged_at: m.logged_at,
-        meal_type: m.meal_type,
-        description: m.description,
-        calories: m.calories,
-        protein_g: m.protein_g,
-        carbs_g: m.carbs_g,
-        fat_g: m.fat_g,
-        fiber_g: m.fiber_g,
-        sugar_g: m.sugar_g,
-        sodium_mg: m.sodium_mg ?? null,
-        source: m.source ?? null,
-    });
+    const mealView = mealViewOf;
 
     return {
         timezone: tz,
@@ -1133,6 +1121,43 @@ export async function saveCalorieGoal(
 
 type Checked<T> = { ok: true; value: T } | { ok: false; error: string };
 type Reply = { status: 200 | 400 | 404; json: Record<string, unknown> };
+export function mealViewOf(m: Meal) {
+    return {
+        id: m.id,
+        logged_at: m.logged_at,
+        meal_type: m.meal_type,
+        description: m.description,
+        calories: m.calories,
+        protein_g: m.protein_g,
+        carbs_g: m.carbs_g,
+        fat_g: m.fat_g,
+        fiber_g: m.fiber_g,
+        sugar_g: m.sugar_g,
+        sodium_mg: m.sodium_mg ?? null,
+        source: m.source ?? null,
+        items: m.items ?? null,
+    };
+}
+
+export function checkItemAmount(body: unknown): Checked<number> {
+    if (!body || typeof body !== "object" || Array.isArray(body))
+        return { ok: false, error: "Request body must be an object." };
+    const obj = body as Record<string, unknown>;
+    if (Object.keys(obj).some((k) => k !== "amount"))
+        return { ok: false, error: "Unknown field." };
+    const amount =
+        typeof obj.amount === "number"
+            ? obj.amount
+            : typeof obj.amount === "string" && obj.amount.trim()
+              ? Number(obj.amount)
+              : NaN;
+    return Number.isFinite(amount) && amount > 0 && amount <= 100000
+        ? { ok: true, value: amount }
+        : {
+              ok: false,
+              error: "amount must be greater than 0 and at most 100000.",
+          };
+}
 const invalid = (error_description: string): Reply => ({
     status: 400,
     json: { error: "invalid_request", error_description },
@@ -1482,22 +1507,52 @@ export async function updateMealFromDashboard(
         status: 200,
         json: {
             ok: true,
-            meal: {
-                id: saved.id,
-                logged_at: saved.logged_at,
-                meal_type: saved.meal_type,
-                description: saved.description,
-                calories: saved.calories,
-                protein_g: saved.protein_g,
-                carbs_g: saved.carbs_g,
-                fat_g: saved.fat_g,
-                fiber_g: saved.fiber_g,
-                sugar_g: saved.sugar_g,
-                sodium_mg: saved.sodium_mg,
-                source: saved.source,
-            },
+            meal: mealViewOf(saved),
         },
     };
+}
+
+export async function patchMealItemFromDashboard(
+    userId: string,
+    id: string,
+    index: number,
+    body: unknown,
+): Promise<Reply> {
+    const notFound: Reply = { status: 404, json: { error: "not_found" } };
+    if (!UUID_RE.test(id)) return notFound;
+    const amount = checkItemAmount(body);
+    if (!amount.ok) return invalid(amount.error);
+    const meal = await getMealById(userId, id);
+    if (!meal?.items) return notFound;
+    if (!Number.isInteger(index) || index < 0 || index >= meal.items.length)
+        return invalid("Item index is out of range.");
+    const items = meal.items.map((item, i) =>
+        i === index ? scaleItem(item, amount.value) : item,
+    );
+    const saved = await updateMeal(userId, id, { items });
+    return { status: 200, json: { ok: true, meal: mealViewOf(saved) } };
+}
+
+export async function deleteMealItemFromDashboard(
+    userId: string,
+    id: string,
+    index: number,
+): Promise<Reply> {
+    const notFound: Reply = { status: 404, json: { error: "not_found" } };
+    if (!UUID_RE.test(id)) return notFound;
+    const meal = await getMealById(userId, id);
+    if (!meal?.items) return notFound;
+    if (!Number.isInteger(index) || index < 0 || index >= meal.items.length)
+        return invalid("Item index is out of range.");
+    const items = removeItem(meal.items, index);
+    if (!items.length) {
+        const deleted = await deleteMealFromDashboard(userId, id);
+        return deleted.status === 200
+            ? { status: 200, json: { ok: true, deleted: true } }
+            : deleted;
+    }
+    const saved = await updateMeal(userId, id, { items });
+    return { status: 200, json: { ok: true, meal: mealViewOf(saved) } };
 }
 
 // ---- Logging a meal from the page (no LLM) --------------------------------
@@ -2338,6 +2393,38 @@ export function createDashboardRouter(): Hono {
         );
         return c.json(res.json, res.status);
     });
+
+    dash.patch(
+        "/api/dashboard/meals/:id/items/:index",
+        authenticateBearer,
+        async (c) => {
+            const body = await readObject(c);
+            if (!body) return c.json({ error: "invalid_request" }, 400);
+            const rawIndex = c.req.param("index") ?? "";
+            const index = /^\d+$/.test(rawIndex) ? Number(rawIndex) : -1;
+            const res = await patchMealItemFromDashboard(
+                c.get("userId") as string,
+                c.req.param("id") ?? "",
+                index,
+                body,
+            );
+            return c.json(res.json, res.status);
+        },
+    );
+    dash.delete(
+        "/api/dashboard/meals/:id/items/:index",
+        authenticateBearer,
+        async (c) => {
+            const rawIndex = c.req.param("index") ?? "";
+            const index = /^\d+$/.test(rawIndex) ? Number(rawIndex) : -1;
+            const res = await deleteMealItemFromDashboard(
+                c.get("userId") as string,
+                c.req.param("id") ?? "",
+                index,
+            );
+            return c.json(res.json, res.status);
+        },
+    );
 
     // Edit one of the user's meals from the Meals tab — update_meal's rules.
     dash.patch("/api/dashboard/meals/:id", authenticateBearer, async (c) => {
