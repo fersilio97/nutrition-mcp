@@ -6,6 +6,7 @@ import { isWeightUnit, toStoredInteger, type WeightUnit } from "./units.js";
 import { isDrinkUnit, type DrinkUnit } from "./alcohol.js";
 import { escapeLikePattern, tokenizeQuery } from "./search.js";
 import type { PatreonTokens, PatreonTokenStore } from "./patreon.js";
+import { totalsFromItems, type MealItem } from "./meal-items.js";
 
 let supabase: SupabaseClient;
 
@@ -135,6 +136,7 @@ export interface Meal {
     source: MealSource | null;
     notes: string | null;
     idempotency_key: string | null;
+    items: MealItem[] | null;
 }
 
 export interface MealInput {
@@ -142,20 +144,21 @@ export interface MealInput {
     // "treat": party food, a pizza night, dessert, drinks out. Needs the
     // 20261111120000_treat_meal_type migration's widened CHECK constraint.
     meal_type: "breakfast" | "lunch" | "dinner" | "snack" | "treat";
-    calories?: number;
-    protein_g?: number;
-    carbs_g?: number;
-    fat_g?: number;
-    fiber_g?: number;
-    sugar_g?: number;
-    alcohol_g?: number;
+    calories?: number | null;
+    protein_g?: number | null;
+    carbs_g?: number | null;
+    fat_g?: number | null;
+    fiber_g?: number | null;
+    sugar_g?: number | null;
+    alcohol_g?: number | null;
     // Milligrams — see Meal.caffeine_mg.
-    caffeine_mg?: number;
-    sodium_mg?: number;
-    source?: MealSource;
+    caffeine_mg?: number | null;
+    sodium_mg?: number | null;
+    source?: MealSource | null;
     logged_at?: string;
     notes?: string;
     idempotency_key?: string;
+    items?: MealItem[] | null;
 }
 
 export interface MealInsertResult {
@@ -231,7 +234,7 @@ export function updatedMealIdempotencyKey(
             (fields.meal_type as MealInput["meal_type"] | undefined) ??
             (existing.meal_type as MealInput["meal_type"]),
         calories:
-            fields.calories !== undefined
+            fields.calories != null
                 ? toStoredInteger(fields.calories)
                 : (existing.calories ?? undefined),
         protein_g: fields.protein_g ?? existing.protein_g ?? undefined,
@@ -264,10 +267,12 @@ export async function insertMeal(
     // outright (22P02), so round before anything else reads the input — the
     // digest below included, or re-logging the same meal would derive a key
     // from 388.54 while the stored row said 389 and the dedup would miss.
+    const derived = input.items ? totalsFromItems(input.items) : null;
+    const prepared: MealInput = derived ? { ...input, ...derived } : input;
     const meal: MealInput =
-        input.calories == null
-            ? input
-            : { ...input, calories: toStoredInteger(input.calories) };
+        prepared.calories == null
+            ? prepared
+            : { ...prepared, calories: toStoredInteger(prepared.calories) };
 
     // Resolve logged_at once so the digest and the persisted row agree.
     const loggedAt = meal.logged_at ?? new Date().toISOString();
@@ -305,6 +310,7 @@ export async function insertMeal(
             notes:
                 meal.notes != null ? decodeEscapeSequences(meal.notes) : null,
             idempotency_key: idempotencyKey,
+            items: meal.items ?? null,
         })
         .select()
         .single();
@@ -610,8 +616,13 @@ export async function updateMeal(
     if (fields.description !== undefined)
         update.description = decodeEscapeSequences(fields.description);
     if (fields.meal_type !== undefined) update.meal_type = fields.meal_type;
+    if (fields.items !== undefined) {
+        update.items = fields.items;
+        if (fields.items !== null)
+            Object.assign(update, totalsFromItems(fields.items));
+    }
     // Integer column — see toStoredInteger.
-    if (fields.calories !== undefined)
+    if (fields.calories != null)
         update.calories = toStoredInteger(fields.calories);
     if (fields.protein_g !== undefined) update.protein_g = fields.protein_g;
     if (fields.carbs_g !== undefined) update.carbs_g = fields.carbs_g;

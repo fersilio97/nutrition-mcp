@@ -3922,6 +3922,59 @@
             .meals-table td.mac b {
                 font-weight: 400;
             }
+            .item-toggle {
+                border: 0;
+                padding: 0 var(--s1) 0 0;
+                background: transparent;
+                color: var(--ink-2);
+                font: inherit;
+                cursor: pointer;
+            }
+            .item-toggle .chev {
+                display: inline-block;
+                transition: transform 120ms ease;
+            }
+            .item-toggle[aria-expanded="true"] .chev {
+                transform: rotate(90deg);
+            }
+            .meals-table tr.item-row td {
+                padding-top: var(--s1);
+                padding-bottom: var(--s1);
+                border-bottom: 1px solid var(--line);
+                color: var(--ink-2);
+                font-size: var(--fs-small);
+            }
+            .meals-table tr.item-row td.item-name {
+                box-shadow: inset 2px 0 var(--line);
+                padding-left: var(--s3);
+            }
+            .item-amount {
+                width: 5em;
+            }
+            .item-name-content {
+                display: inline;
+            }
+            .item-label {
+                min-width: 0;
+            }
+            .item-quantity {
+                white-space: nowrap;
+            }
+            .item-quantity-readonly::before {
+                content: " · ";
+            }
+            .item-unit {
+                margin-left: 4px;
+            }
+            .meal-items-readonly {
+                margin: var(--s2) 0 0;
+                padding-left: var(--s4);
+                color: var(--ink-2);
+                font-size: var(--fs-small);
+            }
+            .meal-items-readonly li {
+                padding: 2px 0;
+            }
             .meals-foot {
                 margin-top: var(--s4);
                 font-size: var(--fs-foot);
@@ -3986,6 +4039,33 @@
                 }
                 .meals-table tr.meal td {
                     border-bottom: 1px solid var(--line);
+                }
+                .meals-table tr.item-row .item-name-content {
+                    display: flex;
+                    align-items: baseline;
+                    gap: var(--s2);
+                    flex: 1;
+                    min-width: 0;
+                }
+                .meals-table tr.item-row .item-label {
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    flex: 1;
+                }
+                .meals-table tr.item-row .item-quantity {
+                    flex: 0 0 6em;
+                    width: 6em;
+                    text-align: right;
+                    color: var(--ink-3);
+                    font-family: var(--font-mono);
+                    font-variant-numeric: tabular-nums;
+                }
+                .meals-table tr.item-row .item-quantity-readonly::before {
+                    content: "";
+                }
+                .meals-table tr.item-row .item-amount {
+                    width: 4em;
                 }
                 .meals-table tr.meal.last td {
                     border-bottom: 0;
@@ -4065,6 +4145,32 @@
                 }
                 .meals-table tr.meal.last {
                     border-bottom: 0;
+                }
+                .meals-table tr.item-row {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 4px var(--s3);
+                    padding: var(--s2) 0 var(--s2) var(--s3);
+                    border-bottom: 1px solid var(--line);
+                }
+                .meals-table tr.item-row td {
+                    display: inline;
+                    padding: 0;
+                    border: 0;
+                }
+                .meals-table tr.item-row td.item-empty {
+                    display: none;
+                }
+                .meals-table tr.item-row td.item-name {
+                    flex-basis: 100%;
+                    box-shadow: inset 2px 0 var(--line);
+                    padding-left: var(--s2);
+                }
+                .meals-table tr.item-row td.item-num::before {
+                    content: attr(data-l) " ";
+                }
+                .meals-table tr.item-row td.item-actions {
+                    margin-left: auto;
                 }
                 .meals-table tr.meal td {
                     padding: 0;
@@ -5879,6 +5985,9 @@
                     );
                 }
                 function mealItem(m) {
+                    const hasItems =
+                        Array.isArray(m.items) && m.items.length >= 2;
+                    const itemsOpen = todayOpenMealItems.has(m.id);
                     return (
                         '<li><div class="m1"><span class="m-time">' +
                         esc(localTime(m.logged_at)) +
@@ -5889,7 +5998,36 @@
                         nz(m.calories) +
                         '<small>kcal</small></span></div><p class="m-desc">' +
                         esc(m.description) +
-                        '</p><p class="m-mac"><span>P <b>' +
+                        (hasItems
+                            ? ' <button type="button" class="item-toggle" data-today-meal-items="' +
+                              esc(m.id) +
+                              '" aria-expanded="' +
+                              itemsOpen +
+                              '" aria-label="Show the ' +
+                              m.items.length +
+                              ' foods in this meal"><span class="chev" aria-hidden="true">›</span> Foods</button>'
+                            : "") +
+                        "</p>" +
+                        (itemsOpen
+                            ? '<ul class="meal-items-readonly">' +
+                              m.items
+                                  .map(function (item) {
+                                      return (
+                                          "<li>" +
+                                          esc(itemName(item)) +
+                                          " · " +
+                                          esc(item.amount) +
+                                          " " +
+                                          esc(item.unit) +
+                                          " · " +
+                                          nz(item.calories) +
+                                          " kcal</li>"
+                                      );
+                                  })
+                                  .join("") +
+                              "</ul>"
+                            : "") +
+                        '<p class="m-mac"><span>P <b>' +
                         nz(m.protein_g) +
                         "</b></span><span>C <b>" +
                         nz(m.carbs_g) +
@@ -5906,6 +6044,16 @@
                         "</p></li>"
                     );
                 }
+                $("today-body").addEventListener("click", function (ev) {
+                    const toggle = ev.target.closest("[data-today-meal-items]");
+                    if (!toggle) return;
+                    const id = toggle.dataset.todayMealItems;
+                    if (todayOpenMealItems.has(id))
+                        todayOpenMealItems.delete(id);
+                    else todayOpenMealItems.add(id);
+                    contentDirty.today = true;
+                    paint();
+                });
                 // Calorie bars against each day's goal: --kcal up to the
                 // goal, a hatched segment above it. Square, as printed; the
                 // bars grow from the baseline on a panel's first render.
@@ -11888,8 +12036,274 @@
                 // a range change) so a half-finished edit is not lost.
                 let mealEditId = null;
                 let mealDraft = null;
+                let mealItemEdit = null;
                 let mealFlash = "";
                 let mealFlashTimer = 0;
+                const openMealItems = new Set();
+                const todayOpenMealItems = new Set();
+                function replaceMealEverywhere(mealId, meal) {
+                    if (data && Array.isArray(data.meals))
+                        data.meals = data.meals.map(function (m) {
+                            return m.id === mealId ? meal : m;
+                        });
+                    if (data && Array.isArray(data.todayMeals))
+                        data.todayMeals = data.todayMeals.map(function (m) {
+                            return m.id === mealId ? meal : m;
+                        });
+                }
+                function dropMealEverywhere(mealId) {
+                    if (data && Array.isArray(data.meals))
+                        data.meals = data.meals.filter(function (m) {
+                            return m.id !== mealId;
+                        });
+                    if (data && Array.isArray(data.todayMeals))
+                        data.todayMeals = data.todayMeals.filter(function (m) {
+                            return m.id !== mealId;
+                        });
+                    openMealItems.delete(mealId);
+                    todayOpenMealItems.delete(mealId);
+                }
+                function setMealFlash(message) {
+                    mealFlash = message;
+                    clearTimeout(mealFlashTimer);
+                    mealFlashTimer = setTimeout(function () {
+                        mealFlash = "";
+                        const f = document.querySelector(".meal-flash");
+                        if (f) f.remove();
+                    }, 6000);
+                }
+                function itemName(item) {
+                    return String((item && item.name) || "");
+                }
+                function renderMealItems(m, index, sod) {
+                    return (m.items || [])
+                        .map(function (item, itemIndex) {
+                            const editing =
+                                mealItemEdit &&
+                                mealItemEdit.mealId === m.id &&
+                                mealItemEdit.index === itemIndex;
+                            return (
+                                '<tr class="item-row"' +
+                                (itemIndex === 0
+                                    ? ' id="meal-items-' + esc(m.id) + '"'
+                                    : "") +
+                                '><td class="item-empty"></td><td class="item-empty"></td><td class="d item-name">' +
+                                '<span class="item-name-content"><span class="item-label">' +
+                                esc(itemName(item)) +
+                                '</span><span class="item-quantity' +
+                                (editing ? "" : " item-quantity-readonly") +
+                                '">' +
+                                (editing
+                                    ? '<input class="input item-amount" type="number" min="0" step="any" value="' +
+                                      esc(item.amount) +
+                                      '" data-item-amount="' +
+                                      esc(m.id) +
+                                      '" data-item-index="' +
+                                      itemIndex +
+                                      '" aria-label="Amount of ' +
+                                      esc(itemName(item)) +
+                                      '"><span class="item-unit">' +
+                                      esc(item.unit) +
+                                      "</span>"
+                                    : esc(item.amount) + " " + esc(item.unit)) +
+                                "</span></span>" +
+                                '</td><td class="n k item-num" data-l="kcal">' +
+                                nz(item.calories) +
+                                "</td>" +
+                                [
+                                    ["protein_g", "P"],
+                                    ["carbs_g", "C"],
+                                    ["fat_g", "F"],
+                                    ["fiber_g", "Fib"],
+                                    ["sugar_g", "Sug"],
+                                ]
+                                    .map(function (x) {
+                                        return (
+                                            '<td class="n mac item-num" data-l="' +
+                                            x[1] +
+                                            '">' +
+                                            nz(item[x[0]]) +
+                                            "</td>"
+                                        );
+                                    })
+                                    .join("") +
+                                (sod
+                                    ? '<td class="n mac item-num" data-l="Na">' +
+                                      nz(item.sodium_mg) +
+                                      "</td>"
+                                    : "") +
+                                '<td class="e item-actions">' +
+                                (editing
+                                    ? '<button type="button" class="btn-edit" data-save-item="' +
+                                      esc(m.id) +
+                                      '" data-item-index="' +
+                                      itemIndex +
+                                      '">Save</button><button type="button" class="btn-edit" data-cancel-item>Cancel</button><button type="button" class="btn-edit" data-remove-item="' +
+                                      esc(m.id) +
+                                      '" data-item-index="' +
+                                      itemIndex +
+                                      '">' +
+                                      (mealItemEdit.confirm
+                                          ? "Confirm remove"
+                                          : "Remove") +
+                                      "</button>"
+                                    : '<button type="button" class="btn-edit" data-edit-item="' +
+                                      esc(m.id) +
+                                      '" data-item-index="' +
+                                      itemIndex +
+                                      '">Edit</button>') +
+                                "</td></tr>"
+                            );
+                        })
+                        .join("");
+                }
+                function writeItemChange(id, index, method, body) {
+                    return writeJson(
+                        method,
+                        "/api/dashboard/meals/" +
+                            encodeURIComponent(id) +
+                            "/items/" +
+                            index,
+                        body,
+                    );
+                }
+                function showItemError(res) {
+                    setMealFlash(
+                        (res.body && res.body.message) ||
+                            (res.body && res.body.error_description) ||
+                            "Could not update meal item.",
+                    );
+                    contentDirty.meals = true;
+                    paint();
+                }
+                $("meals-body").addEventListener("click", function (ev) {
+                    const toggle = ev.target.closest("[data-meal-items]");
+                    if (toggle) {
+                        const id = toggle.dataset.mealItems;
+                        if (openMealItems.has(id)) openMealItems.delete(id);
+                        else openMealItems.add(id);
+                        contentDirty.meals = true;
+                        paint();
+                        return;
+                    }
+                    const editItem = ev.target.closest("[data-edit-item]");
+                    if (editItem) {
+                        mealItemEdit = {
+                            mealId: editItem.dataset.editItem,
+                            index: Number(editItem.dataset.itemIndex),
+                            confirm: false,
+                        };
+                        contentDirty.meals = true;
+                        paint();
+                        return;
+                    }
+                    if (ev.target.closest("[data-cancel-item]")) {
+                        mealItemEdit = null;
+                        contentDirty.meals = true;
+                        paint();
+                        return;
+                    }
+                    const saveItem = ev.target.closest("[data-save-item]");
+                    if (saveItem) {
+                        const id = saveItem.dataset.saveItem,
+                            index = Number(saveItem.dataset.itemIndex);
+                        const input = $("meals-body").querySelector(
+                            '[data-item-amount="' +
+                                CSS.escape(id) +
+                                '"][data-item-index="' +
+                                index +
+                                '"]',
+                        );
+                        if (!input || !input.value || Number(input.value) <= 0)
+                            return;
+                        saveItem.disabled = true;
+                        writeItemChange(id, index, "PATCH", {
+                            amount: Number(input.value),
+                        })
+                            .then(function (res) {
+                                if (!res.ok) return showItemError(res);
+                                mealItemEdit = null;
+                                replaceMealEverywhere(id, res.body.meal);
+                                openMealItems.add(id);
+                                contentDirty.meals = true;
+                                paint();
+                                refresh();
+                            })
+                            .catch(function () {
+                                setMealFlash("Could not reach the server.");
+                                contentDirty.meals = true;
+                                paint();
+                            });
+                        return;
+                    }
+                    const remove = ev.target.closest("[data-remove-item]");
+                    if (!remove) return;
+                    const sameRow =
+                        mealItemEdit &&
+                        mealItemEdit.mealId === remove.dataset.removeItem &&
+                        mealItemEdit.index === Number(remove.dataset.itemIndex);
+                    if (!sameRow || !mealItemEdit.confirm) {
+                        mealItemEdit = {
+                            mealId: remove.dataset.removeItem,
+                            index: Number(remove.dataset.itemIndex),
+                            confirm: true,
+                        };
+                        contentDirty.meals = true;
+                        paint();
+                        return;
+                    }
+                    const id = remove.dataset.removeItem,
+                        index = Number(remove.dataset.itemIndex);
+                    remove.disabled = true;
+                    writeItemChange(id, index, "DELETE")
+                        .then(function (res) {
+                            if (!res.ok) return showItemError(res);
+                            if (res.body.deleted) {
+                                mealItemEdit = null;
+                                dropMealEverywhere(id);
+                                setMealFlash(
+                                    "Meal deleted — it had no foods left.",
+                                );
+                            } else {
+                                mealItemEdit = null;
+                                replaceMealEverywhere(id, res.body.meal);
+                            }
+                            contentDirty.meals = true;
+                            paint();
+                            refresh();
+                        })
+                        .catch(function (err) {
+                            if (err && err.message === "unauthorized") return;
+                            setMealFlash("Could not reach the server.");
+                            contentDirty.meals = true;
+                            paint();
+                        });
+                });
+                $("meals-body").addEventListener("change", function (ev) {
+                    const input = ev.target.closest("[data-item-amount]");
+                    if (!input || !input.value || Number(input.value) <= 0)
+                        return;
+                    const id = input.dataset.itemAmount,
+                        index = Number(input.dataset.itemIndex);
+                    input.disabled = true;
+                    writeItemChange(id, index, "PATCH", {
+                        amount: Number(input.value),
+                    })
+                        .then(function (res) {
+                            if (!res.ok) return showItemError(res);
+                            replaceMealEverywhere(id, res.body.meal);
+                            openMealItems.add(id);
+                            contentDirty.meals = true;
+                            paint();
+                            refresh();
+                        })
+                        .catch(function (err) {
+                            if (err && err.message === "unauthorized") return;
+                            setMealFlash("Could not reach the server.");
+                            contentDirty.meals = true;
+                            paint();
+                        });
+                });
                 const MEAL_NUMS = [
                     ["calories", "kcal", 1],
                     ["protein_g", "Protein g", 0.1],
@@ -13110,6 +13524,12 @@
                 // Enter in the amount / count boxes commits them; it must not
                 // submit (log) the form half-way through choosing.
                 $("meals-body").addEventListener("keydown", function (ev) {
+                    if (ev.key === "Escape" && mealItemEdit) {
+                        mealItemEdit = null;
+                        contentDirty.meals = true;
+                        paint();
+                        return;
+                    }
                     if (
                         ev.key === "Enter" &&
                         ev.target.closest &&
@@ -13270,6 +13690,12 @@
                                         const editing = mealEditId === m.id;
                                         const duping = mealDupId === m.id;
                                         const last = i === g.meals.length - 1;
+                                        const hasItems =
+                                            Array.isArray(m.items) &&
+                                            m.items.length >= 2;
+                                        const itemsOpen = openMealItems.has(
+                                            m.id,
+                                        );
                                         return (
                                             '<tr class="meal' +
                                             (last && !editing && !duping
@@ -13283,6 +13709,17 @@
                                             '</td><td class="ty">' +
                                             esc(mealTypeLabel(m.meal_type)) +
                                             '</td><td class="d">' +
+                                            (hasItems
+                                                ? '<button type="button" class="item-toggle" data-meal-items="' +
+                                                  esc(m.id) +
+                                                  '" aria-expanded="' +
+                                                  itemsOpen +
+                                                  '" aria-controls="meal-items-' +
+                                                  esc(m.id) +
+                                                  '" aria-label="Show the ' +
+                                                  m.items.length +
+                                                  ' foods in this meal"><span class="chev" aria-hidden="true">›</span></button>'
+                                                : "") +
                                             esc(m.description) +
                                             sourceBadge(m.source) +
                                             '</td><td class="n k">' +
@@ -13322,6 +13759,9 @@
                                             ", " +
                                             esc(localTime(m.logged_at)) +
                                             '">Edit</button></td></tr>' +
+                                            (hasItems && itemsOpen
+                                                ? renderMealItems(m, i, sod)
+                                                : "") +
                                             (editing
                                                 ? '<tr class="edit-row' +
                                                   (last ? " last" : "") +

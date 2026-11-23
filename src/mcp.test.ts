@@ -106,6 +106,7 @@ function meal(over: Partial<Meal> = {}): Meal {
         source: null,
         notes: null,
         idempotency_key: null,
+        items: null,
         ...over,
     };
 }
@@ -2169,6 +2170,7 @@ describe("missingNutrientNote", () => {
         source: null,
         notes: null,
         idempotency_key: null,
+        items: null,
     } satisfies Meal;
 
     test("names both missing fields and the meal id to repair", () => {

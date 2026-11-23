@@ -28,6 +28,7 @@ function meal(logged_at: string, fields: Partial<Meal> = {}): Meal {
         source: null,
         notes: null,
         idempotency_key: null,
+        items: null,
         ...fields,
     };
 }
@@ -88,6 +89,7 @@ function week(
             notes: null,
             created_at: w.logged_at,
             idempotency_key: null,
+            items: null,
         })),
         DAYS[0]!,
         DAYS[6]!,
