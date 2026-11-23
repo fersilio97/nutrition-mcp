@@ -1639,6 +1639,10 @@
                 color: var(--ink-2);
                 font-size: var(--fs-small);
             }
+            /* Under the metabolism chart: clear of its date labels. */
+            .met-break {
+                margin: 14px 0 18px;
+            }
             .cal2-legend-base {
                 fill: var(--cal2-c-base);
             }
@@ -8551,7 +8555,7 @@
                         );
                     return (
                         head +
-                        '<div class="plot" id="met-plot"></div><div class="strip two rv" id="met-stats"></div><p class="met-highlight" id="met-today"></p>' +
+                        '<div class="plot" id="met-plot"></div><p class="cal2-why met-break" id="met-gap" hidden></p><div class="strip two rv" id="met-stats"></div><p class="met-highlight" id="met-today"></p>' +
                         calcHtml()
                     );
                 }
@@ -8978,6 +8982,67 @@
                     },
                     true,
                 );
+                // Why the line breaks. A day has a point only when the days
+                // before it pass the calibration checks (src/calibration.ts),
+                // so a stretch that fails leaves a gap, and the chart can end
+                // before today. Names the reasons of the latest window when
+                // the line stops short, else just what a gap means.
+                function metGapNote(points) {
+                    const ok = (p) => p.data_kcal != null;
+                    const first = points.findIndex(ok);
+                    if (first < 0) return "";
+                    const lastOk = points.slice().reverse().find(ok);
+                    const broken = points.slice(first).some((p) => !ok(p));
+                    if (!broken) return "";
+                    const L = lookbackDays();
+                    const rule =
+                        "Each point needs the " +
+                        L +
+                        " days before it to have weigh-ins on 8+ days, 21+ days between the first and the last, a full food log on 70% of those days, and a steady weight trend. Where that fails the line stops, and it continues when a later stretch passes.";
+                    const c = data.calibration;
+                    const w = (c && c.window) || {};
+                    const latest = points[points.length - 1];
+                    if (ok(latest)) return rule;
+                    const why = [];
+                    const span = w.span_days || 0;
+                    const wi = w.weighin_days || 0;
+                    if (wi < 8)
+                        why.push(
+                            "weigh-ins on " + wi + " different days (8 needed)",
+                        );
+                    if (span < 21)
+                        why.push(
+                            span +
+                                " days between first and last weigh-in (21 needed)",
+                        );
+                    else if ((w.counted_days || 0) < Math.ceil(span * 0.7))
+                        why.push(
+                            "a full food log on " +
+                                (w.counted_days || 0) +
+                                " of the " +
+                                span +
+                                " days (" +
+                                Math.ceil(span * 0.7) +
+                                " needed, 70%)",
+                        );
+                    if (wi >= 3 && w.uncertainty_kcal > 150)
+                        why.push(
+                            "weigh-ins that scatter too much (±" +
+                                fmt(w.uncertainty_kcal) +
+                                " kcal/day, ±150 allowed)",
+                        );
+                    if (c && c.bmr_kcal == null)
+                        why.push("height, birth date or sex missing");
+                    return (
+                        "No calibrated figure since " +
+                        shortDay(lastOk.date) +
+                        (why.length
+                            ? ": the latest stretch has " + why.join(", ")
+                            : ": the latest stretch does not pass the checks") +
+                        ". " +
+                        rule
+                    );
+                }
                 function metabolismChart() {
                     const host = $("met-plot");
                     if (!host || !host.clientWidth) return;
@@ -9198,6 +9263,9 @@
                                 ? "±" + fmt(latestData.uncertainty_kcal)
                                 : "",
                         );
+                    const gap = metGapNote(points);
+                    $("met-gap").textContent = gap;
+                    $("met-gap").hidden = !gap;
                     $("met-today").textContent =
                         latest && latest.data_kcal != null
                             ? "Your baseline burn today: ~" +
