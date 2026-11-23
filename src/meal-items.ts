@@ -169,13 +169,22 @@ export function removeItem(items: MealItem[], index: number): MealItem[] {
     return items.filter((_, i) => i !== index);
 }
 
+const PLURAL_UNITS = new Set(["can", "cup", "slice", "serving", "bottle"]);
+
 export function describeItems(items: MealItem[]): string {
     return items
         .map((item) => {
             const amount = Number.isInteger(item.amount)
                 ? String(item.amount)
                 : String(item.amount).replace(/\.0+$/, "");
-            return `${item.name} (${amount}${item.unit === "piece" ? "" : ` ${item.unit}`})`;
+            // A piece is just a count ("Clif Bar (2)"); countable units
+            // take a plural ("2 cans"); measures (g, ml, tbsp) never do.
+            if (item.unit === "piece") return `${item.name} (${amount})`;
+            const unit =
+                PLURAL_UNITS.has(item.unit) && item.amount !== 1
+                    ? `${item.unit}s`
+                    : item.unit;
+            return `${item.name} (${amount} ${unit})`;
         })
         .join(" + ");
 }

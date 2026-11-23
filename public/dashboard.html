@@ -3932,6 +3932,9 @@
             .item-quantity {
                 white-space: nowrap;
             }
+            .item-quantity-readonly::before {
+                content: " · ";
+            }
             .item-unit {
                 margin-left: 4px;
             }
@@ -4009,11 +4012,6 @@
                 .meals-table tr.meal td {
                     border-bottom: 1px solid var(--line);
                 }
-                .meals-table tr.item-row td.item-name {
-                    display: flex;
-                    align-items: baseline;
-                    min-width: 0;
-                }
                 .meals-table tr.item-row .item-name-content {
                     display: flex;
                     align-items: baseline;
@@ -4034,6 +4032,9 @@
                     color: var(--ink-3);
                     font-family: var(--font-mono);
                     font-variant-numeric: tabular-nums;
+                }
+                .meals-table tr.item-row .item-quantity-readonly::before {
+                    content: "";
                 }
                 .meals-table tr.item-row .item-amount {
                     width: 4em;
@@ -12012,7 +12013,9 @@
                                 '><td class="item-empty"></td><td class="item-empty"></td><td class="d item-name">' +
                                 '<span class="item-name-content"><span class="item-label">' +
                                 esc(itemName(item)) +
-                                '</span><span class="item-quantity">' +
+                                '</span><span class="item-quantity' +
+                                (editing ? "" : " item-quantity-readonly") +
+                                '">' +
                                 (editing
                                     ? '<input class="input item-amount" type="number" min="0" step="any" value="' +
                                       esc(item.amount) +
@@ -12025,10 +12028,7 @@
                                       '"><span class="item-unit">' +
                                       esc(item.unit) +
                                       "</span>"
-                                    : " · " +
-                                      esc(item.amount) +
-                                      " " +
-                                      esc(item.unit)) +
+                                    : esc(item.amount) + " " + esc(item.unit)) +
                                 "</span></span>" +
                                 '</td><td class="n k item-num" data-l="kcal">' +
                                 nz(item.calories) +
@@ -12128,12 +12128,17 @@
                     }
                     const saveItem = ev.target.closest("[data-save-item]");
                     if (saveItem) {
-                        const input =
-                            $("meals-body").querySelector("[data-item-amount]");
-                        if (!input || !input.value || Number(input.value) <= 0)
-                            return;
                         const id = saveItem.dataset.saveItem,
                             index = Number(saveItem.dataset.itemIndex);
+                        const input = $("meals-body").querySelector(
+                            '[data-item-amount="' +
+                                CSS.escape(id) +
+                                '"][data-item-index="' +
+                                index +
+                                '"]',
+                        );
+                        if (!input || !input.value || Number(input.value) <= 0)
+                            return;
                         saveItem.disabled = true;
                         writeItemChange(id, index, "PATCH", {
                             amount: Number(input.value),
@@ -12156,14 +12161,16 @@
                     }
                     const remove = ev.target.closest("[data-remove-item]");
                     if (!remove) return;
-                    if (!mealItemEdit || !mealItemEdit.confirm) {
-                        if (mealItemEdit) mealItemEdit.confirm = true;
-                        else
-                            mealItemEdit = {
-                                mealId: remove.dataset.removeItem,
-                                index: Number(remove.dataset.itemIndex),
-                                confirm: true,
-                            };
+                    const sameRow =
+                        mealItemEdit &&
+                        mealItemEdit.mealId === remove.dataset.removeItem &&
+                        mealItemEdit.index === Number(remove.dataset.itemIndex);
+                    if (!sameRow || !mealItemEdit.confirm) {
+                        mealItemEdit = {
+                            mealId: remove.dataset.removeItem,
+                            index: Number(remove.dataset.itemIndex),
+                            confirm: true,
+                        };
                         contentDirty.meals = true;
                         paint();
                         return;

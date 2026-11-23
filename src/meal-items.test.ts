@@ -26,9 +26,13 @@ describe("meal items", () => {
             describeItems([
                 item("Rolled oats", { amount: 70, unit: "g" }),
                 item("Clif Bar", { amount: 1, unit: "piece" }),
+                item("Beans", { amount: 2, unit: "can" }),
+                item("Crackers", { amount: 2, unit: "piece" }),
                 item("Milk", { amount: 1.5, unit: "cup" }),
             ]),
-        ).toBe("Rolled oats (70 g) + Clif Bar (1) + Milk (1.5 cup)");
+        ).toBe(
+            "Rolled oats (70 g) + Clif Bar (1) + Beans (2 cans) + Crackers (2) + Milk (1.5 cups)",
+        );
     });
     test("sums totals, optional values, and common source", () => {
         expect(
