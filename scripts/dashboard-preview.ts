@@ -51,6 +51,7 @@ import {
     dashboardAppAssetResponse,
     parseModelParams,
     whatIf,
+    METABOLISM_DAYS,
 } from "../src/dashboard.js";
 import {
     SCENARIOS,
@@ -259,14 +260,23 @@ const server = Bun.serve({
             const days = Number.isFinite(n)
                 ? Math.min(365, Math.max(1, n))
                 : 30;
+            // Like production: no metabolism series here, it has its own call.
             return json(
                 previewPayload(
                     state.scenario,
                     days,
                     edits(),
                     url.searchParams.get("end") ?? undefined,
+                    false,
                 ),
             );
+        }
+
+        if (req.method === "GET" && path === "/api/dashboard/metabolism") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            if (state.delay) await Bun.sleep(state.delay);
+            const p = previewPayload(state.scenario, METABOLISM_DAYS, edits());
+            return json({ metabolism: p.metabolism });
         }
 
         if (req.method === "POST" && path === "/api/dashboard/body") {

@@ -5457,6 +5457,7 @@
                         if (on && changed) revealNext[t] = true;
                     });
                     if (opts.focus) $("tab-" + name).focus();
+                    if (changed && data) loadTabExtras(false);
                     // A history entry per tab change, so back/forward
                     // moves between tabs. The panels' ids are panel-*,
                     // so the browser has no anchor to scroll to.
@@ -8504,7 +8505,7 @@
                     return fmtSignedDec(toUnit(g, unit)) + " " + unit;
                 }
                 function metabolismHtml() {
-                    const points = data.metabolism || [];
+                    const points = metPoints();
                     const latest = points.length
                         ? points[points.length - 1]
                         : null;
@@ -8546,6 +8547,15 @@
                             head +
                             '<p class="empty">Add your height, birth date and sex in Body details to estimate this.<br>' +
                             ADD_BODY +
+                            "</p>"
+                        );
+                    if (metabolism === null)
+                        return (
+                            head +
+                            '<p class="empty">' +
+                            (metabolismFailed
+                                ? "Could not load this chart. Reload the page to try again."
+                                : "Loading…") +
                             "</p>"
                         );
                     if (!points.some((p) => p.data_kcal != null))
@@ -9046,7 +9056,7 @@
                 function metabolismChart() {
                     const host = $("met-plot");
                     if (!host || !host.clientWidth) return;
-                    const points = data.metabolism || [];
+                    const points = metPoints();
                     const latest = points.length
                         ? points[points.length - 1]
                         : null;
@@ -13848,6 +13858,60 @@
                               ? "dinner"
                               : "snack";
                 }
+                // The Resting metabolism series. Its window is the widest on the
+                // page (90 days plus the lookback before them), so it is not in
+                // /api/dashboard/data: the Body tab asks for it when it opens,
+                // and again only when the calibration figures /data returns have
+                // changed (a weigh-in, a meal, a setting), so the chart's last
+                // point never disagrees with the Body figure. At most every 5
+                // minutes otherwise.
+                let metabolism = null;
+                let metabolismSig = "";
+                let metabolismAt = 0;
+                let metabolismFailed = false;
+                const metPoints = () => metabolism || [];
+                function metSignature() {
+                    const c = data && data.calibration;
+                    return c
+                        ? [
+                              c.implied_kcal_per_day,
+                              c.resting_kcal,
+                              c.bmr_kcal,
+                              c.window_days,
+                              c.counted_days,
+                          ].join("|")
+                        : "";
+                }
+                function loadMetabolism() {
+                    if (!data || !token) return;
+                    const sig = metSignature();
+                    const fresh =
+                        metabolism &&
+                        sig === metabolismSig &&
+                        Date.now() - metabolismAt < 300000;
+                    if (fresh) return;
+                    metabolismSig = sig;
+                    metabolismAt = Date.now();
+                    fetch("/api/dashboard/metabolism", authHeader())
+                        .then((r) => (r.ok ? r.json() : null))
+                        .then(function (b) {
+                            if (!token) return;
+                            if (!b) throw new Error("metabolism");
+                            metabolism = b.metabolism || [];
+                            metabolismFailed = false;
+                            contentDirty.body = true;
+                            chartsDirty.body = true;
+                            if (active === "body") paint();
+                        })
+                        .catch(function () {
+                            metabolismAt = 0;
+                            if (metabolism === null) {
+                                metabolismFailed = true;
+                                contentDirty.body = true;
+                                if (active === "body") paint();
+                            }
+                        });
+                }
                 // The meals this user logs most, from their own history (the server
                 // looks back 90 days, not just the listed range). Each button
                 // repeats the NEWEST such meal by id, so the server copies its
@@ -15004,9 +15068,34 @@
                             paint();
                         });
                 }
+                // Per-tab extras: each is fetched only while a tab that shows it
+                // is on screen (and again when one switches to it), so Trends,
+                // Body, Weigh-ins and Advisor never pay for them.
+                const EXTRAS_STALE_MS = 60000;
+                let frequentAt = 0;
+                let recipesAt = 0;
+                function loadTabExtras(force) {
+                    const now = Date.now();
+                    const wantFrequent =
+                        active === "today" || active === "meals";
+                    if (
+                        wantFrequent &&
+                        (force || now - frequentAt > EXTRAS_STALE_MS)
+                    ) {
+                        frequentAt = now;
+                        loadFrequent();
+                    }
+                    if (
+                        active === "meals" &&
+                        (force || now - recipesAt > EXTRAS_STALE_MS)
+                    ) {
+                        recipesAt = now;
+                        loadRecipes();
+                    }
+                    if (active === "body") loadMetabolism();
+                }
                 function onData() {
-                    loadFrequent();
-                    loadRecipes();
+                    loadTabExtras(true);
                     if (active === "weighins" || wl) loadWeights();
                     if (active === "advisor" || adv) loadAdvisor();
                     markDirty();
