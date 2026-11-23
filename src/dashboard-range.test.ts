@@ -100,9 +100,6 @@ describe("payload with a moved range", () => {
                 expect(moved.daily[0]!.date).toBe(moved.startDate);
                 expect(moved.daily.at(-1)!.date).toBe(end);
                 expect(moved.daily.some((r) => r.in_progress)).toBe(false);
-                expect(moved.metabolism.map((p) => p.date)).toEqual(
-                    moved.daily.map((r) => r.date),
-                );
                 for (const m of moved.meals) {
                     const d = dateInTz(m.logged_at, tz);
                     expect(d >= moved.startDate && d <= end).toBe(true);
@@ -116,6 +113,9 @@ describe("payload with a moved range", () => {
                 for (const key of [
                     "calibration",
                     "calibrationDetail",
+                    // The Body tab's fixed last-90-days chart, whatever
+                    // range the Trends tab shows.
+                    "metabolism",
                     "goalPlan",
                     "last7",
                     "weightStats",
