@@ -3,6 +3,7 @@ import {
     buildDashboardDays,
     buildEstimateVsScale,
     buildLast7,
+    buildWeekBudget,
     buildWeightStats,
     granularityFor,
     groupDays,
@@ -232,6 +233,89 @@ describe("buildEstimateVsScale", () => {
         expect(uncounted.status).toBe("no_estimate");
         expect(uncounted.implied_kcal_per_day).toBeNull();
         expect(Object.keys(uncounted).sort()).toEqual(Object.keys(none).sort());
+    });
+});
+
+describe("buildWeekBudget", () => {
+    const row = (
+        date: string,
+        calories: number,
+        goal: number | null = 1800,
+        mealCount = 3,
+    ) => ({ date, calories, goal_calories: goal, mealCount });
+    // Today is Nov 23; the week is Nov 17..22 judged, Nov 23 still running.
+    const TODAY = "2026-11-23";
+
+    test("reads one big day against the days around it", () => {
+        const b = buildWeekBudget(
+            [
+                row("2026-11-17", 1700),
+                row("2026-11-18", 2000),
+                row("2026-11-19", 1600),
+                row("2026-11-20", 2300),
+                row("2026-11-21", 3400),
+                row("2026-11-22", 2000),
+                row("2026-11-23", 500),
+            ],
+            TODAY,
+        )!;
+        expect(b.days).toBe(6);
+        expect(b.net_kcal).toBe(-100 + 200 - 200 + 500 + 1600 + 200);
+        expect(b.over_kcal).toBe(200 + 500 + 1600 + 200);
+        expect(b.under_kcal).toBe(100 + 200);
+        expect(b.over_days).toBe(4);
+        expect(b.enough).toBe(true);
+        expect([
+            b.biggest_date,
+            b.biggest_eaten_kcal,
+            b.biggest_goal_kcal,
+            b.biggest_over_kcal,
+        ]).toEqual(["2026-11-21", 3400, 1800, 1600]);
+    });
+
+    test("does not judge today, unlogged days or days with no goal", () => {
+        const b = buildWeekBudget(
+            [
+                row("2026-11-17", 1700),
+                row("2026-11-18", 0, 1800, 0),
+                row("2026-11-19", 1900),
+                row("2026-11-20", 1800, null),
+                row("2026-11-21", 1600),
+                row("2026-11-23", 9000),
+            ],
+            TODAY,
+        )!;
+        expect(b.days).toBe(3);
+        expect(b.net_kcal).toBe(-100 + 100 - 200);
+        expect(b.biggest_date).toBe("2026-11-19");
+    });
+
+    test("ignores days outside the 7-day week", () => {
+        const b = buildWeekBudget(
+            [
+                row("2026-11-15", 5000),
+                row("2026-11-16", 5000),
+                row("2026-11-17", 1800),
+                row("2026-11-18", 1800),
+                row("2026-11-19", 1800),
+            ],
+            TODAY,
+        )!;
+        expect(b.from).toBe("2026-11-17");
+        expect(b.days).toBe(3);
+        expect(b.biggest_date).toBeNull();
+        expect(b.biggest_over_kcal).toBeNull();
+        expect(b.over_days).toBe(0);
+    });
+
+    test("is not enough with fewer than three judged days, but keeps its shape", () => {
+        const b = buildWeekBudget(
+            [row("2026-11-21", 1800), row("2026-11-22", 1800)],
+            TODAY,
+        );
+        expect(b.enough).toBe(false);
+        expect(b.days).toBe(2);
+        expect(b.biggest_date).toBeNull();
     });
 });
 

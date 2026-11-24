@@ -59,6 +59,8 @@ export const SCENARIOS = [
     "water-on",
     "onboarding",
     "sodium",
+    // Vault 205: a week of days under goal with one day far over it.
+    "weekend-spike",
 ] as const;
 export type ScenarioName = (typeof SCENARIOS)[number];
 
@@ -533,7 +535,8 @@ function generateScenario(name: ScenarioName, today: string): FixtureData {
         } else {
             // ~10% unlogged days — never inside over-goal's forced week, so
             // its "5 of the last 7 over" does not depend on the PRNG stream.
-            const forcedWeek = name === "over-goal" && k <= 6;
+            const forcedWeek =
+                (name === "over-goal" || name === "weekend-spike") && k <= 6;
             if (rnd() < 0.1 && !forcedWeek) {
                 history.push({ date, active, logged: false });
                 continue;
@@ -545,10 +548,18 @@ function generateScenario(name: ScenarioName, today: string): FixtureData {
             const over =
                 name === "over-goal" && k <= 6
                     ? k !== 3 && k !== 5
-                    : roll < 0.2;
-            const total = over
-                ? goal + 80 + rnd() * 420
-                : goal - 60 - rnd() * 480;
+                    : name === "weekend-spike" && k <= 6
+                      ? k === 2
+                      : roll < 0.2;
+            // weekend-spike: one day ~1,500 over, the others 100–300 under.
+            const total =
+                name === "weekend-spike" && k <= 6
+                    ? over
+                        ? goal + 1500
+                        : goal - 100 - rnd() * 200
+                    : over
+                      ? goal + 80 + rnd() * 420
+                      : goal - 60 - rnd() * 480;
             const count = 2 + Math.floor(rnd() * 3);
             // About one evening in eight is a treat (pizza, party, drinks
             // out) — on its own row, as the user logs it. Kept out of the
