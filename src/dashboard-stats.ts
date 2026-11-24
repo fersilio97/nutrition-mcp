@@ -30,9 +30,41 @@ import { resolveGoalMode } from "./goal-plan.js";
 import type { DailyBucket } from "./insights.js";
 import type { Meal, NutritionGoals } from "./supabase.js";
 
+/** The Trends "Calories by meal" chart's slots, in eating order. `other`
+ *  holds meals with no (or an unknown) meal_type, so the slots always add
+ *  up to the day's calories. */
+export const MEAL_SLOTS = [
+    "breakfast",
+    "lunch",
+    "dinner",
+    "snack",
+    "treat",
+    "other",
+] as const;
+export type MealSlot = (typeof MEAL_SLOTS)[number];
+export type MealKcal = Record<MealSlot, number>;
+
+/** kcal per meal slot for one day's meals. */
+export function mealKcalOf(
+    meals: { meal_type: string | null; calories: number | null }[],
+): MealKcal {
+    const out = Object.fromEntries(MEAL_SLOTS.map((k) => [k, 0])) as MealKcal;
+    for (const m of meals) {
+        const slot = (MEAL_SLOTS as readonly string[]).includes(
+            m.meal_type ?? "",
+        )
+            ? (m.meal_type as MealSlot)
+            : "other";
+        out[slot] += m.calories ?? 0;
+    }
+    return out;
+}
+
 export interface DashboardDay {
     date: string;
     calories: number;
+    /** The day's calories split by meal type (sums to `calories`). */
+    meal_kcal: MealKcal;
     protein_g: number;
     carbs_g: number;
     fat_g: number;
@@ -213,6 +245,7 @@ export function buildDashboardDays(
         return {
             date: b.date,
             calories: b.calories,
+            meal_kcal: mealKcalOf(b.meals),
             protein_g: b.protein_g,
             carbs_g: b.carbs_g,
             fat_g: b.fat_g,
@@ -511,16 +544,28 @@ export interface TrendBucket {
      *  month. Drawn dimmed and labelled "so far". */
     partial: boolean;
     calories: number | null;
+    /** Each meal slot averaged over the same logged days as `calories`;
+     *  all zeros when none is logged (`calories` null marks that), so the
+     *  payload keeps one shape. */
+    meal_kcal: MealKcal;
     protein_g: number | null;
     carbs_g: number | null;
     fat_g: number | null;
     fiber_g: number | null;
+    /** Averaged over the same logged days as the macros. */
+    sugar_g: number | null;
+    /** Averaged over the days with any water logged (drinking is logged
+     *  apart from meals, so a day without meals can still count). */
+    water_ml: number | null;
     /** Reference levels: averaged over the logged days; with none logged,
      *  over every day that has one, so the goal and burn lines stay
      *  continuous across an empty week. */
     goal_calories: number | null;
     bmr_kcal: number | null;
     active_kcal: number | null;
+    /** Digestion (thermic effect of food), averaged over the same days as
+     *  active, so baseline + active + digestion adds up to the burn. */
+    tef_kcal: number | null;
     burn_kcal: number | null;
     /** Average daily balance over the logged complete days that have one. */
     balance_kcal: number | null;
@@ -536,14 +581,18 @@ type GroupRow = Pick<
     DashboardDay,
     | "date"
     | "calories"
+    | "meal_kcal"
     | "protein_g"
     | "carbs_g"
     | "fat_g"
     | "fiber_g"
+    | "sugar_g"
+    | "waterMl"
     | "mealCount"
     | "goal_calories"
     | "bmr_kcal"
     | "active_kcal"
+    | "tef_kcal"
     | "burn_kcal"
     | "balance_g"
     | "balance_kcal"
@@ -587,10 +636,23 @@ function bucketOf(
         logged_days: counted.length,
         partial: rows.some((r) => r.in_progress),
         calories: avgOf(pick(counted, (r) => r.calories)),
+        meal_kcal: Object.fromEntries(
+            MEAL_SLOTS.map((k) => [
+                k,
+                avgOf(counted.map((r) => r.meal_kcal[k])) ?? 0,
+            ]),
+        ) as MealKcal,
         protein_g: avgOf(pick(counted, (r) => r.protein_g)),
         carbs_g: avgOf(pick(counted, (r) => r.carbs_g)),
         fat_g: avgOf(pick(counted, (r) => r.fat_g)),
         fiber_g: avgOf(pick(counted, (r) => r.fiber_g)),
+        sugar_g: avgOf(pick(counted, (r) => r.sugar_g)),
+        water_ml: avgOf(
+            pick(
+                rows.filter((r) => r.waterMl > 0),
+                (r) => r.waterMl,
+            ),
+        ),
         goal_calories: avgOf(pick(ref, (r) => r.goal_calories)),
         bmr_kcal: avgOf(pick(ref, (r) => r.bmr_kcal)),
         // Active averaged over the same days as burn (no record = 0), so
@@ -598,6 +660,7 @@ function bucketOf(
         active_kcal: avgOf(
             pick(ref.filter(withBurn), (r) => r.active_kcal ?? 0),
         ),
+        tef_kcal: avgOf(pick(ref.filter(withBurn), (r) => r.tef_kcal)),
         burn_kcal: avgOf(pick(ref, (r) => r.burn_kcal)),
         balance_kcal: avgOf(pick(balanced, (r) => r.balance_kcal)),
         balance_g: avgOf(pick(balanced, (r) => r.balance_g)),

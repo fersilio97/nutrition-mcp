@@ -303,13 +303,9 @@ Found by the nutritionist review on 2026-11-21 against commit a7d8721.
 1. **Body tab "Est. burn today" uses formula BMR**, not R
    (`buildWeightStats`, `src/dashboard-stats.ts`). The Body and Today tabs
    disagree when calibration is on. Breaks §8 and invariant 6.
-2. **The Resting metabolism chart ignores the user's `L` and `k`.**
-   `metabolismSeries` hard-codes `WINDOW_DAYS` and the default k
-   (`src/calibration.ts`), and `buildDashboardPayload` passes it no model.
-   Breaks §7 and invariant 6.
-3. **Body details accepts k from 3 to 9** (`src/dashboard.ts`). Make it
+2. **Body details accepts k from 3 to 9** (`src/dashboard.ts`). Make it
    5–7.7, as in the What-if lab.
-4. **Wording**:
+3. **Wording**:
    - the UI calls 7.7 "pure fat" (`public/dashboard.html`); it is adipose tissue
    - the `low_intake` flag says "your BMR" when the floor may be the
      calibrated R (`src/goal-plan.ts`)

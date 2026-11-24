@@ -6,6 +6,7 @@ import {
     buildWeightStats,
     granularityFor,
     groupDays,
+    mealKcalOf,
 } from "./dashboard-stats.js";
 import { energyWindow } from "./calibration.js";
 import { buildDailyBuckets } from "./insights.js";
@@ -338,20 +339,55 @@ describe("balance_kcal on each day", () => {
     });
 });
 
+describe("mealKcalOf", () => {
+    test("splits by meal type; unknown or missing types go to other", () => {
+        const k = mealKcalOf([
+            { meal_type: "breakfast", calories: 400 },
+            { meal_type: "lunch", calories: 650 },
+            { meal_type: "snack", calories: 150 },
+            { meal_type: "snack", calories: 100 },
+            { meal_type: null, calories: 90 },
+            { meal_type: "brunch", calories: 10 },
+            { meal_type: "dinner", calories: null },
+        ]);
+        expect(k).toEqual({
+            breakfast: 400,
+            lunch: 650,
+            dinner: 0,
+            snack: 250,
+            treat: 0,
+            other: 100,
+        });
+    });
+});
+
 describe("groupDays", () => {
     // A row per day from `start`, the last one today (in progress).
     // `eaten` null = an unlogged day.
     const row = (date: string, eaten: number | null, inProgress = false) => ({
         date,
         calories: eaten ?? 0,
+        // A logged day: a third at lunch, the rest at dinner.
+        meal_kcal: {
+            breakfast: 0,
+            lunch: eaten == null ? 0 : Math.round(eaten / 3),
+            dinner: eaten == null ? 0 : eaten - Math.round(eaten / 3),
+            snack: 0,
+            treat: 0,
+            other: 0,
+        },
         protein_g: eaten == null ? 0 : 100,
         carbs_g: eaten == null ? 0 : 200,
         fat_g: eaten == null ? 0 : 60,
         fiber_g: eaten == null ? 0 : 25,
+        sugar_g: eaten == null ? 0 : 40,
+        // Water is logged apart from meals: 1.5 L on every day.
+        waterMl: 1500,
         mealCount: eaten == null ? 0 : 3,
         goal_calories: 2000,
-        bmr_kcal: 1700,
+        bmr_kcal: 1500,
         active_kcal: 300,
+        tef_kcal: 200,
         burn_kcal: 2000,
         balance_g:
             eaten == null || inProgress
@@ -382,7 +418,11 @@ describe("groupDays", () => {
         );
         expect(b).toHaveLength(7);
         expect(b[1]!.calories).toBeNull(); // unlogged: no bar, not zero
+        expect(Object.values(b[1]!.meal_kcal).every((v) => v === 0)).toBe(true);
+        expect(b[0]!.meal_kcal!.lunch + b[0]!.meal_kcal!.dinner).toBe(1800);
         expect(b[1]!.goal_calories).toBe(2000); // the goal line stays
+        expect(b[1]!.sugar_g).toBeNull(); // like the macros
+        expect(b[1]!.water_ml).toBe(1500); // water counts without meals
         expect(b[6]!.calories).toBe(900);
         expect(b[6]!.partial).toBe(true);
         // Today's balance is never counted while it runs.
@@ -415,7 +455,11 @@ describe("groupDays", () => {
         expect(b[1]!.calories).toBeNull();
         expect(b[1]!.balance_g_sum).toBeNull();
         expect(b[1]!.burn_kcal).toBe(2000);
-        expect(b[1]!.bmr_kcal! + b[1]!.active_kcal!).toBe(b[1]!.burn_kcal!);
+        // The Burn chart stacks these three, so they must add up.
+        expect(b[1]!.tef_kcal).toBe(200);
+        expect(b[1]!.bmr_kcal! + b[1]!.tef_kcal! + b[1]!.active_kcal!).toBe(
+            b[1]!.burn_kcal!,
+        );
         // The current week: today's 500 kcal does not drag the average.
         expect(b[3]!.partial).toBe(true);
         expect(b[3]!.logged_days).toBe(6);

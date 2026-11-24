@@ -630,9 +630,15 @@ export function previewInputs(
     days: number,
     today: string,
     end?: string,
+    withMetabolism = true,
 ): DashboardInputs {
     const tz = fx.profile.timezone ?? "UTC";
-    const { fetchSpans, weightFetchSpans } = dashboardWindow(today, days, end);
+    const { fetchSpans, weightFetchSpans } = dashboardWindow(
+        today,
+        days,
+        end,
+        withMetabolism,
+    );
     // The same spans production fetches: a moved range plus today's own.
     const within = (d: string, spans: [string, string][]) =>
         spans.some(([f, t]) => d >= f && d <= t);
@@ -654,6 +660,7 @@ export function previewInputs(
         days,
         today,
         end,
+        skipMetabolism: !withMetabolism,
     };
 }
 
@@ -904,12 +911,19 @@ export function previewInputsFor(
     days: number,
     edits: PreviewEdits = {},
     rawEnd?: string,
+    withMetabolism = true,
 ): DashboardInputs {
     const tz = scenarioTz(name);
     const today = todayInTz(tz);
     const fx = scenarioWithEdits(name, today, edits);
     return {
-        ...previewInputs(fx, days, today, clampEnd(rawEnd, today)),
+        ...previewInputs(
+            fx,
+            days,
+            today,
+            clampEnd(rawEnd, today),
+            withMetabolism,
+        ),
         dayOverrides: edits.dayOverrides,
         activityConnected: name !== "onboarding" && name !== "empty",
     };
@@ -921,6 +935,9 @@ export function previewPayload(
     days: number,
     edits: PreviewEdits = {},
     end?: string,
+    withMetabolism = true,
 ) {
-    return buildDashboardPayload(previewInputsFor(name, days, edits, end));
+    return buildDashboardPayload(
+        previewInputsFor(name, days, edits, end, withMetabolism),
+    );
 }

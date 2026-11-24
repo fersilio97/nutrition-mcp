@@ -100,9 +100,6 @@ describe("payload with a moved range", () => {
                 expect(moved.daily[0]!.date).toBe(moved.startDate);
                 expect(moved.daily.at(-1)!.date).toBe(end);
                 expect(moved.daily.some((r) => r.in_progress)).toBe(false);
-                expect(moved.metabolism.map((p) => p.date)).toEqual(
-                    moved.daily.map((r) => r.date),
-                );
                 for (const m of moved.meals) {
                     const d = dateInTz(m.logged_at, tz);
                     expect(d >= moved.startDate && d <= end).toBe(true);
@@ -116,6 +113,9 @@ describe("payload with a moved range", () => {
                 for (const key of [
                     "calibration",
                     "calibrationDetail",
+                    // The Body tab's fixed last-90-days chart, whatever
+                    // range the Trends tab shows.
+                    "metabolism",
                     "goalPlan",
                     "last7",
                     "weightStats",
@@ -147,4 +147,45 @@ describe("payload with a moved range", () => {
         },
         HEAVY_MS,
     );
+});
+
+// The Resting metabolism series needs the widest window on the page (90 days
+// plus its lookback) and only the Body tab draws it, so /data leaves it out
+// and the Body tab asks for it separately. Leaving it out must change
+// nothing else.
+describe("metabolism fetched apart from the main payload", () => {
+    const span = (w: ReturnType<typeof dashboardWindow>) =>
+        (Date.parse(w.fetchSpans.at(-1)![1]) -
+            Date.parse(w.fetchSpans[0]![0])) /
+        864e5;
+    test("without it, a 7-day request fetches the range and lookback only", () => {
+        const withIt = dashboardWindow(TODAY, 7);
+        const without = dashboardWindow(TODAY, 7, undefined, false);
+        expect(span(without)).toBeLessThan(span(withIt));
+        // 7 days + the 56-day lookback before them, not 90 + 56.
+        expect(span(without)).toBeLessThanOrEqual(7 + 56 + 1);
+        expect(span(withIt)).toBeGreaterThanOrEqual(90 + 56 - 1);
+    });
+
+    for (const days of [7, 30, 365])
+        test(
+            `days=${days}: every other field is identical, the series is the same either way`,
+            () => {
+                const fx = buildScenario("full", TODAY);
+                const full = buildDashboardPayload(
+                    previewInputs(fx, days, TODAY),
+                );
+                const lean = buildDashboardPayload(
+                    previewInputs(fx, days, TODAY, undefined, false),
+                );
+                expect(lean.metabolism).toEqual([]);
+                const { metabolism: _a, ...fullRest } = full;
+                const { metabolism: _b, ...leanRest } = lean;
+                expect(leanRest).toEqual(fullRest);
+                // What the Body tab's own call returns: the 90-day series.
+                const own = buildDashboardPayload(previewInputs(fx, 90, TODAY));
+                expect(own.metabolism).toEqual(full.metabolism);
+            },
+            HEAVY_MS,
+        );
 });

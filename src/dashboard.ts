@@ -147,6 +147,11 @@ import { loadAdvisorReport } from "./advisor-data.js";
 // so the weight tracker always looks back at least this far, whatever range
 // the calorie charts show.
 const WEIGHT_WINDOW_DAYS = 90;
+/** The Resting metabolism chart's span, fixed whatever the Trends range:
+ *  each point is calibrated from the lookback before it, so a 7-day slice
+ *  of that line shows nothing, and 90 days lets the user judge whether
+ *  their baseline is drifting. Same span as the weight chart beside it. */
+export const METABOLISM_DAYS = 90;
 
 /** The inputs of today's Mifflin-St Jeor BMR, for the explanation panel:
  *  the weigh-in in effect today (the last one on or before it, else the
@@ -261,11 +266,13 @@ export function dashboardWindow(
     today: string,
     days: number,
     end?: string,
+    withMetabolism = true,
 ): {
     startDate: string;
     rangeEnd: string;
     endDate: string;
     weightStart: string;
+    metabolismStart: string;
     fetchStart: string;
     weightFetchStart: string;
     fetchSpans: Span[];
@@ -290,6 +297,16 @@ export function dashboardWindow(
     const homeStart = shiftLocalDate(today, -days);
     const last7Start = shiftLocalDate(today, -LAST7_DAYS);
     const trackerStart = shiftLocalDate(today, -(WEIGHT_WINDOW_DAYS - 1));
+    // The Resting metabolism chart is the last METABOLISM_DAYS ending today,
+    // whatever range is shown: each point is calibrated from the lookback
+    // before it, so its first day needs MAX_WINDOW_DAYS more behind it. Only
+    // the Body tab draws it, so every other request leaves the span out
+    // (`withMetabolism` false) and the page asks for it on its own.
+    const metabolismStart = shiftLocalDate(today, -(METABOLISM_DAYS - 1));
+    const metabolismSpan: Span = [
+        shiftLocalDate(metabolismStart, -MAX_WINDOW_DAYS),
+        today,
+    ];
     // Also the calibration days before the range's first day: every plotted
     // day of the metabolism chart is calibrated from the days before it, and
     // the latest of those windows is the Body tab's figure, so neither
@@ -300,6 +317,7 @@ export function dashboardWindow(
     ];
     const fetchSpans = mergeSpans([
         rangeSpan,
+        ...(withMetabolism ? [metabolismSpan] : []),
         [
             [
                 homeStart,
@@ -312,6 +330,7 @@ export function dashboardWindow(
     // Weigh-ins for the same calibration windows, and the weight tracker.
     const weightFetchSpans = mergeSpans([
         rangeSpan,
+        ...(withMetabolism ? [metabolismSpan] : []),
         [
             [
                 homeStart,
@@ -326,6 +345,7 @@ export function dashboardWindow(
         rangeEnd,
         endDate: today,
         weightStart: [homeStart, trackerStart].sort()[0]!,
+        metabolismStart,
         fetchStart: fetchSpans[0]![0],
         weightFetchStart: weightFetchSpans[0]![0],
         fetchSpans,
@@ -366,6 +386,10 @@ export interface DashboardInputs {
     /** Whether an activity-sync token exists (setup checklist). Optional:
      *  absent falls back to "any activity row in the window". */
     activityConnected?: boolean;
+    /** The rows do not reach back far enough for the Resting metabolism
+     *  series, so leave it empty (it has its own endpoint, fetched by the
+     *  Body tab). Never set where that series is read. */
+    skipMetabolism?: boolean;
 }
 
 /**
@@ -377,8 +401,22 @@ export async function dashboardPayload(
     userId: string,
     days: number,
     end?: string,
+    withMetabolism = true,
 ) {
-    return buildDashboardPayload(await loadDashboardInputs(userId, days, end));
+    return buildDashboardPayload(
+        await loadDashboardInputs(userId, days, end, withMetabolism),
+    );
+}
+
+/**
+ * The Resting metabolism series on its own: the last METABOLISM_DAYS ending
+ * today, each point calibrated from the user's lookback before it. It needs
+ * the widest window of anything on the page, so it is fetched when the Body
+ * tab opens instead of widening every other tab's request.
+ */
+export async function metabolismPayload(userId: string) {
+    const p = await dashboardPayload(userId, METABOLISM_DAYS);
+    return { metabolism: p.metabolism };
 }
 
 /** Fetch everything one dashboard request needs (see dashboardWindow). */
@@ -386,6 +424,7 @@ export async function loadDashboardInputs(
     userId: string,
     days: number,
     rawEnd?: string,
+    withMetabolism = true,
 ): Promise<DashboardInputs> {
     const profile = await getProfile(userId);
     const tz = timezoneFromProfile(profile) ?? "UTC";
@@ -395,6 +434,7 @@ export async function loadDashboardInputs(
         today,
         days,
         end,
+        withMetabolism,
     );
 
     const [meals, water, weight, goals, latestWeight, activityRows] =
@@ -439,6 +479,7 @@ export async function loadDashboardInputs(
         today,
         end,
         activityConnected: sync != null,
+        skipMetabolism: !withMetabolism,
     };
 }
 
@@ -465,8 +506,14 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
     const model = inputs.model ?? modelFromProfile(profile);
     const tz = timezoneFromProfile(profile) ?? "UTC";
     const weightUnit = preferredWeightUnitFromProfile(profile) ?? "kg";
-    const { startDate, rangeEnd, endDate, weightStart, fetchStart } =
-        dashboardWindow(today, days, end);
+    const {
+        startDate,
+        rangeEnd,
+        endDate,
+        weightStart,
+        metabolismStart,
+        fetchStart,
+    } = dashboardWindow(today, days, end);
     const inRangeDay = (d: string) => d >= startDate && d <= rangeEnd;
 
     // The same bucketing the MCP trend tools use, so a figure here and a
@@ -533,11 +580,25 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         profile?.resting_basis === "calibrated" ? "calibrated" : "formula",
         model,
     );
-    const metabolism = metabolismSeries(
-        energyDays,
-        allWeighIns,
-        allRows.filter((r) => inRangeDay(r.date)).map((r) => r.date),
-    );
+    // Starts at the first day calibration was possible: a run of empty
+    // leading points would only squash the line into the chart's right end.
+    // Gaps after that stay, so a lapse in logging still shows. With no
+    // calibrated day at all, today's point alone stays (formula BMR only),
+    // so the payload keeps its shape and the card shows its empty state.
+    const metabolismAll = inputs.skipMetabolism
+        ? []
+        : metabolismSeries(
+              energyDays,
+              allWeighIns,
+              allRows
+                  .filter((r) => r.date >= metabolismStart)
+                  .map((r) => r.date),
+              model,
+          );
+    const firstCalibrated = metabolismAll.findIndex((p) => p.data_kcal != null);
+    const metabolism = inputs.skipMetabolism
+        ? []
+        : metabolismAll.slice(firstCalibrated < 0 ? -1 : firstCalibrated);
     if (calibration.applied && calibration.implied_kcal_per_day != null) {
         for (const row of allRows) {
             if (row.bmr_kcal == null) continue;
@@ -729,13 +790,13 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         recentDays: allRows.filter(
             (r) => r.date >= shiftLocalDate(endDate, -LAST7_DAYS),
         ),
-        // The calibration window (28 days ending yesterday) as the
+        // The calibration window (the lookback ending yesterday) as the
         // Estimate-vs-reality card shows it: the same days, trend and offset
         // as `calibration`, so the card and the Body tab cannot disagree.
         estimateVsScale: buildEstimateVsScale(calibration.window),
-        // One point per day of the range: the formula BMR next to the
-        // baseline the 28 days before it imply. The last point is exactly
-        // the Body tab's calibrated figure.
+        // One point per day of the last METABOLISM_DAYS, whatever the range:
+        // the formula BMR next to the baseline the lookback before it
+        // implies. The last point is exactly the Body tab's calibrated figure.
         metabolism,
         // Today's two 7-day figures, from the widened rows: fixed to the
         // last week whatever the selected range.
@@ -2276,8 +2337,17 @@ export function createDashboardRouter(): Hono {
                 userId,
                 clampDays(c.req.query("days")),
                 c.req.query("end"),
+                // `metabolism` comes back empty; the Body tab has its own call.
+                false,
             ),
         );
+    });
+
+    // The Resting metabolism series, for the Body tab only: it needs a much
+    // wider window than anything else, so it is not part of /data.
+    dash.get("/api/dashboard/metabolism", authenticateBearer, async (c) => {
+        const userId = c.get("userId") as string;
+        return c.json(await metabolismPayload(userId));
     });
 
     // The what-if lab: the calibration under other model parameters, next
