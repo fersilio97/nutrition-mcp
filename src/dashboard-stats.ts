@@ -509,6 +509,100 @@ export function buildLast7(
     };
 }
 
+// ---------- Week budget ----------
+
+export interface WeekBudget {
+    from: string;
+    /** Today; today's own partial day is never judged. */
+    to: string;
+    /** Complete logged days with a goal in [from, to). */
+    days: number;
+    /** days >= MIN_WEEK_BUDGET_DAYS: below that the figures are noise and
+     *  the page shows nothing. Always present, so the payload keeps one
+     *  shape. */
+    enough: boolean;
+    /** Σ (eaten − goal) over those days: + is over the week's budget. */
+    net_kcal: number;
+    /** Σ (goal − eaten) over the days under goal: what they left unused. */
+    under_kcal: number;
+    /** Σ (eaten − goal) over the days over goal. */
+    over_kcal: number;
+    over_days: number;
+    /** The day furthest over its goal, flattened (a nested nullable object
+     *  would change the payload's key set): all null when none was over. */
+    biggest_date: string | null;
+    biggest_eaten_kcal: number | null;
+    biggest_goal_kcal: number | null;
+    biggest_over_kcal: number | null;
+}
+
+/** Fewer judged days than this and a "week" verdict would be noise. */
+export const MIN_WEEK_BUDGET_DAYS = 3;
+
+/**
+ * Read-side only: the last week's calorie budget (the sum of each day's
+ * effective goal) against what was eaten, so one big day is read against the
+ * days around it instead of alone. It never touches a goal. Days with no meals
+ * are unknown, not zero, and today is still running, so neither is judged;
+ * a day with no goal cannot be over or under it.
+ */
+export function buildWeekBudget(
+    rows: Pick<
+        DashboardDay,
+        "date" | "calories" | "mealCount" | "goal_calories"
+    >[],
+    today: string,
+): WeekBudget {
+    const from = shiftDay(today, -(LAST7_DAYS - 1));
+    const judged = rows.filter(
+        (r) =>
+            r.date >= from &&
+            r.date < today &&
+            r.mealCount > 0 &&
+            r.goal_calories != null,
+    );
+    let net = 0,
+        under = 0,
+        over = 0,
+        overDays = 0;
+    let biggest: {
+        date: string;
+        eaten: number;
+        goal: number;
+        over: number;
+    } | null = null;
+    for (const r of judged) {
+        const goal = r.goal_calories!;
+        const diff = Math.round(r.calories - goal);
+        net += diff;
+        if (diff > 0) {
+            over += diff;
+            overDays++;
+            if (!biggest || diff > biggest.over)
+                biggest = {
+                    date: r.date,
+                    eaten: Math.round(r.calories),
+                    goal: Math.round(goal),
+                    over: diff,
+                };
+        } else under -= diff;
+    }
+    return {
+        from,
+        to: today,
+        days: judged.length,
+        enough: judged.length >= MIN_WEEK_BUDGET_DAYS,
+        net_kcal: net,
+        under_kcal: under,
+        over_kcal: over,
+        over_days: overDays,
+        biggest_date: biggest?.date ?? null,
+        biggest_eaten_kcal: biggest?.eaten ?? null,
+        biggest_goal_kcal: biggest?.goal ?? null,
+        biggest_over_kcal: biggest?.over ?? null,
+    };
+}
+
 function shiftDay(date: string, n: number): string {
     const d = new Date(`${date}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() + n);
