@@ -199,4 +199,33 @@ describe("meal items", () => {
         });
         if (checked.ok) expect(checked.value[0]).not.toHaveProperty("unknown");
     });
+    test("scaling keeps a small nutrient above 0 instead of storing a fake zero", () => {
+        const scaled = scaleItem(
+            item("oil", { amount: 100, fat_g: 4, calories: 36 }),
+            1,
+        );
+        expect(scaled.fat_g).toBe(0.04);
+        expect(scaled.calories).toBe(0.4);
+    });
+    test("a recipe ingredient scales by servings/recipe.servings, not by its rounded amount", () => {
+        const recipe = {
+            name: "Stew",
+            servings: 6,
+            ingredient_items: [
+                item("Cumin", { amount: 0.5, unit: "tsp", calories: 100 }),
+            ],
+            calories: null,
+            protein_g: null,
+            carbs_g: null,
+            fat_g: null,
+            fiber_g: null,
+            sugar_g: null,
+            sodium_mg: null,
+            caffeine_mg: null,
+        };
+        const [cumin] = itemsForRecipe(recipe, 1);
+        // 100 kcal * (1/6) = 16.7, not 100 * (0.08 / 0.5) = 16
+        expect(cumin!.calories).toBe(16.7);
+        expect(cumin!.amount).toBe(0.08);
+    });
 });

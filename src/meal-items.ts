@@ -153,18 +153,32 @@ export function totalsFromItems(items: MealItem[]): Totals {
     };
 }
 
-export function scaleItem(item: MealItem, newAmount: number): MealItem {
-    const factor = newAmount / item.amount;
-    const result = { ...item, amount: newAmount };
+/**
+ * An item's nutrients multiplied by `factor` (null stays null). Items are
+ * stored in jsonb, so they keep one decimal of kcal and two of everything
+ * else: rounding harder turned a 0.04 g ingredient into a stored 0 (a fake
+ * measurement) and compounded across repeated edits. The page rounds for
+ * display, and meal totals are rounded when summed (totalsFromItems).
+ */
+export function scaleItemBy(
+    item: MealItem,
+    factor: number,
+    amount: number,
+): MealItem {
+    const result = { ...item, amount };
     for (const key of numeric) {
         const n = item[key];
         if (n != null)
             result[key] =
                 key === "calories"
-                    ? Math.round(n * factor)
-                    : Math.round(n * factor * 10) / 10;
+                    ? Math.round(n * factor * 10) / 10
+                    : Math.round(n * factor * 100) / 100;
     }
     return result;
+}
+
+export function scaleItem(item: MealItem, newAmount: number): MealItem {
+    return scaleItemBy(item, newAmount / item.amount, newAmount);
 }
 
 export function itemsForRecipe(
@@ -188,7 +202,9 @@ export function itemsForRecipe(
     if (recipe.ingredient_items?.length) {
         const factor = servings / recipe.servings;
         return recipe.ingredient_items.map((item) =>
-            scaleItem(item, round(item.amount * factor, 2)),
+            // The factor comes from the servings, not from the rounded
+            // amount: 0.5 tsp / 6 stored as 0.08 would skew it by ~4%.
+            scaleItemBy(item, factor, round(item.amount * factor, 2)),
         );
     }
     const scaled = (v: number | null, places: number) =>
