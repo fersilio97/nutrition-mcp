@@ -57,13 +57,20 @@ import {
     type WeightEntry,
 } from "./supabase.js";
 import { buildDailyBuckets } from "./insights.js";
-import { describeItems, removeItem, scaleItem } from "./meal-items.js";
+import {
+    describeItems,
+    removeItem,
+    scaleItem,
+    totalsFromItems,
+    checkMealItems,
+    itemsForRecipe,
+    type MealItem,
+} from "./meal-items.js";
 import { setupChecklist } from "./onboarding.js";
 import {
     checkLoggedServings,
     checkRecipe,
     recipeMealDescription,
-    scaleRecipe,
     type Recipe,
 } from "./recipes.js";
 import {
@@ -1200,6 +1207,7 @@ export function mealViewOf(m: Meal) {
         sodium_mg: m.sodium_mg ?? null,
         source: m.source ?? null,
         items: m.items ?? null,
+        items_label: m.items_label ?? null,
     };
 }
 
@@ -1221,6 +1229,106 @@ export function checkItemAmount(body: unknown): Checked<number> {
               ok: false,
               error: "amount must be greater than 0 and at most 100000.",
           };
+}
+
+export function checkScaleMeal(
+    body: unknown,
+): Checked<{ name?: string; eaten: number; of: number; unit: string }> {
+    if (!body || typeof body !== "object" || Array.isArray(body))
+        return { ok: false, error: "Request body must be an object." };
+    const b = body as Record<string, unknown>;
+    if (
+        b.name !== undefined &&
+        (typeof b.name !== "string" || b.name.length > 200)
+    )
+        return { ok: false, error: "name must be at most 200 characters." };
+    if (
+        typeof b.unit !== "string" ||
+        !b.unit.trim() ||
+        b.unit.trim().length > 20
+    )
+        return { ok: false, error: "unit must be 1 to 20 characters." };
+    const eaten = Number(b.eaten),
+        of = Number(b.of);
+    if (
+        !Number.isFinite(eaten) ||
+        !Number.isFinite(of) ||
+        eaten <= 0 ||
+        of <= 0 ||
+        eaten > of * 20
+    )
+        return {
+            ok: false,
+            error: "eaten and of must be positive, with eaten at most 20 times of.",
+        };
+    for (const k of Object.keys(b))
+        if (!["name", "eaten", "of", "unit"].includes(k))
+            return { ok: false, error: `Unknown field: ${k}.` };
+    return {
+        ok: true,
+        value: {
+            ...(typeof b.name === "string" ? { name: b.name.trim() } : {}),
+            eaten,
+            of,
+            unit: b.unit.trim(),
+        },
+    };
+}
+
+export function scaleMealToItem(
+    meal: Meal,
+    input: { name?: string; eaten: number; of: number; unit: string },
+): MealItem {
+    const name =
+        input.name || meal.description.replace(/\s*\([^()]*\)\s*$/, "").trim();
+    const factor = input.eaten / input.of;
+    const scaled = (v: number | null, integer = false) =>
+        v == null
+            ? null
+            : integer
+              ? Math.round(v * factor)
+              : Math.round(v * factor * 10) / 10;
+    const source = ["label", "chain", "barcode", "estimate", "recipe"].includes(
+        meal.source ?? "",
+    )
+        ? (meal.source as MealItem["source"])
+        : "estimate";
+    return {
+        name: name || meal.description,
+        amount: input.eaten,
+        unit: input.unit,
+        calories: scaled(meal.calories, true) ?? 0,
+        protein_g: scaled(meal.protein_g),
+        carbs_g: scaled(meal.carbs_g),
+        fat_g: scaled(meal.fat_g),
+        fiber_g: scaled(meal.fiber_g),
+        sugar_g: scaled(meal.sugar_g),
+        alcohol_g: scaled(meal.alcohol_g),
+        caffeine_mg: scaled(meal.caffeine_mg),
+        sodium_mg: scaled(meal.sodium_mg),
+        source,
+    };
+}
+
+export async function scaleMealFromDashboard(
+    userId: string,
+    id: string,
+    body: unknown,
+): Promise<Reply> {
+    const checked = checkScaleMeal(body);
+    if (!checked.ok) return invalid(checked.error);
+    if (!UUID_RE.test(id)) return { status: 404, json: { error: "not_found" } };
+    const meal = await getMealById(userId, id);
+    if (!meal) return { status: 404, json: { error: "not_found" } };
+    if (meal.items)
+        return invalid("This meal already has foods; edit them instead.");
+    const item = scaleMealToItem(meal, checked.value);
+    const saved = await updateMeal(userId, id, {
+        items: [item],
+        items_label: null,
+        description: describeItems([item]),
+    });
+    return { status: 200, json: { ok: true, meal: mealViewOf(saved) } };
 }
 const invalid = (error_description: string): Reply => ({
     status: 400,
@@ -1595,7 +1703,7 @@ export async function patchMealItemFromDashboard(
     );
     const saved = await updateMeal(userId, id, {
         items,
-        description: describeItems(items),
+        description: describeItems(items, meal.items_label),
     });
     return { status: 200, json: { ok: true, meal: mealViewOf(saved) } };
 }
@@ -1620,7 +1728,7 @@ export async function deleteMealItemFromDashboard(
     }
     const saved = await updateMeal(userId, id, {
         items,
-        description: describeItems(items),
+        description: describeItems(items, meal.items_label),
     });
     return { status: 200, json: { ok: true, meal: mealViewOf(saved) } };
 }
@@ -2001,6 +2109,7 @@ export function recipeChip(r: Recipe) {
         protein_g: r.protein_g,
         carbs_g: r.carbs_g,
         fat_g: r.fat_g,
+        ingredient_items: r.ingredient_items,
     };
 }
 
@@ -2057,17 +2166,21 @@ export function recipeMealInput(
     opts: { servings: number; key?: string; meal_type?: string },
     localHour: number,
 ): MealInput {
-    const scaled = scaleRecipe(recipe, opts.servings);
-    const nutrients = Object.fromEntries(
-        Object.entries(scaled).filter(([, v]) => v != null),
-    );
+    const items = itemsForRecipe(recipe, opts.servings);
+    const items_label =
+        recipe.ingredient_items && recipe.ingredient_items.length >= 2
+            ? recipe.name
+            : null;
     return {
-        description: recipeMealDescription(recipe.name, opts.servings),
+        description: recipe.ingredient_items
+            ? describeItems(items, items_label)
+            : recipeMealDescription(recipe.name, opts.servings),
         meal_type:
             (opts.meal_type as MealInput["meal_type"] | undefined) ??
             mealTypeForHour(localHour),
         source: "recipe" as const,
-        ...nutrients,
+        items,
+        items_label,
         ...(opts.key ? { idempotency_key: opts.key } : {}),
     };
 }
@@ -2116,6 +2229,7 @@ export function recipeFromMeal(
                 ? name
                 : fallback.slice(0, 120) || m.description.slice(0, 120),
         servings: 1,
+        ...(m.items?.length ? { ingredient_items: m.items } : {}),
         calories: m.calories,
         protein_g: m.protein_g,
         carbs_g: m.carbs_g,
@@ -2472,6 +2586,21 @@ export function createDashboardRouter(): Hono {
         );
         return c.json(res.json, res.status);
     });
+
+    dash.post(
+        "/api/dashboard/meals/:id/scale",
+        authenticateBearer,
+        async (c) => {
+            const body = await readObject(c);
+            if (!body) return c.json({ error: "invalid_request" }, 400);
+            const res = await scaleMealFromDashboard(
+                c.get("userId") as string,
+                c.req.param("id") ?? "",
+                body,
+            );
+            return c.json(res.json, res.status);
+        },
+    );
 
     dash.patch(
         "/api/dashboard/meals/:id/items/:index",

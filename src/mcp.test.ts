@@ -107,6 +107,7 @@ function meal(over: Partial<Meal> = {}): Meal {
         notes: null,
         idempotency_key: null,
         items: null,
+        items_label: null,
         ...over,
     };
 }
@@ -2171,6 +2172,7 @@ describe("missingNutrientNote", () => {
         notes: null,
         idempotency_key: null,
         items: null,
+        items_label: null,
     } satisfies Meal;
 
     test("names both missing fields and the meal id to repair", () => {
@@ -5248,7 +5250,26 @@ describe("dashboard API", () => {
         stage();
         // Populate every array so element shapes are compared too.
         const now = new Date().toISOString();
-        db.meals = [meal({ logged_at: now })];
+        db.meals = [
+            meal({
+                logged_at: now,
+                items_label: "Desayuno dieta",
+                items: [
+                    {
+                        name: "Huevos",
+                        amount: 3,
+                        unit: "piece",
+                        calories: 216,
+                        protein_g: 18.9,
+                        carbs_g: 1.1,
+                        fat_g: 14.4,
+                        fiber_g: 0,
+                        sugar_g: 1.1,
+                        source: "estimate",
+                    },
+                ],
+            }),
+        ];
         db.water = [
             {
                 id: "h0",
@@ -5791,8 +5812,16 @@ describe("manage_recipes", () => {
             expect(logged).toContain("Meal logged from recipe");
             const row = db.inserted.at(-1)!;
             expect(row.description).toBe("Lentil stew (1.5 servings)");
-            expect(row.calories).toBe(675);
-            expect(row.protein_g).toBe(41.3);
+            expect(row.items).toMatchObject([
+                {
+                    name: "Lentil stew",
+                    amount: 1.5,
+                    unit: "serving",
+                    calories: 675,
+                    protein_g: 41.3,
+                    source: "recipe",
+                },
+            ]);
             expect(row.source).toBe("recipe");
             expect(row.meal_type).toBe("dinner");
             // unknown nutrients are omitted, never written as 0
@@ -5818,6 +5847,7 @@ describe("manage_recipes", () => {
                 name: "Overnight oats with peanut butter",
                 servings: 1,
                 ingredients: [],
+                ingredient_items: null,
                 calories: 500,
                 protein_g: null,
                 carbs_g: null,

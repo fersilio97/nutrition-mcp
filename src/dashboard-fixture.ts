@@ -43,7 +43,7 @@ import type {
     WaterEntry,
     WeightEntry,
 } from "./supabase.js";
-import { totalsFromItems, type MealItem } from "./meal-items.js";
+import { describeItems, totalsFromItems, type MealItem } from "./meal-items.js";
 
 export const SCENARIOS = [
     "full",
@@ -191,6 +191,7 @@ function makeMeal(
         notes: null,
         idempotency_key: null,
         items: null,
+        items_label: null,
     };
 }
 
@@ -219,6 +220,56 @@ export const PREVIEW_RECIPES: Recipe[] = [
         name: "Overnight oats",
         servings: 1,
         ingredients: ["rolled oats 50 g", "milk 200 ml", "raspberries 10"],
+        ingredient_items: [
+            {
+                name: "Oats",
+                amount: 50,
+                unit: "g",
+                calories: 190,
+                protein_g: 6.5,
+                carbs_g: 33.8,
+                fat_g: 3.3,
+                fiber_g: 5.1,
+                sugar_g: 0.5,
+                source: "estimate",
+            },
+            {
+                name: "Milk",
+                amount: 200,
+                unit: "ml",
+                calories: 122,
+                protein_g: 6.4,
+                carbs_g: 9.6,
+                fat_g: 6.4,
+                fiber_g: 0,
+                sugar_g: 9.6,
+                source: "estimate",
+            },
+            {
+                name: "Chia",
+                amount: 12,
+                unit: "g",
+                calories: 58,
+                protein_g: 2,
+                carbs_g: 5,
+                fat_g: 1,
+                fiber_g: 1.1,
+                sugar_g: 0,
+                source: "estimate",
+            },
+            {
+                name: "Berries",
+                amount: 100,
+                unit: "g",
+                calories: 50,
+                protein_g: 3.1,
+                carbs_g: 9.6,
+                fat_g: 0.3,
+                fiber_g: 1.8,
+                sugar_g: 3.9,
+                source: "estimate",
+            },
+        ],
         calories: 420,
         protein_g: 18,
         carbs_g: 58,
@@ -236,6 +287,7 @@ export const PREVIEW_RECIPES: Recipe[] = [
         name: "Lentil stew",
         servings: 4,
         ingredients: ["lentils 300 g", "carrots 2", "chorizo 80 g"],
+        ingredient_items: null,
         calories: 450,
         protein_g: 27.5,
         carbs_g: 52,
@@ -840,6 +892,124 @@ export function scenarioWithEdits(
             items,
             description: "SunChips (75 g) + Modelo Oro (1 lata, 355 ml)",
         });
+    }
+    if (todayMeals.length) {
+        const recipeItems: MealItem[] = [
+            {
+                name: "Huevos",
+                amount: 3,
+                unit: "piece",
+                calories: 216,
+                protein_g: 18.9,
+                carbs_g: 1.1,
+                fat_g: 14.4,
+                fiber_g: 0,
+                sugar_g: 1.1,
+                source: "estimate",
+            },
+            {
+                name: "Mantequilla",
+                amount: 5,
+                unit: "g",
+                calories: 36,
+                protein_g: 0,
+                carbs_g: 0,
+                fat_g: 4.1,
+                fiber_g: 0,
+                sugar_g: 0,
+                source: "estimate",
+            },
+            {
+                name: "Zanahorias baby",
+                amount: 150,
+                unit: "g",
+                calories: 53,
+                protein_g: 1.4,
+                carbs_g: 12.6,
+                fat_g: 0.3,
+                fiber_g: 4.2,
+                sugar_g: 7.1,
+                source: "estimate",
+            },
+        ];
+        const breakfastRecipe = makeMeal(
+            `m-${today}-recipe-breakfast`,
+            today,
+            6,
+            13,
+            "breakfast",
+            305,
+            () => 0.5,
+            tz,
+        );
+        Object.assign(breakfastRecipe, totalsFromItems(recipeItems), {
+            items: recipeItems,
+            items_label: "Desayuno dieta",
+            description: describeItems(recipeItems, "Desayuno dieta"),
+            source: "recipe",
+        });
+        const breadItems: MealItem[] = [
+            {
+                name: "Pan de masa madre",
+                amount: 85,
+                unit: "g",
+                calories: 230,
+                protein_g: 7.6,
+                carbs_g: 44,
+                fat_g: 1.4,
+                fiber_g: 2.1,
+                sugar_g: 1.2,
+                sodium_mg: 430,
+                source: "estimate",
+            },
+        ];
+        const bread = makeMeal(
+            `m-${today}-sourdough`,
+            today,
+            11,
+            43,
+            "lunch",
+            230,
+            () => 0.5,
+            tz,
+        );
+        Object.assign(bread, totalsFromItems(breadItems), {
+            items: breadItems,
+            description: describeItems(breadItems),
+        });
+        const stewItems: MealItem[] = [
+            {
+                name: "Guiso de lentejas",
+                amount: 1,
+                unit: "serving",
+                calories: 420,
+                protein_g: 24,
+                carbs_g: 62,
+                fat_g: 8,
+                fiber_g: 16,
+                sugar_g: 6,
+                source: "recipe",
+            },
+        ];
+        const dinner = makeMeal(
+            `m-${today}-lentil-dinner`,
+            today,
+            19,
+            30,
+            "dinner",
+            420,
+            () => 0.5,
+            tz,
+        );
+        Object.assign(dinner, totalsFromItems(stewItems), {
+            items: stewItems,
+            description: describeItems(stewItems),
+        });
+        // The scenario object is cached and this runs on every API call, so
+        // add each seeded meal only once.
+        for (const seeded of [breakfastRecipe, bread, dinner])
+            if (!fx.meals.some((m) => m.id === seeded.id))
+                fx.meals.push(seeded);
     }
     if (edits.body) fx.profile = { ...fx.profile, ...edits.body };
     if (edits.restingBasis)

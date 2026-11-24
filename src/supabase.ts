@@ -137,6 +137,7 @@ export interface Meal {
     notes: string | null;
     idempotency_key: string | null;
     items: MealItem[] | null;
+    items_label: string | null;
 }
 
 export interface MealInput {
@@ -159,6 +160,7 @@ export interface MealInput {
     notes?: string;
     idempotency_key?: string;
     items?: MealItem[] | null;
+    items_label?: string | null;
 }
 
 export interface MealInsertResult {
@@ -311,6 +313,7 @@ export async function insertMeal(
                 meal.notes != null ? decodeEscapeSequences(meal.notes) : null,
             idempotency_key: idempotencyKey,
             items: meal.items ?? null,
+            items_label: meal.items_label ?? null,
         })
         .select()
         .single();
@@ -618,21 +621,46 @@ export async function updateMeal(
     if (fields.meal_type !== undefined) update.meal_type = fields.meal_type;
     if (fields.items !== undefined) {
         update.items = fields.items;
+        if (fields.items_label !== undefined)
+            update.items_label = fields.items_label;
+        else if (fields.items === null) update.items_label = null;
         if (fields.items !== null)
             Object.assign(update, totalsFromItems(fields.items));
     }
-    // Integer column — see toStoredInteger.
-    if (fields.calories != null)
-        update.calories = toStoredInteger(fields.calories);
-    if (fields.protein_g !== undefined) update.protein_g = fields.protein_g;
-    if (fields.carbs_g !== undefined) update.carbs_g = fields.carbs_g;
-    if (fields.fat_g !== undefined) update.fat_g = fields.fat_g;
-    if (fields.fiber_g !== undefined) update.fiber_g = fields.fiber_g;
-    if (fields.sugar_g !== undefined) update.sugar_g = fields.sugar_g;
-    if (fields.alcohol_g !== undefined) update.alcohol_g = fields.alcohol_g;
-    if (fields.caffeine_mg !== undefined)
-        update.caffeine_mg = fields.caffeine_mg;
-    if (fields.sodium_mg !== undefined) update.sodium_mg = fields.sodium_mg;
+    const typedNutrients = [
+        "calories",
+        "protein_g",
+        "carbs_g",
+        "fat_g",
+        "fiber_g",
+        "sugar_g",
+        "alcohol_g",
+        "caffeine_mg",
+        "sodium_mg",
+    ];
+    if (
+        fields.items === undefined &&
+        existing.items &&
+        typedNutrients.some((k) => fields[k as keyof MealInput] !== undefined)
+    ) {
+        update.items = null;
+        update.items_label = null;
+    }
+    // Item totals always win when a replacement item list is supplied.
+    if (fields.items == null) {
+        // Integer column — see toStoredInteger.
+        if (fields.calories != null)
+            update.calories = toStoredInteger(fields.calories);
+        if (fields.protein_g !== undefined) update.protein_g = fields.protein_g;
+        if (fields.carbs_g !== undefined) update.carbs_g = fields.carbs_g;
+        if (fields.fat_g !== undefined) update.fat_g = fields.fat_g;
+        if (fields.fiber_g !== undefined) update.fiber_g = fields.fiber_g;
+        if (fields.sugar_g !== undefined) update.sugar_g = fields.sugar_g;
+        if (fields.alcohol_g !== undefined) update.alcohol_g = fields.alcohol_g;
+        if (fields.caffeine_mg !== undefined)
+            update.caffeine_mg = fields.caffeine_mg;
+        if (fields.sodium_mg !== undefined) update.sodium_mg = fields.sodium_mg;
+    }
     if (fields.source !== undefined) update.source = fields.source;
     if (fields.logged_at !== undefined) update.logged_at = fields.logged_at;
     if (fields.notes !== undefined)
@@ -2256,6 +2284,9 @@ function recipeOf(r: Record<string, unknown>): Recipe {
         sugar_g: n(r.sugar_g),
         sodium_mg: n(r.sodium_mg),
         caffeine_mg: n(r.caffeine_mg),
+        ingredient_items: Array.isArray(r.ingredient_items)
+            ? (r.ingredient_items as MealItem[])
+            : null,
         created_at: String(r.created_at ?? ""),
         updated_at: String(r.updated_at ?? ""),
     };

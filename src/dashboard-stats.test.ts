@@ -54,6 +54,7 @@ const meal = (logged_at: string, calories: number): Meal =>
         created_at: logged_at,
         idempotency_key: null,
         items: null,
+        items_label: null,
     }) as Meal;
 
 const body = {
