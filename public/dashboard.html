@@ -2412,8 +2412,8 @@
             }
             .m-wtrend {
                 fill: none;
-                stroke: var(--ink);
-                stroke-width: 2.5;
+                stroke: var(--ink-2);
+                stroke-width: 2;
                 stroke-linejoin: round;
                 stroke-linecap: round;
             }
@@ -5780,6 +5780,14 @@
                         }
                         if (key === "weight-trend") {
                             weightTrendOn = value === "on";
+                            const wn =
+                                document.querySelector(".w-chart p.note");
+                            if (wn)
+                                wn.innerHTML =
+                                    wn.innerHTML.replace(
+                                        /\s*<b class="trend-pace">.*?<\/b>/,
+                                        "",
+                                    ) + trendPaceHtml();
                             store("nutrition-dash-weight-trend", value);
                             document
                                 .querySelectorAll(
@@ -13104,6 +13112,29 @@
                             t.date >= data.startDate &&
                             t.date <= rEnd(),
                     );
+                // Pace of the trend line in view: first to last trend point,
+                // per week. Only shown with the trend on and 3+ days apart.
+                const trendPaceHtml = () => {
+                    const t = trendPts();
+                    if (!weightTrendOn || t.length < 2) return "";
+                    const a = t[0],
+                        b = t[t.length - 1];
+                    const days =
+                        (parseDay(b.date).getTime() -
+                            parseDay(a.date).getTime()) /
+                        86400000;
+                    if (days < 3) return "";
+                    const perWeek =
+                        toUnit(b.trend_g - a.trend_g, data.weightUnit) *
+                        (7 / days);
+                    return (
+                        ' <b class="trend-pace">Trend ' +
+                        fmtSignedDec(perWeek) +
+                        " " +
+                        data.weightUnit +
+                        "/week</b>"
+                    );
+                };
                 const weightLegendHtml = (s) =>
                     legend(
                         [[LG.dotline(), "Weight"]]
@@ -13156,7 +13187,8 @@
                                   esc(rangeNoun()) +
                                   ", in " +
                                   unit +
-                                  "."
+                                  "." +
+                                  trendPaceHtml()
                                 : "No weigh-ins in this " +
                                   esc(rangeNoun()) +
                                   ".",
