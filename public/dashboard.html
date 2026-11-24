@@ -13277,12 +13277,32 @@
                     const plotH = base - PAD.t;
                     const vals = pts.map((p) => p.v);
                     if (s.target_g != null) vals.push(toUnit(s.target_g, unit));
-                    const tp = weightTrendOn
-                        ? trendPts().map((t) => ({
-                              date: t.date,
-                              v: toUnit(t.trend_g, unit),
-                          }))
-                        : [];
+                    // Every trend point feeds the hover card; the line is drawn
+                    // only with the toggle on.
+                    const tpAll = trendPts().map((t) => ({
+                        date: t.date,
+                        v: toUnit(t.trend_g, unit),
+                    }));
+                    const tp = weightTrendOn ? tpAll : [];
+                    // Trend pace at a point: its change against the trend a
+                    // week earlier (or the first point in view), per week.
+                    const paceAt = (d) => {
+                        const i = tpAll.findIndex((t) => t.date === d);
+                        if (i < 1) return null;
+                        let ref = tpAll[0];
+                        for (let j = i - 1; j >= 0; j--)
+                            if (shiftDay(d, -7) >= tpAll[j].date) {
+                                ref = tpAll[j];
+                                break;
+                            }
+                        const days =
+                            (parseDay(d).getTime() -
+                                parseDay(ref.date).getTime()) /
+                            86400000;
+                        return days < 3
+                            ? null
+                            : ((tpAll[i].v - ref.v) * 7) / days;
+                    };
                     tp.forEach((t) => vals.push(t.v));
                     let lo = Math.min.apply(null, vals);
                     let hi = Math.max.apply(null, vals);
@@ -13423,12 +13443,19 @@
                                     1,
                                 ],
                             ];
-                            const tr = tp.find((t) => t.date === p.date);
+                            const tr = tpAll.find((t) => t.date === p.date);
                             if (tr)
                                 rows.push([
                                     null,
                                     "Trend",
                                     tr.v.toFixed(1) + " " + unit,
+                                ]);
+                            const pace = paceAt(p.date);
+                            if (pace != null)
+                                rows.push([
+                                    null,
+                                    "Trend pace",
+                                    fmtSignedDec(pace) + " " + unit + "/week",
                                 ]);
                             if (s.height_cm)
                                 rows.push([
