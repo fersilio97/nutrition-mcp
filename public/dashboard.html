@@ -4069,6 +4069,19 @@
             .meals-table tr.meal .item-quantity {
                 margin-left: var(--s2);
             }
+            /* "Adjust amount" on a meal with no foods: a quiet text button,
+               not a second primary action beside Edit. */
+            .item-quantity-btn.scale-btn {
+                font-family: inherit;
+                font-size: var(--fs-small);
+                margin-left: var(--s2);
+                text-decoration: underline dotted;
+                text-underline-offset: 3px;
+            }
+            .item-quantity-btn.scale-btn:hover,
+            .item-quantity-btn.scale-btn:focus-visible {
+                color: var(--ink);
+            }
             @media (max-width: 480px) {
                 .meals-table tr.meal .item-quantity {
                     display: block;
@@ -13607,6 +13620,28 @@
                         /\s*\([^()]*\)\s*$/,
                         "",
                     );
+                    // The first "85 g" / "200 ml" in the description is a good
+                    // guess for the logged amount; the user types what they ate.
+                    const guess = /(\d+(?:[.,]\d+)?)\s*(g|ml)\b/i.exec(
+                        String(m.description || ""),
+                    );
+                    const guessOf = guess ? guess[1].replace(",", ".") : "";
+                    const guessUnit = guess ? guess[2].toLowerCase() : "g";
+                    // The food name is the text before that amount when it is
+                    // clean ("Pan de masa madre (sourdough)"), so the rebuilt
+                    // title does not repeat "85 g, con el almuerzo".
+                    const beforeAmount = guess
+                        ? String(m.description || "")
+                              .slice(0, guess.index)
+                              .replace(/[\s,~(]+$/, "")
+                        : "";
+                    const balanced =
+                        (beforeAmount.match(/\(/g) || []).length ===
+                        (beforeAmount.match(/\)/g) || []).length;
+                    const scaleName =
+                        beforeAmount.length >= 3 && balanced
+                            ? beforeAmount
+                            : name;
                     return (
                         '<form id="me-form" class="me-form" novalidate aria-label="Edit meal"><div class="form-grid">' +
                         '<label class="field wide" for="me-description">Description<textarea class="input" id="me-description" rows="2" maxlength="2000">' +
@@ -13634,8 +13669,22 @@
                         (hasItems
                             ? '<div class="wide" id="me-items-note"><p class="meal-items-note">Calories and nutrients come from the foods below. Change an amount there, or type the figures here to turn this into a single line.</p><button type="button" class="btn" id="me-type-figures">Type the figures myself</button></div>'
                             : '<p class="meal-items-note wide"><strong>Ate only part of it?</strong> Say how much you ate of the amount you logged, e.g. 70 of 85 g, and the calories and nutrients are scaled for you.</p><div class="meal-scale wide"><label class="field" for="me-scale-name">Food name<input class="input" id="me-scale-name" value="' +
-                              esc(name) +
-                              '"></label><label class="field" for="me-scale-eaten">I ate<input class="input" id="me-scale-eaten" type="number" min="0" step="any"></label><span>of</span><label class="field" for="me-scale-of">Amount<input class="input" id="me-scale-of" type="number" min="0" step="any"></label><label class="field" for="me-scale-unit">Unit<select class="input" id="me-scale-unit"><option>g</option><option>ml</option><option>piece</option><option>serving</option></select></label><button type="button" class="btn" id="me-scale">Scale</button></div><span class="b-status wide" id="me-scale-status" role="status"></span>') +
+                              esc(scaleName) +
+                              '"></label><label class="field" for="me-scale-eaten">I ate<input class="input" id="me-scale-eaten" type="number" min="0" step="any"></label><span>of</span><label class="field" for="me-scale-of">Amount<input class="input" id="me-scale-of" type="number" min="0" step="any" value="' +
+                              esc(guessOf) +
+                              '"></label><label class="field" for="me-scale-unit">Unit<select class="input" id="me-scale-unit">' +
+                              ["g", "ml", "piece", "serving"]
+                                  .map(function (u) {
+                                      return (
+                                          "<option" +
+                                          (u === guessUnit ? " selected" : "") +
+                                          ">" +
+                                          u +
+                                          "</option>"
+                                      );
+                                  })
+                                  .join("") +
+                              '</select></label><button type="button" class="btn" id="me-scale">Scale</button></div><span class="b-status wide" id="me-scale-status" role="status"></span>') +
                         (showFigures
                             ? MEAL_NUMS.map(function (n) {
                                   return (
@@ -13725,6 +13774,23 @@
                         paint();
                         return;
                     }
+                    const adjust = ev.target.closest("[data-scale-meal]");
+                    if (adjust) {
+                        // "Adjust amount" on a meal with no foods: open its
+                        // Edit form straight on the "I ate X of Y" box.
+                        mealEditId = adjust.dataset.scaleMeal;
+                        mealDraft = null;
+                        mealDupId = null;
+                        mealDupDraft = null;
+                        contentDirty.meals = true;
+                        paint();
+                        const eaten = $("me-scale-eaten");
+                        if (eaten) {
+                            eaten.scrollIntoView({ block: "center" });
+                            eaten.focus();
+                        }
+                        return;
+                    }
                     if (ev.target.closest("#me-scale")) {
                         const eaten = Number($("me-scale-eaten").value),
                             of = Number($("me-scale-of").value),
@@ -13799,12 +13865,10 @@
                     ev.preventDefault();
                     // "I ate 70 of 85" filled in: Save changes (or Enter in
                     // those boxes) means Scale, not "nothing to change".
-                    const eatenBox = $("me-scale-eaten"),
-                        ofBox = $("me-scale-of");
-                    if (
-                        eatenBox &&
-                        (eatenBox.value !== "" || ofBox.value !== "")
-                    ) {
+                    // Only "I ate" decides: the amount box may be pre-filled
+                    // from the description, and a plain edit must still save.
+                    const eatenBox = $("me-scale-eaten");
+                    if (eatenBox && eatenBox.value !== "") {
                         $("me-scale").click();
                         return;
                     }
@@ -15184,6 +15248,13 @@
                                                         ) +
                                                         "</button>") +
                                                   "</span>"
+                                                : "") +
+                                            (!hasItems && !oneItem
+                                                ? '<button type="button" class="item-quantity-btn scale-btn" data-scale-meal="' +
+                                                  esc(m.id) +
+                                                  '" aria-label="Adjust the amount you ate of ' +
+                                                  esc(m.description) +
+                                                  '">Adjust amount</button>'
                                                 : "") +
                                             sourceBadge(m.source) +
                                             '</td><td class="n k">' +
