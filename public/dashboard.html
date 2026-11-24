@@ -2444,6 +2444,12 @@
             .wk-today {
                 opacity: 0.4;
             }
+            .wk-sum {
+                margin: 10px 0 4px;
+                font-size: 0.875rem;
+                line-height: 1.45;
+                color: var(--ink-2, var(--ink));
+            }
             .wk-mode {
                 display: flex;
                 justify-content: flex-end;
@@ -6779,6 +6785,86 @@
                         "</div>"
                     );
                 }
+                // The week's calorie budget (server-side `weekBudget`): each
+                // complete day's goal summed against what was eaten, so a big
+                // day is read against the days around it. Read-side only.
+                function weekBudgetHtml() {
+                    const b = data.weekBudget;
+                    if (!b || !b.enough) return "";
+                    const net = trioCell(
+                        "Week vs goal",
+                        fmtSigned(b.net_kcal),
+                        "kcal",
+                        plural(b.days, "complete day") + " · estimate",
+                        {
+                            sw:
+                                b.net_kcal > 0
+                                    ? "s-gain"
+                                    : b.net_kcal < 0
+                                      ? "s-loss"
+                                      : null,
+                        },
+                    );
+                    const big = b.biggest_date
+                        ? trioCell(
+                              "Biggest day",
+                              fmtSigned(b.biggest_over_kcal),
+                              "kcal",
+                              esc(shortDay(b.biggest_date)) +
+                                  " · ate " +
+                                  fmt(b.biggest_eaten_kcal) +
+                                  " of " +
+                                  fmt(b.biggest_goal_kcal),
+                          )
+                        : trioCell(
+                              "Biggest day",
+                              "—",
+                              "",
+                              "No day over its goal",
+                              { missing: true },
+                          );
+                    const over = trioCell(
+                        "Days over goal",
+                        String(b.over_days),
+                        "of " + b.days,
+                        b.over_days
+                            ? fmt(b.over_kcal) + " kcal over in total"
+                            : "All under or on goal",
+                    );
+                    let line = "";
+                    if (b.biggest_date) {
+                        // Inside a 7-day window a weekday name is unambiguous.
+                        const d = parseDay(b.biggest_date).toLocaleDateString(
+                            undefined,
+                            { weekday: "long" },
+                        );
+                        const others = b.under_kcal;
+                        line =
+                            esc(d) +
+                            " ran " +
+                            fmt(b.biggest_over_kcal) +
+                            " kcal over its goal. " +
+                            (others > 0
+                                ? "The days under goal left " +
+                                  fmt(others) +
+                                  " kcal unused, so the week is " +
+                                  (b.net_kcal > 0
+                                      ? fmt(b.net_kcal) + " kcal over"
+                                      : b.net_kcal < 0
+                                        ? fmt(-b.net_kcal) + " kcal under"
+                                        : "on") +
+                                  " its budget."
+                                : "No day came in under goal to offset it.");
+                    }
+                    return (
+                        '<div class="trio strip three" data-week-budget>' +
+                        net +
+                        big +
+                        over +
+                        "</div>" +
+                        (line ? '<p class="wk-sum">' + line + "</p>" : "")
+                    );
+                }
                 function todayMeals() {
                     return (data.todayMeals || data.meals)
                         .filter(function (m) {
@@ -8103,6 +8189,7 @@
                             note: "Scale change, estimated change and kcal balance over complete logged days; then what you ate each day against its goal and your estimated burn.",
                         }) +
                         weekPairHtml() +
+                        weekBudgetHtml() +
                         (anyLogged(last7) || last7.some((r) => r.goal_calories)
                             ? '<div class="wk-mode">' +
                               chartPref("week-chart", "Red shows", weekMode(), [

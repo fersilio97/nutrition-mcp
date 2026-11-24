@@ -129,6 +129,7 @@ import {
     buildDashboardDays,
     buildEstimateVsScale,
     buildLast7,
+    buildWeekBudget,
     buildWeightStats,
     countDay,
     MIN_DAY_ENTRIES,
@@ -801,6 +802,8 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         // Today's two 7-day figures, from the widened rows: fixed to the
         // last week whatever the selected range.
         last7: buildLast7(allRows, weighIns, endDate),
+        // The week's calorie budget against what was eaten (read-side only).
+        weekBudget: buildWeekBudget(allRows, endDate),
         // The Trends charts' bars: daily for 7 days, weekly for 30, monthly
         // for a year — averages per logged day (dashboard-stats.ts).
         // `daily` above is unchanged and still feeds the tiles and Today.
