@@ -7,6 +7,12 @@
 // log_meal's `recipe`) and src/dashboard.ts (/api/dashboard/recipes) are thin
 // adapters over src/supabase.ts — the src/import.ts pattern.
 
+import {
+    checkMealItems,
+    totalsFromItems,
+    type MealItem,
+} from "./meal-items.js";
+
 export const RECIPE_NUTRIENTS = [
     "calories",
     "protein_g",
@@ -43,6 +49,7 @@ export interface Recipe extends RecipeNutrients {
     /** How many servings the recipe makes. Nutrients are PER SERVING. */
     servings: number;
     ingredients: string[];
+    ingredient_items: MealItem[] | null;
     created_at: string;
     updated_at: string;
 }
@@ -51,6 +58,7 @@ export interface RecipeDraft extends RecipeNutrients {
     name: string;
     servings: number;
     ingredients: string[];
+    ingredient_items: MealItem[] | null;
 }
 
 export interface RecipeInput {
@@ -61,6 +69,7 @@ export interface RecipeInput {
      *  a whole pot's ingredients actually knows. */
     per?: unknown;
     ingredients?: unknown;
+    ingredient_items?: unknown;
     [k: string]: unknown;
 }
 
@@ -92,13 +101,23 @@ export function checkRecipe(input: RecipeInput): Checked<RecipeDraft> {
             ok: false,
             error: `servings must be more than 0 and at most ${MAX_RECIPE_SERVINGS}`,
         };
+    let ingredientItems: MealItem[] | null = null;
+    if (
+        input.ingredient_items !== undefined &&
+        input.ingredient_items !== null
+    ) {
+        const checked = checkMealItems(input.ingredient_items, 50);
+        if (!checked.ok) return checked;
+        ingredientItems = checked.value;
+    }
     const per = input.per ?? "serving";
-    if (per !== "serving" && per !== "batch")
+    if (!ingredientItems && per !== "serving" && per !== "batch")
         return { ok: false, error: "per must be 'serving' or 'batch'" };
     const divisor = per === "batch" ? servings : 1;
 
     const nutrients = {} as RecipeNutrients;
     for (const k of RECIPE_NUTRIENTS) {
+        if (ingredientItems) continue;
         const v = num(input[k]);
         if (v === undefined || v === null) {
             // Blank means "not known", never 0 — a stored 0 is a fake
@@ -115,6 +134,19 @@ export function checkRecipe(input: RecipeInput): Checked<RecipeDraft> {
                 error: `${k} of ${round(perServing, 1)} per serving is implausible (max ${MAX[k]})`,
             };
         nutrients[k] = round(perServing, dpOf(k));
+    }
+    if (ingredientItems) {
+        const totals = totalsFromItems(ingredientItems);
+        for (const k of RECIPE_NUTRIENTS) {
+            const v = totals[k as keyof typeof totals];
+            nutrients[k] =
+                typeof v !== "number" ? null : round(v / servings, dpOf(k));
+            if (nutrients[k] != null && nutrients[k]! > MAX[k])
+                return {
+                    ok: false,
+                    error: `${k} of ${nutrients[k]} per serving is implausible (max ${MAX[k]})`,
+                };
+        }
     }
     if (nutrients.calories == null)
         return {
@@ -145,6 +177,7 @@ export function checkRecipe(input: RecipeInput): Checked<RecipeDraft> {
             name,
             servings: round(servings, 2),
             ingredients,
+            ingredient_items: ingredientItems,
             ...nutrients,
         },
     };
@@ -216,6 +249,15 @@ export function formatRecipe(r: Recipe): string {
         r.caffeine_mg != null ? `${r.caffeine_mg} mg caffeine` : null,
     ].filter((p): p is string => p !== null);
     const made = `makes ${r.servings} serving${r.servings === 1 ? "" : "s"}`;
-    const ing = r.ingredients.length ? ` — ${r.ingredients.join(", ")}` : "";
+    const measured = r.ingredient_items?.length
+        ? r.ingredient_items
+              .map((i) => `${i.name} ${i.amount} ${i.unit}`)
+              .join(", ")
+        : "";
+    const ing = measured
+        ? ` — ${measured}`
+        : r.ingredients.length
+          ? ` — ${r.ingredients.join(", ")}`
+          : "";
     return `- ${r.name} (${made}; per serving: ${parts.join(", ")}) [id ${r.id}]${ing}`;
 }

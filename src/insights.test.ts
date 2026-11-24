@@ -111,6 +111,7 @@ function meal(logged_at: string, fields: Partial<Meal> = {}): Meal {
         notes: null,
         idempotency_key: null,
         items: null,
+        items_label: null,
         ...fields,
     };
 }

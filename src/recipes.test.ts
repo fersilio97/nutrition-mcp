@@ -46,6 +46,35 @@ describe("checkRecipe", () => {
         expect(r.value.sodium_mg).toBe(600);
     });
 
+    test("measured ingredient totals define per-serving nutrition", () => {
+        const r = checkRecipe({
+            name: "Oats",
+            servings: 2,
+            per: "ignored",
+            calories: 1,
+            ingredient_items: [
+                {
+                    name: "Oats",
+                    amount: 100,
+                    unit: "g",
+                    calories: 380,
+                    protein_g: 13,
+                    carbs_g: 68,
+                    fat_g: 7,
+                },
+            ],
+        });
+        expect(r.ok).toBe(true);
+        if (r.ok)
+            expect(r.value).toMatchObject({
+                calories: 190,
+                protein_g: 6.5,
+                carbs_g: 34,
+                fat_g: 3.5,
+                ingredient_items: [{ amount: 100 }],
+            });
+    });
+
     test("rejects what cannot be a dish", () => {
         expect(checkRecipe({ ...base, name: "  " }).ok).toBe(false);
         expect(checkRecipe({ ...base, calories: undefined }).ok).toBe(false);
@@ -114,6 +143,7 @@ test("formatRecipe lists per-serving figures and the id", () => {
         name: "Oats",
         servings: 2,
         ingredients: ["oats", "milk"],
+        ingredient_items: null,
         calories: 400,
         protein_g: 15,
         carbs_g: null,

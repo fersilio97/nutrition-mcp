@@ -173,6 +173,7 @@ function existingMeal(overrides: Partial<Meal> = {}): Meal {
         notes: "made with milk",
         idempotency_key: key(meal()),
         items: null,
+        items_label: null,
         ...overrides,
     };
 }

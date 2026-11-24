@@ -33,6 +33,8 @@ import {
     bodyOf,
     checkMealPatch,
     checkItemAmount,
+    checkScaleMeal,
+    scaleMealToItem,
     checkMealEntry,
     repeatFields,
     checkRepeat,
@@ -524,6 +526,7 @@ const server = Bun.serve({
             sodium_mg: m.sodium_mg ?? null,
             source: m.source ?? null,
             items: m.items ?? null,
+            items_label: m.items_label ?? null,
         });
         // The same idempotency the real insertMeal gives a client_key: the
         // second request with a key returns the first row.
@@ -556,6 +559,7 @@ const server = Bun.serve({
                 logged_at: fields.logged_at ?? new Date().toISOString(),
                 idempotency_key: key ?? null,
                 items: fields.items ?? null,
+                items_label: fields.items_label ?? null,
             } as Meal;
             (e.addedMeals ??= []).push(meal);
             return { meal, deduplicated: false };
@@ -724,6 +728,43 @@ const server = Bun.serve({
                 meal: mealSummary(r.meal),
             });
         }
+        const scaleMatch = /^\/api\/dashboard\/meals\/([^/]+)\/scale$/.exec(
+            path,
+        );
+        if (scaleMatch && req.method === "POST") {
+            if (!authed(req)) return json({ error: "invalid_token" }, 401);
+            const b = await readJson(req);
+            if (!b) return json({ error: "invalid_request" }, 400);
+            const checked = checkScaleMeal(b);
+            if (!checked.ok) return invalid(checked.error);
+            const id = decodeURIComponent(scaleMatch[1]!);
+            const tz = scenarioTz(state.scenario);
+            const fx = scenarioWithEdits(
+                state.scenario,
+                todayInTz(tz),
+                edits(),
+            );
+            const meal = fx.meals.find((m) => m.id === id);
+            if (!meal) return json({ error: "not_found" }, 404);
+            if (meal.items)
+                return invalid(
+                    "This meal already has foods; edit them instead.",
+                );
+            const item = scaleMealToItem(meal, checked.value);
+            const e = edits();
+            e.mealPatches ??= {};
+            e.mealPatches[id] = {
+                ...e.mealPatches[id],
+                items: [item],
+                items_label: null,
+                description: describeItems([item]),
+                ...totalsFromItems([item]),
+            };
+            return json({
+                ok: true,
+                meal: mealSummary({ ...meal, ...e.mealPatches[id] }),
+            });
+        }
         const itemMatch =
             /^\/api\/dashboard\/meals\/([^/]+)\/items\/([^/]+)$/.exec(path);
         if (itemMatch && (req.method === "PATCH" || req.method === "DELETE")) {
@@ -765,7 +806,8 @@ const server = Bun.serve({
             e.mealPatches[id] = {
                 ...e.mealPatches[id],
                 items,
-                description: describeItems(items),
+                description: describeItems(items, meal.items_label),
+                items_label: meal.items_label,
                 ...totalsFromItems(items),
             };
             return json({

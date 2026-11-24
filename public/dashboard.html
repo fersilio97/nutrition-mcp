@@ -4051,6 +4051,29 @@
             .item-quantity {
                 white-space: nowrap;
             }
+            .item-quantity-btn {
+                border: 0;
+                padding: 0;
+                background: transparent;
+                color: var(--ink-3);
+                font: inherit;
+                font-family: var(--font-mono);
+                cursor: pointer;
+            }
+            .meals-table tr.meal .item-quantity {
+                margin-left: var(--s2);
+            }
+            @media (max-width: 480px) {
+                .meals-table tr.meal .item-quantity {
+                    display: block;
+                    margin-left: 0;
+                }
+                .meal-scale {
+                    display: grid;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    align-items: end;
+                }
+            }
             .item-quantity-readonly::before {
                 content: " · ";
             }
@@ -4080,6 +4103,19 @@
             }
             .me-form .form-foot {
                 margin-top: 0;
+            }
+            .meal-scale {
+                display: flex;
+                align-items: end;
+                gap: var(--s2);
+                flex-wrap: wrap;
+            }
+            .meal-scale .field {
+                min-width: 5em;
+            }
+            .meal-items-note {
+                color: var(--ink-3);
+                margin: 0;
             }
             @media (min-width: 481px) {
                 .me-form .form-grid {
@@ -13476,6 +13512,14 @@
                         "snack",
                         "treat",
                     ];
+                    const hasItems =
+                        Array.isArray(m.items) && m.items.length > 0;
+                    const showFigures =
+                        !hasItems || (mealDraft && mealDraft.showFigures);
+                    const name = String(m.description || "").replace(
+                        /\s*\([^()]*\)\s*$/,
+                        "",
+                    );
                     return (
                         '<form id="me-form" class="me-form" novalidate aria-label="Edit meal"><div class="form-grid">' +
                         '<label class="field wide" for="me-description">Description<textarea class="input" id="me-description" rows="2" maxlength="2000">' +
@@ -13500,21 +13544,28 @@
                         '<label class="field" for="me-at">Eaten at<input class="input" id="me-at" type="datetime-local" value="' +
                         esc(v.logged_at) +
                         '" /></label>' +
-                        MEAL_NUMS.map(function (n) {
-                            return (
-                                '<label class="field" for="me-' +
-                                n[0] +
-                                '">' +
-                                n[1] +
-                                '<input class="input" id="me-' +
-                                n[0] +
-                                '" type="number" inputmode="decimal" min="0" step="' +
-                                n[2] +
-                                '" value="' +
-                                esc(v[n[0]]) +
-                                '" /></label>'
-                            );
-                        }).join("") +
+                        (hasItems
+                            ? '<div class="wide" id="me-items-note"><p class="meal-items-note">Calories and nutrients come from the foods below. Change an amount there, or type the figures here to turn this into a single line.</p><button type="button" class="btn" id="me-type-figures">Type the figures myself</button></div>'
+                            : '<div class="meal-scale wide"><label class="field" for="me-scale-name">Food name<input class="input" id="me-scale-name" value="' +
+                              esc(name) +
+                              '"></label><label class="field" for="me-scale-eaten">I ate<input class="input" id="me-scale-eaten" type="number" min="0" step="any"></label><span>of</span><label class="field" for="me-scale-of">Amount<input class="input" id="me-scale-of" type="number" min="0" step="any"></label><label class="field" for="me-scale-unit">Unit<select class="input" id="me-scale-unit"><option>g</option><option>ml</option><option>piece</option><option>serving</option></select></label><button type="button" class="btn" id="me-scale">Scale</button></div><span class="b-status wide" id="me-scale-status" role="status"></span>') +
+                        (showFigures
+                            ? MEAL_NUMS.map(function (n) {
+                                  return (
+                                      '<label class="field" for="me-' +
+                                      n[0] +
+                                      '">' +
+                                      n[1] +
+                                      '<input class="input" id="me-' +
+                                      n[0] +
+                                      '" type="number" inputmode="decimal" min="0" step="' +
+                                      n[2] +
+                                      '" value="' +
+                                      esc(v[n[0]]) +
+                                      '" /></label>'
+                                  );
+                              }).join("")
+                            : "") +
                         "</div>" +
                         '<div class="form-foot"><button type="submit" class="btn primary" id="me-save">Save changes</button><button type="button" class="btn" id="me-cancel">Cancel</button><span class="b-status" id="me-status" role="status"></span><button type="button" class="btn" id="me-recipe" title="Save this meal\u2019s figures as a one-serving recipe you can log in one tap">Save as recipe</button><button type="button" class="btn danger" id="me-delete">Delete meal</button></div>' +
                         '<p class="form-hint">Times are in ' +
@@ -13529,8 +13580,10 @@
                         logged_at: $("me-at").value,
                     };
                     MEAL_NUMS.forEach(function (n) {
-                        v[n[0]] = $("me-" + n[0]).value;
+                        const field = $("me-" + n[0]);
+                        v[n[0]] = field ? field.value : "";
                     });
+                    v.showFigures = !!(mealDraft && mealDraft.showFigures);
                     return v;
                 }
                 // Only what differs from the meal as listed. A number left
@@ -13545,6 +13598,12 @@
                         out.meal_type = v.meal_type;
                     if (v.logged_at && v.logged_at !== was.logged_at)
                         out.logged_at = v.logged_at;
+                    if (
+                        Array.isArray(m.items) &&
+                        m.items.length &&
+                        !v.showFigures
+                    )
+                        return out;
                     MEAL_NUMS.forEach(function (n) {
                         const now = v[n[0]].trim();
                         const before = was[n[0]];
@@ -13572,6 +13631,61 @@
                     }
                 }
                 $("meals-body").addEventListener("click", function (ev) {
+                    if (ev.target.closest("#me-type-figures")) {
+                        mealDraft = readMealForm();
+                        mealDraft.showFigures = true;
+                        contentDirty.meals = true;
+                        paint();
+                        return;
+                    }
+                    if (ev.target.closest("#me-scale")) {
+                        const eaten = Number($("me-scale-eaten").value),
+                            of = Number($("me-scale-of").value),
+                            st = $("me-scale-status");
+                        if (!(eaten > 0 && of > 0 && eaten <= of * 20)) {
+                            st.className = "b-status err";
+                            st.textContent =
+                                "Enter amounts greater than zero; eaten must be no more than 20 times the amount.";
+                            return;
+                        }
+                        st.textContent = "Scaling…";
+                        writeJson(
+                            "POST",
+                            "/api/dashboard/meals/" +
+                                encodeURIComponent(mealEditId) +
+                                "/scale",
+                            {
+                                name: $("me-scale-name").value,
+                                eaten: eaten,
+                                of: of,
+                                unit: $("me-scale-unit").value,
+                            },
+                        )
+                            .then(function (res) {
+                                if (!res.ok) {
+                                    st.className = "b-status err";
+                                    st.textContent =
+                                        (res.body && res.body.message) ||
+                                        "Could not scale meal.";
+                                    return;
+                                }
+                                const id = mealEditId;
+                                replaceMealEverywhere(id, res.body.meal);
+                                mealEditId = null;
+                                mealDraft = null;
+                                setMealFlash(
+                                    "Scaled — the meal is now 1 item you can adjust.",
+                                );
+                                contentDirty.meals = true;
+                                paint();
+                                refresh();
+                            })
+                            .catch(function () {
+                                st.className = "b-status err";
+                                st.textContent = "Could not reach the server.";
+                            });
+                        return;
+                    }
                     const ed = ev.target.closest("[data-edit]");
                     if (ed) {
                         const id = ed.dataset.edit;
@@ -14729,6 +14843,18 @@
                     }
                     if (
                         ev.key === "Enter" &&
+                        ev.target.matches &&
+                        ev.target.matches("[data-item-amount]")
+                    ) {
+                        ev.preventDefault();
+                        const save = ev.target
+                            .closest(".item-quantity")
+                            .querySelector("[data-save-item]");
+                        if (save) save.click();
+                        return;
+                    }
+                    if (
+                        ev.key === "Enter" &&
                         ev.target.closest &&
                         ev.target.closest("#lm-item")
                     ) {
@@ -14890,6 +15016,15 @@
                                         const hasItems =
                                             Array.isArray(m.items) &&
                                             m.items.length >= 2;
+                                        const oneItem =
+                                            Array.isArray(m.items) &&
+                                            m.items.length === 1;
+                                        const one = oneItem ? m.items[0] : null;
+                                        const oneEditing =
+                                            oneItem &&
+                                            mealItemEdit &&
+                                            mealItemEdit.mealId === m.id &&
+                                            mealItemEdit.index === 0;
                                         const itemsOpen = openMealItems.has(
                                             m.id,
                                         );
@@ -14918,6 +15053,40 @@
                                                   ' foods in this meal"><span class="chev" aria-hidden="true">›</span></button>'
                                                 : "") +
                                             esc(m.description) +
+                                            (oneItem
+                                                ? '<span class="item-quantity">' +
+                                                  (oneEditing
+                                                      ? '<input class="input item-amount" type="number" min="0" step="any" value="' +
+                                                        esc(one.amount) +
+                                                        '" data-item-amount="' +
+                                                        esc(m.id) +
+                                                        '" data-item-index="0" aria-label="Amount of ' +
+                                                        esc(itemName(one)) +
+                                                        '"><span class="item-unit">' +
+                                                        esc(one.unit) +
+                                                        '</span><button type="button" class="btn-edit" data-save-item="' +
+                                                        esc(m.id) +
+                                                        '" data-item-index="0">Save</button><button type="button" class="btn-edit" data-cancel-item>Cancel</button>'
+                                                      : '<button type="button" class="item-quantity-btn" data-edit-item="' +
+                                                        esc(m.id) +
+                                                        '" data-item-index="0" aria-label="Change the amount of ' +
+                                                        esc(itemName(one)) +
+                                                        '">' +
+                                                        esc(one.amount) +
+                                                        " " +
+                                                        esc(
+                                                            one.unit ===
+                                                                "serving"
+                                                                ? Number(
+                                                                      one.amount,
+                                                                  ) === 1
+                                                                    ? "serving"
+                                                                    : "servings"
+                                                                : one.unit,
+                                                        ) +
+                                                        "</button>") +
+                                                  "</span>"
+                                                : "") +
                                             sourceBadge(m.source) +
                                             '</td><td class="n k">' +
                                             nz(m.calories) +
