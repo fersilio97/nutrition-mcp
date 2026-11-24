@@ -3,6 +3,7 @@ import {
     buildDashboardDays,
     buildEstimateVsScale,
     buildLast7,
+    buildLoggingStreak,
     buildWeekBudget,
     buildWeightStats,
     granularityFor,
@@ -623,5 +624,63 @@ describe("calorie goal default and editor", () => {
         expect(checkCalorieGoal({ calories: 100 }).ok).toBe(false);
         expect(checkCalorieGoal({ calories: 99999 }).ok).toBe(false);
         expect(checkCalorieGoal({ calories: "abc" }).ok).toBe(false);
+    });
+});
+
+describe("buildLoggingStreak", () => {
+    const day = (date: string, mealCount: number) => ({ date, mealCount });
+    test("counts consecutive logged days and skips an unlogged today", () => {
+        const s = buildLoggingStreak(
+            [
+                day("2026-11-17", 2),
+                day("2026-11-18", 2),
+                day("2026-11-19", 1),
+                day("2026-11-20", 3),
+                day("2026-11-21", 0),
+                day("2026-11-22", 2),
+                day("2026-11-23", 0),
+            ],
+            "2026-11-23",
+        );
+        expect(s).toEqual({
+            days: 1,
+            capped: false,
+            missed_days: 0,
+            missed_date: null,
+            last_logged_date: "2026-11-22",
+        });
+    });
+    test("reports the missed run ending yesterday", () => {
+        const s = buildLoggingStreak(
+            [
+                day("2026-11-19", 2),
+                day("2026-11-20", 2),
+                day("2026-11-21", 0),
+                day("2026-11-22", 0),
+                day("2026-11-23", 1),
+            ],
+            "2026-11-23",
+        );
+        expect(s.missed_days).toBe(2);
+        expect(s.missed_date).toBe("2026-11-22");
+        expect(s.last_logged_date).toBe("2026-11-20");
+        expect(s.days).toBe(1);
+    });
+    test("flags a streak that reaches the start of the window as capped", () => {
+        const s = buildLoggingStreak(
+            [day("2026-11-21", 1), day("2026-11-22", 1), day("2026-11-23", 1)],
+            "2026-11-23",
+        );
+        expect(s.days).toBe(3);
+        expect(s.capped).toBe(true);
+    });
+    test("gives a brand-new account no missed-day card", () => {
+        const s = buildLoggingStreak(
+            [day("2026-11-22", 0), day("2026-11-23", 0)],
+            "2026-11-23",
+        );
+        expect(s.missed_days).toBe(0);
+        expect(s.missed_date).toBeNull();
+        expect(s.last_logged_date).toBeNull();
     });
 });

@@ -86,6 +86,7 @@ import {
     gramsPerDayToRate,
     rateToGramsPerDay,
     resolveGoalMode,
+    trendWeightToday,
     type GoalMode,
     type RatePeriod,
 } from "./goal-plan.js";
@@ -129,6 +130,7 @@ import {
     buildDashboardDays,
     buildEstimateVsScale,
     buildLast7,
+    buildLoggingStreak,
     buildWeekBudget,
     buildWeightStats,
     countDay,
@@ -804,6 +806,7 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
         last7: buildLast7(allRows, weighIns, endDate),
         // The week's calorie budget against what was eaten (read-side only).
         weekBudget: buildWeekBudget(allRows, endDate),
+        loggingStreak: buildLoggingStreak(allRows, endDate),
         // The Trends charts' bars: daily for 7 days, weekly for 30, monthly
         // for a year — averages per logged day (dashboard-stats.ts).
         // `daily` above is unchanged and still feeds the tiles and Today.
@@ -826,6 +829,24 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
                 date: dateInTz(w.logged_at, tz),
                 logged_at: w.logged_at,
                 weight_g: w.weight_g,
+            })),
+        // The §6.1 trend weight as of each weigh-in day in the range: the
+        // same `trendWeightToday` the goal uses, called once per day with
+        // that day as "today" and the user's lookback. Not a new smoother.
+        // It lets the Body chart draw the line that discounts water swings.
+        weightTrendSeries: [
+            ...new Set(
+                weight
+                    .map((w) => dateInTz(w.logged_at, tz))
+                    .filter((d) => inRangeDay(d)),
+            ),
+        ]
+            .sort()
+            .map((d) => ({
+                date: d,
+                trend_g:
+                    trendWeightToday(allWeighIns, d, model.windowDays)
+                        ?.weight_g ?? null,
             })),
         // Only the range's meals: the fetch reaches back further for last7.
         meals: meals

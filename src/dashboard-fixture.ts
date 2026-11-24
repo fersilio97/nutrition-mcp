@@ -61,6 +61,8 @@ export const SCENARIOS = [
     "sodium",
     // Vault 205: a week of days under goal with one day far over it.
     "weekend-spike",
+    // Vault 023: yesterday and the day before unlogged, a run before that.
+    "missed-days",
 ] as const;
 export type ScenarioName = (typeof SCENARIOS)[number];
 
@@ -485,7 +487,12 @@ function generateScenario(name: ScenarioName, today: string): FixtureData {
             // its "5 of the last 7 over" does not depend on the PRNG stream.
             const forcedWeek =
                 (name === "over-goal" || name === "weekend-spike") && k <= 6;
-            if (rnd() < 0.1 && !forcedWeek) {
+            // missed-days: yesterday and the day before are empty, the 8
+            // days before that always logged, so the card and the streak
+            // read the same on every run.
+            const missed = name === "missed-days" && (k === 1 || k === 2);
+            const forcedLogged = name === "missed-days" && k >= 3 && k <= 10;
+            if (missed || (rnd() < 0.1 && !forcedWeek && !forcedLogged)) {
                 history.push({ date, active, logged: false });
                 continue;
             }

@@ -539,6 +539,67 @@ export interface WeekBudget {
 /** Fewer judged days than this and a "week" verdict would be noise. */
 export const MIN_WEEK_BUDGET_DAYS = 3;
 
+/** The logging streak and the missed-day card (vault 023). Flat scalars with
+ *  a constant shape: the preview payload must carry the same deep keys. */
+export interface LoggingStreak {
+    /** Consecutive logged days ending today (if logged) or yesterday. */
+    days: number;
+    /** True when the run reaches the start of the fetched window, so the
+     *  real streak may be longer than `days`. */
+    capped: boolean;
+    /** How many days in a row, ending yesterday, have no meal (0 = yesterday
+     *  was logged). */
+    missed_days: number;
+    /** Yesterday's date when it was missed, else null. */
+    missed_date: string | null;
+    /** The last day with a meal before today, null when nothing ever logged. */
+    last_logged_date: string | null;
+}
+
+/**
+ * A day is logged when it has a meal. Today does not break a streak while it
+ * is still running: it counts if logged and is skipped if not. The missed run
+ * is only reported for someone who has logged before; a brand-new account
+ * with nothing logged gets no "you missed yesterday" card.
+ */
+export function buildLoggingStreak(
+    rows: Pick<DashboardDay, "date" | "mealCount">[],
+    today: string,
+): LoggingStreak {
+    const byDate = new Map(rows.map((r) => [r.date, r.mealCount > 0]));
+    const first = rows.reduce<string | null>(
+        (m, r) => (m == null || r.date < m ? r.date : m),
+        null,
+    );
+    let cursor = byDate.get(today) ? today : shiftDay(today, -1);
+    let days = 0;
+    while (byDate.get(cursor)) {
+        days++;
+        cursor = shiftDay(cursor, -1);
+    }
+    const capped = first != null && cursor < first && days > 0;
+    const yesterday = shiftDay(today, -1);
+    let missed = 0;
+    let probe = yesterday;
+    while (first != null && probe >= first && !byDate.get(probe)) {
+        missed++;
+        probe = shiftDay(probe, -1);
+    }
+    const lastLogged =
+        rows
+            .filter((r) => r.date < today && r.mealCount > 0)
+            .map((r) => r.date)
+            .sort()
+            .at(-1) ?? null;
+    return {
+        days,
+        capped,
+        missed_days: lastLogged ? missed : 0,
+        missed_date: lastLogged && missed > 0 ? yesterday : null,
+        last_logged_date: lastLogged,
+    };
+}
+
 /**
  * Read-side only: the last week's calorie budget (the sum of each day's
  * effective goal) against what was eaten, so one big day is read against the
