@@ -13633,7 +13633,7 @@
                         '" /></label>' +
                         (hasItems
                             ? '<div class="wide" id="me-items-note"><p class="meal-items-note">Calories and nutrients come from the foods below. Change an amount there, or type the figures here to turn this into a single line.</p><button type="button" class="btn" id="me-type-figures">Type the figures myself</button></div>'
-                            : '<div class="meal-scale wide"><label class="field" for="me-scale-name">Food name<input class="input" id="me-scale-name" value="' +
+                            : '<p class="meal-items-note wide"><strong>Ate only part of it?</strong> Say how much you ate of the amount you logged, e.g. 70 of 85 g, and the calories and nutrients are scaled for you.</p><div class="meal-scale wide"><label class="field" for="me-scale-name">Food name<input class="input" id="me-scale-name" value="' +
                               esc(name) +
                               '"></label><label class="field" for="me-scale-eaten">I ate<input class="input" id="me-scale-eaten" type="number" min="0" step="any"></label><span>of</span><label class="field" for="me-scale-of">Amount<input class="input" id="me-scale-of" type="number" min="0" step="any"></label><label class="field" for="me-scale-unit">Unit<select class="input" id="me-scale-unit"><option>g</option><option>ml</option><option>piece</option><option>serving</option></select></label><button type="button" class="btn" id="me-scale">Scale</button></div><span class="b-status wide" id="me-scale-status" role="status"></span>') +
                         (showFigures
@@ -13797,6 +13797,17 @@
                 $("meals-body").addEventListener("submit", function (ev) {
                     if (!ev.target.closest("#me-form")) return;
                     ev.preventDefault();
+                    // "I ate 70 of 85" filled in: Save changes (or Enter in
+                    // those boxes) means Scale, not "nothing to change".
+                    const eatenBox = $("me-scale-eaten"),
+                        ofBox = $("me-scale-of");
+                    if (
+                        eatenBox &&
+                        (eatenBox.value !== "" || ofBox.value !== "")
+                    ) {
+                        $("me-scale").click();
+                        return;
+                    }
                     const id = mealEditId;
                     const meal = data.meals.filter((m) => m.id === id)[0];
                     if (!meal) return;
