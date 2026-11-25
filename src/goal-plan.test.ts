@@ -24,6 +24,7 @@ import {
     resolveGoalMode,
     tefRatio,
     trendWeightToday,
+    waterSwing,
     type FlagInput,
     type RatePlan,
     type TrendWeight,
@@ -1099,5 +1100,38 @@ describe("unusual active days (Body details switch)", () => {
         expect(off.goalPlan.active_outlier_filter).toBe(false);
         expect(off.goalPlan.active_dropped_days).toEqual([]);
         expect(on.modelSettings.active_outlier_filter).toBe(true);
+    });
+});
+
+describe("waterSwing (§6.3)", () => {
+    test("reads the usual scatter around the trend, robust to one outlier", () => {
+        // 30 daily weigh-ins on a falling line with ±300 g alternating noise.
+        const w = line(30, 30, 80_000, -50).map((x, i) => ({
+            ...x,
+            weight_g: x.weight_g + (i % 2 ? 300 : -300),
+        }));
+        const clean = waterSwing(w, iso(30), 42);
+        expect(clean.days).toBeGreaterThanOrEqual(8);
+        expect(clean.swing_g).not.toBeNull();
+        // One 3 kg post-holiday reading barely moves a MAD-based figure.
+        const spiked = w.map((x, i) =>
+            i === 20 ? { ...x, weight_g: x.weight_g + 3000 } : x,
+        );
+        const s = waterSwing(spiked, iso(30), 42);
+        expect(Math.abs(s.swing_g! - clean.swing_g!)).toBeLessThan(150);
+    });
+
+    test("averages same-day readings into one residual", () => {
+        const w = line(30, 30, 80_000, -50);
+        const doubled = w.flatMap((x) => [x, { ...x }]);
+        expect(waterSwing(doubled, iso(30), 42).days).toBe(
+            waterSwing(w, iso(30), 42).days,
+        );
+    });
+
+    test("needs 8 trend-sourced days", () => {
+        const w = line(30, 5, 80_000, -50);
+        const r = waterSwing(w, iso(30), 42);
+        expect(r.swing_g).toBeNull();
     });
 });

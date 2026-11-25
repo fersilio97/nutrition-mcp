@@ -2410,6 +2410,18 @@
                 stroke: var(--bg);
                 stroke-width: 1.5;
             }
+            .m-wband {
+                fill: var(--ink-3);
+                fill-opacity: 0.16;
+                stroke: none;
+            }
+            .m-wtrend {
+                fill: none;
+                stroke: var(--ink-3);
+                stroke-width: 1.5;
+                stroke-linejoin: round;
+                stroke-linecap: round;
+            }
             .m-target {
                 fill: none;
                 stroke: var(--ink-2);
@@ -2443,6 +2455,27 @@
             }
             .wk-today {
                 opacity: 0.4;
+            }
+            .streak {
+                margin: 0 0 var(--s4);
+                font-size: var(--fs-small);
+                color: var(--ink-2);
+            }
+            .streak b {
+                color: var(--ink);
+            }
+            .streak.miss {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--s4);
+                padding: var(--s1) 0 var(--s1) var(--s4);
+                border-left: 3px solid var(--warn);
+                max-width: 68ch;
+                color: var(--ink);
+            }
+            .streak.miss .btn {
+                flex-shrink: 0;
             }
             .wk-sum {
                 margin: 10px 0 4px;
@@ -5201,6 +5234,8 @@
                         '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="m-rest"/></svg>',
                     active: () =>
                         '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="7" y1="2" x2="7" y2="12" class="m-active"/></svg>',
+                    trend: () =>
+                        '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="m-wtrend"/></svg>',
                     dotline: () =>
                         '<svg viewBox="0 0 14 14" aria-hidden="true"><line x1="0" y1="7" x2="14" y2="7" class="m-wline"/><circle cx="7" cy="7" r="3.5" class="m-wdot"/></svg>',
                 };
@@ -5797,6 +5832,36 @@
                             setWeekMode(value);
                             return;
                         }
+                        if (key === "weight-trend") {
+                            weightTrendOn = value === "on";
+                            const wn =
+                                document.querySelector(".w-chart p.note");
+                            if (wn)
+                                wn.innerHTML =
+                                    wn.innerHTML.replace(
+                                        /\s*<b class="trend-pace">.*?<\/b>/,
+                                        "",
+                                    ) + trendPaceHtml();
+                            store("nutrition-dash-weight-trend", value);
+                            document
+                                .querySelectorAll(
+                                    '[data-chart-pref="weight-trend"]',
+                                )
+                                .forEach(function (b) {
+                                    b.setAttribute(
+                                        "aria-pressed",
+                                        String(b.dataset.value === value),
+                                    );
+                                });
+                            const lg =
+                                document.querySelector(".w-chart .legend");
+                            if (lg)
+                                lg.outerHTML = weightLegendHtml(
+                                    data.weightStats,
+                                );
+                            weightChart();
+                            return;
+                        }
                         if (key === "macro-segments") macroLabels = value;
                         if (key === "macro-totals")
                             macroTotals = value === "on";
@@ -6272,6 +6337,15 @@
                         ev.target.closest &&
                         ev.target.closest("[data-lw-open]");
                     if (lw) return openLogWeight(lw.dataset.lwOpen || "body");
+                    const ld =
+                        ev.target.closest &&
+                        ev.target.closest("[data-log-day]");
+                    if (ld) {
+                        openLogMeal();
+                        const at = $("lm-at");
+                        if (at) at.value = ld.dataset.logDay + "T12:00";
+                        return;
+                    }
                     const t =
                         ev.target.closest && ev.target.closest("[data-go]");
                     if (!t) return;
@@ -6837,6 +6911,41 @@
                 // The week's calorie budget (server-side `weekBudget`): each
                 // complete day's goal summed against what was eaten, so a big
                 // day is read against the days around it. Read-side only.
+                // Vault 023: the logging streak, and one tap to fill a day
+                // that was missed. "Log it" opens the Meals form with the
+                // time set to that day, so it lands on the right date.
+                function streakHtml() {
+                    const s = data.loggingStreak;
+                    if (!s || !s.last_logged_date) return "";
+                    const missed = s.missed_days > 0 && s.missed_date;
+                    if (!missed && s.days < 2) return "";
+                    if (!missed)
+                        return (
+                            '<p class="streak rv" data-streak>' +
+                            "<b>" +
+                            s.days +
+                            (s.capped ? "+" : "") +
+                            "-day streak.</b> Every day logged since " +
+                            esc(
+                                shortDay(shiftDay(data.endDate, -(s.days - 1))),
+                            ) +
+                            ".</p>"
+                        );
+                    return (
+                        '<div class="streak miss rv" data-streak-missed>' +
+                        "<span><b>" +
+                        (s.missed_days === 1
+                            ? "Yesterday has nothing logged."
+                            : s.missed_days +
+                              " days in a row have nothing logged.") +
+                        "</b> Last logged " +
+                        esc(shortDay(s.last_logged_date)) +
+                        ". A quick entry keeps your week and your trend honest.</span>" +
+                        '<button type="button" class="btn btn-sm" data-log-day="' +
+                        esc(s.missed_date) +
+                        '">Log yesterday</button></div>'
+                    );
+                }
                 function weekBudgetHtml() {
                     const b = data.weekBudget;
                     if (!b || !b.enough) return "";
@@ -8155,6 +8264,7 @@
                     const last7 = recent().slice(-7);
                     $("today-body").innerHTML =
                         installCardHtml() +
+                        streakHtml() +
                         setupCardHtml() +
                         logButtonsHtml() +
                         waterQuickHtml() +
@@ -13043,6 +13153,88 @@
                 // The Body chart plots the shared range (the head above it);
                 // the Weight panel, rate and goal stay on today's tracker
                 // window, like the Today tab.
+                // "With trend" draws the §6.1 trend weight (the same smoothing
+                // the goal uses, computed server-side per weigh-in day) as a
+                // line through the scatter, so water swings stop reading as
+                // fat gain or loss. Remembered per browser.
+                let weightTrendOn =
+                    load("nutrition-dash-weight-trend") === "on";
+                const trendPts = () =>
+                    (data.weightTrendSeries || []).filter(
+                        (t) =>
+                            t.trend_g != null &&
+                            t.date >= data.startDate &&
+                            t.date <= rEnd(),
+                    );
+                // Pace of the trend line in view: first to last trend point,
+                // per week. Only shown with the trend on and 3+ days apart.
+                const trendPaceHtml = () => {
+                    const t = trendPts();
+                    if (!weightTrendOn || t.length < 2) return "";
+                    const a = t[0],
+                        b = t[t.length - 1];
+                    const days =
+                        (parseDay(b.date).getTime() -
+                            parseDay(a.date).getTime()) /
+                        86400000;
+                    if (days < 3) return "";
+                    const perWeek =
+                        toUnit(b.trend_g - a.trend_g, data.weightUnit) *
+                        (7 / days);
+                    return (
+                        ' <b class="trend-pace">Trend ' +
+                        fmtSignedDec(perWeek) +
+                        " " +
+                        data.weightUnit +
+                        "/week</b>"
+                    );
+                };
+                // §6.3 water swing (formulas.md): computed server-side from
+                // the L days ending on the range end; null below 8 days.
+                const scatterSd = () => {
+                    const g = data.weightSwing && data.weightSwing.swing_g;
+                    return g == null ? null : toUnit(g, data.weightUnit);
+                };
+                const weightLegendHtml = (s) =>
+                    legend(
+                        [[LG.dotline(), "Weight"]]
+                            .concat(
+                                weightTrendOn && trendPts().length > 1
+                                    ? [
+                                          [
+                                              LG.trend(),
+                                              "Trend (water smoothed out)",
+                                          ],
+                                      ]
+                                    : [],
+                            )
+                            .concat(
+                                weightTrendOn &&
+                                    trendPts().length > 1 &&
+                                    scatterSd() != null
+                                    ? [
+                                          [
+                                              LG.bar("m-wband"),
+                                              "Usual day-to-day swing ±" +
+                                                  scatterSd().toFixed(1) +
+                                                  " " +
+                                                  data.weightUnit +
+                                                  " (about 2 in 3 weigh-ins)",
+                                          ],
+                                      ]
+                                    : [],
+                            )
+                            .concat(
+                                s.target_g != null
+                                    ? [[LG.line(true), "Target"]]
+                                    : [],
+                            )
+                            .concat(
+                                s.healthy_min_g != null
+                                    ? [[LG.bar("m-band"), "Healthy BMI range"]]
+                                    : [],
+                            ),
+                    );
                 const bodyWeights = () =>
                     (data.rangeWeights || data.weights).filter(
                         (w) => w.date >= data.startDate && w.date <= rEnd(),
@@ -13071,31 +13263,26 @@
                                   esc(rangeNoun()) +
                                   ", in " +
                                   unit +
-                                  "."
+                                  "." +
+                                  trendPaceHtml()
                                 : "No weigh-ins in this " +
                                   esc(rangeNoun()) +
                                   ".",
-                            legend: pts
-                                ? legend(
-                                      [[LG.dotline(), "Weight"]]
-                                          .concat(
-                                              s.target_g != null
-                                                  ? [[LG.line(true), "Target"]]
-                                                  : [],
-                                          )
-                                          .concat(
-                                              s.healthy_min_g != null
-                                                  ? [
-                                                        [
-                                                            LG.bar("m-band"),
-                                                            "Healthy BMI range",
-                                                        ],
-                                                    ]
-                                                  : [],
-                                          ),
-                                  )
-                                : "",
+                            legend: pts ? weightLegendHtml(s) : "",
                         }) +
+                        (pts && trendPts().length > 1
+                            ? '<div class="chart-prefs">' +
+                              chartPref(
+                                  "weight-trend",
+                                  "Weight line",
+                                  weightTrendOn ? "on" : "off",
+                                  [
+                                      ["off", "Weigh-ins"],
+                                      ["on", "With trend"],
+                                  ],
+                              ) +
+                              "</div>"
+                            : "") +
                         (pts
                             ? '<div class="plot" id="weight-plot"></div>'
                             : '<p class="empty">' +
@@ -13166,6 +13353,37 @@
                     const plotH = base - PAD.t;
                     const vals = pts.map((p) => p.v);
                     if (s.target_g != null) vals.push(toUnit(s.target_g, unit));
+                    // Every trend point feeds the hover card; the line is drawn
+                    // only with the toggle on.
+                    const tpAll = trendPts().map((t) => ({
+                        date: t.date,
+                        v: toUnit(t.trend_g, unit),
+                    }));
+                    const tp = weightTrendOn ? tpAll : [];
+                    // Trend pace at a point: its change against the trend a
+                    // week earlier (or the first point in view), per week.
+                    const paceAt = (d) => {
+                        const i = tpAll.findIndex((t) => t.date === d);
+                        if (i < 1) return null;
+                        let ref = tpAll[0];
+                        for (let j = i - 1; j >= 0; j--)
+                            if (shiftDay(d, -7) >= tpAll[j].date) {
+                                ref = tpAll[j];
+                                break;
+                            }
+                        const days =
+                            (parseDay(d).getTime() -
+                                parseDay(ref.date).getTime()) /
+                            86400000;
+                        return days < 3
+                            ? null
+                            : ((tpAll[i].v - ref.v) * 7) / days;
+                    };
+                    const sd = tp.length > 1 ? scatterSd() : null;
+                    tp.forEach((t) => {
+                        vals.push(t.v);
+                        if (sd != null) vals.push(t.v - sd, t.v + sd);
+                    });
                     let lo = Math.min.apply(null, vals);
                     let hi = Math.max.apply(null, vals);
                     const padY = (hi - lo) * 0.2 || 1;
@@ -13253,6 +13471,46 @@
                         }),
                     );
                     const r = pts.length > 60 ? 2.5 : 3.5;
+                    // With the trend on, the raw line steps back to dots.
+                    if (tp.length > 1) {
+                        const raw = svg.querySelector("path.m-wline");
+                        if (raw) raw.setAttribute("opacity", "0.35");
+                        if (sd != null) {
+                            const up = tp.map(
+                                (p, i) =>
+                                    (i ? "L" : "M") +
+                                    xAt(p.date) +
+                                    "," +
+                                    yAt(p.v + sd),
+                            );
+                            const down = tp
+                                .slice()
+                                .reverse()
+                                .map(
+                                    (p) =>
+                                        "L" + xAt(p.date) + "," + yAt(p.v - sd),
+                                );
+                            const band = svgEl("path", {
+                                d: up.concat(down).join(" ") + "Z",
+                                class: "m-wband",
+                            });
+                            svg.insertBefore(band, raw);
+                        }
+                        svg.appendChild(
+                            svgEl("path", {
+                                d: tp
+                                    .map(
+                                        (p, i) =>
+                                            (i ? "L" : "M") +
+                                            xAt(p.date) +
+                                            "," +
+                                            yAt(p.v),
+                                    )
+                                    .join(" "),
+                                class: "m-wtrend",
+                            }),
+                        );
+                    }
                     pts.forEach(function (p) {
                         svg.appendChild(
                             svgEl("circle", {
@@ -13286,6 +13544,50 @@
                                     1,
                                 ],
                             ];
+                            const tr = tpAll.find((t) => t.date === p.date);
+                            if (tr)
+                                rows.push([
+                                    null,
+                                    "Trend",
+                                    tr.v.toFixed(1) + " " + unit,
+                                ]);
+                            // §6.3: how far this weigh-in sits from the
+                            // trend, read against the usual day-to-day swing.
+                            const sw = scatterSd();
+                            if (tr) {
+                                const off = p.v - tr.v;
+                                // Judged on the 1-decimal figures the card
+                                // shows, so "+0.2" never reads as above "±0.2".
+                                const r1 = (x) => Math.round(x * 10) / 10;
+                                const a = r1(Math.abs(off));
+                                rows.push([
+                                    null,
+                                    "Off trend",
+                                    fmtSignedDec(off) +
+                                        " " +
+                                        unit +
+                                        (sw == null
+                                            ? ""
+                                            : a <= r1(sw)
+                                              ? " · usual"
+                                              : a <= r1(2 * sw)
+                                                ? " · above usual"
+                                                : " · unusual"),
+                                ]);
+                            }
+                            if (sw != null)
+                                rows.push([
+                                    null,
+                                    "Usual swing",
+                                    "±" + sw.toFixed(1) + " " + unit,
+                                ]);
+                            const pace = paceAt(p.date);
+                            if (pace != null)
+                                rows.push([
+                                    null,
+                                    "Trend pace",
+                                    fmtSignedDec(pace) + " " + unit + "/week",
+                                ]);
                             if (s.height_cm)
                                 rows.push([
                                     null,

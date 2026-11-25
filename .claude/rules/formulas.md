@@ -220,6 +220,37 @@ By date gives a rate of 0 when any of these holds:
    2+ readings; two on the same day qualify).
 3. Otherwise, the latest reading.
 
+### 6.3 Water swing band (Body › Weight chart, "With trend")
+
+The usual day-to-day scatter of the scale around the §6.1 trend: water,
+glycogen, gut content and sodium together. Display only; nothing else reads it.
+(§6.2 is held for the approved trend-outlier rule, A4 on the board.)
+
+For each weigh-in day i in `[end − L, end]`, where `end` is the chart's last
+day: `w̄_i` = that day's mean reading, `T_i` = the §6.1 trend weight as of
+day i (only days whose trend came from the fitted line).
+
+- `d_i = w̄_i − T_i`
+- `s = 1.4826 × median(|d_i − median(d)|)` (MAD in SD units)
+- band = `T ± s`, one constant width across the chart
+
+Rules:
+- One residual per weigh-in day (the daily mean), never one per reading.
+- Window: the L days ending on the range end, so zooming does not change it.
+- Shown only with 8+ such days (the calibration minimum).
+- MAD, not RMS or SD: one post-holiday reading barely moves it.
+- ±1 s covers about 2 in 3 weigh-ins. Label: "Usual day-to-day swing ±x kg
+  (about 2 in 3 weigh-ins)". A reading beyond ±2 s is a real outlier.
+- Computed in grams, converted once, shown to 1 decimal.
+- Sanity range: about 0.4–0.8% of body weight (0.3–0.6 kg at 60–80 kg;
+  Edholm 1964, Robinson & Watson 1965). Above about 1.2% points to mixed
+  weighing times or a scale problem.
+- Caveat: `T_i` is causal and includes day i itself; with weigh-ins every
+  1–4 days the residuals also absorb some trend error, so s slightly
+  overstates pure fluctuation. No correction is applied.
+
+Agreed with the user on 2026-11-24 from the nutritionist's recommendation.
+
 ## 7. Model settings (Body › Body details › Burn model)
 
 - `k`, kcal per gram of weight change: default **6.0**. A few weeks of scale
@@ -315,7 +346,7 @@ Found by the nutritionist review on 2026-11-21 against commit a7d8721.
 
 | Formula | Code |
 | --- | --- |
-| Goal, rate, f, A, trend weight, checks, macros | `src/goal-plan.ts`: `goalKcal`, `planRate`, `tefRatio`, `activeAverage`, `activeAverageDetail`, `activeOutliers`, `goalActiveKcal`, `trendWeightToday`, `goalFlags`, `recommendedRates`, `scaleDerivedMacros`, `applyDerivedGoals` |
+| Goal, rate, f, A, trend weight, checks, macros | `src/goal-plan.ts`: `goalKcal`, `planRate`, `tefRatio`, `activeAverage`, `activeAverageDetail`, `activeOutliers`, `goalActiveKcal`, `trendWeightToday`, `waterSwing`, `goalFlags`, `recommendedRates`, `scaleDerivedMacros`, `applyDerivedGoals` |
 | BMR, TEF, burn, balance, weight slope | `src/body.ts`: `bmrMifflin`, `bmrFor`, `foodTef`, `dailyBurn`, `balanceGrams`, `weightSlope` |
 | Calibration | `src/calibration.ts`: `energyWindow`, `calibratedBaseline`, `buildCalibration`, `metabolismSeries` |
 | Day counting, Body-tab stats, default goal | `src/dashboard-stats.ts`: `countDay`, `typicalDayKcal`, `buildWeightStats`, `withBurnDefault`, `buildEstimateVsScale` |

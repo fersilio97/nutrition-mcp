@@ -207,6 +207,45 @@ export function trendWeightToday(
     };
 }
 
+/** The fewest trend-sourced weigh-in days the §6.3 swing needs. */
+export const MIN_SWING_DAYS = 8;
+
+/** §6.3 Water swing band: the usual day-to-day scatter of the scale around
+ *  the §6.1 trend. One residual per weigh-in day (its mean reading minus the
+ *  trend as of that day), over the L days ending on `end`, scaled by the MAD
+ *  (× 1.4826, so it reads in SD units). Null below MIN_SWING_DAYS days whose
+ *  trend came from the fitted line. Display only: nothing else reads it. */
+export function waterSwing(
+    weighIns: WeighIn[],
+    end: string,
+    windowDays: number,
+): { swing_g: number | null; days: number } {
+    const from = addDays(end, -windowDays);
+    const byDay = new Map<string, number[]>();
+    for (const w of weighIns) {
+        if (w.date < from || w.date > end) continue;
+        const list = byDay.get(w.date) ?? [];
+        list.push(w.weight_g);
+        byDay.set(w.date, list);
+    }
+    const resid: number[] = [];
+    for (const [date, vals] of byDay) {
+        const t = trendWeightToday(weighIns, date, windowDays);
+        if (!t || t.source !== "trend") continue;
+        resid.push(vals.reduce((a, b) => a + b, 0) / vals.length - t.weight_g);
+    }
+    if (resid.length < MIN_SWING_DAYS)
+        return { swing_g: null, days: resid.length };
+    const med = (xs: number[]) => {
+        const s = [...xs].sort((a, b) => a - b);
+        const m = Math.floor(s.length / 2);
+        return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+    };
+    const c = med(resid);
+    const mad = med(resid.map((r) => Math.abs(r - c)));
+    return { swing_g: Math.round(1.4826 * mad), days: resid.length };
+}
+
 /** The intake that holds `rate` g/day of scale-weight change, kcal. A
  *  generalised breakEvenKcal: rate 0 and f = TEF_FRACTION give the same. */
 export function goalKcal(
