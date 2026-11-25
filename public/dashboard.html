@@ -2410,6 +2410,11 @@
                 stroke: var(--bg);
                 stroke-width: 1.5;
             }
+            .m-wband {
+                fill: var(--ink-3);
+                fill-opacity: 0.16;
+                stroke: none;
+            }
             .m-wtrend {
                 fill: none;
                 stroke: var(--ink-3);
@@ -13135,6 +13140,26 @@
                         "/week</b>"
                     );
                 };
+                // Display-only spread, not a product formula: how far the
+                // weigh-ins in view sit from the trend line (root mean square
+                // of weigh-in minus trend on the same day). It reads as the
+                // usual water swing around the trend. Needs 4+ weigh-ins.
+                const scatterSd = () => {
+                    const unit = data.weightUnit;
+                    const tm = new Map(
+                        trendPts().map((t) => [
+                            t.date,
+                            toUnit(t.trend_g, unit),
+                        ]),
+                    );
+                    const r = bodyWeights()
+                        .filter((w) => tm.has(w.date))
+                        .map((w) => toUnit(w.weight_g, unit) - tm.get(w.date));
+                    if (r.length < 4) return null;
+                    return Math.sqrt(
+                        r.reduce((a, x) => a + x * x, 0) / r.length,
+                    );
+                };
                 const weightLegendHtml = (s) =>
                     legend(
                         [[LG.dotline(), "Weight"]]
@@ -13144,6 +13169,21 @@
                                           [
                                               LG.trend(),
                                               "Trend (water smoothed out)",
+                                          ],
+                                      ]
+                                    : [],
+                            )
+                            .concat(
+                                weightTrendOn &&
+                                    trendPts().length > 1 &&
+                                    scatterSd() != null
+                                    ? [
+                                          [
+                                              LG.bar("m-wband"),
+                                              "Usual water swing ±" +
+                                                  scatterSd().toFixed(1) +
+                                                  " " +
+                                                  data.weightUnit,
                                           ],
                                       ]
                                     : [],
@@ -13303,7 +13343,11 @@
                             ? null
                             : ((tpAll[i].v - ref.v) * 7) / days;
                     };
-                    tp.forEach((t) => vals.push(t.v));
+                    const sd = tp.length > 1 ? scatterSd() : null;
+                    tp.forEach((t) => {
+                        vals.push(t.v);
+                        if (sd != null) vals.push(t.v - sd, t.v + sd);
+                    });
                     let lo = Math.min.apply(null, vals);
                     let hi = Math.max.apply(null, vals);
                     const padY = (hi - lo) * 0.2 || 1;
@@ -13395,6 +13439,27 @@
                     if (tp.length > 1) {
                         const raw = svg.querySelector("path.m-wline");
                         if (raw) raw.setAttribute("opacity", "0.35");
+                        if (sd != null) {
+                            const up = tp.map(
+                                (p, i) =>
+                                    (i ? "L" : "M") +
+                                    xAt(p.date) +
+                                    "," +
+                                    yAt(p.v + sd),
+                            );
+                            const down = tp
+                                .slice()
+                                .reverse()
+                                .map(
+                                    (p) =>
+                                        "L" + xAt(p.date) + "," + yAt(p.v - sd),
+                                );
+                            const band = svgEl("path", {
+                                d: up.concat(down).join(" ") + "Z",
+                                class: "m-wband",
+                            });
+                            svg.insertBefore(band, raw);
+                        }
                         svg.appendChild(
                             svgEl("path", {
                                 d: tp
