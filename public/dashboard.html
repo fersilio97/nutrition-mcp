@@ -13140,25 +13140,11 @@
                         "/week</b>"
                     );
                 };
-                // Display-only spread, not a product formula: how far the
-                // weigh-ins in view sit from the trend line (root mean square
-                // of weigh-in minus trend on the same day). It reads as the
-                // usual water swing around the trend. Needs 4+ weigh-ins.
+                // §6.3 water swing (formulas.md): computed server-side from
+                // the L days ending on the range end; null below 8 days.
                 const scatterSd = () => {
-                    const unit = data.weightUnit;
-                    const tm = new Map(
-                        trendPts().map((t) => [
-                            t.date,
-                            toUnit(t.trend_g, unit),
-                        ]),
-                    );
-                    const r = bodyWeights()
-                        .filter((w) => tm.has(w.date))
-                        .map((w) => toUnit(w.weight_g, unit) - tm.get(w.date));
-                    if (r.length < 4) return null;
-                    return Math.sqrt(
-                        r.reduce((a, x) => a + x * x, 0) / r.length,
-                    );
+                    const g = data.weightSwing && data.weightSwing.swing_g;
+                    return g == null ? null : toUnit(g, data.weightUnit);
                 };
                 const weightLegendHtml = (s) =>
                     legend(
@@ -13180,10 +13166,11 @@
                                     ? [
                                           [
                                               LG.bar("m-wband"),
-                                              "Usual water swing ±" +
+                                              "Usual day-to-day swing ±" +
                                                   scatterSd().toFixed(1) +
                                                   " " +
-                                                  data.weightUnit,
+                                                  data.weightUnit +
+                                                  " (about 2 in 3 weigh-ins)",
                                           ],
                                       ]
                                     : [],

@@ -87,6 +87,7 @@ import {
     rateToGramsPerDay,
     resolveGoalMode,
     trendWeightToday,
+    waterSwing,
     type GoalMode,
     type RatePeriod,
 } from "./goal-plan.js";
@@ -848,6 +849,9 @@ export function buildDashboardPayload(inputs: DashboardInputs) {
                     trendWeightToday(allWeighIns, d, model.windowDays)
                         ?.weight_g ?? null,
             })),
+        // §6.3 band around that trend: the L days ending on the range end,
+        // so zooming the chart does not change it.
+        weightSwing: waterSwing(allWeighIns, rangeEnd, model.windowDays),
         // Only the range's meals: the fetch reaches back further for last7.
         meals: meals
             .filter((m) => inRange(m.logged_at))
