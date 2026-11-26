@@ -58,6 +58,15 @@ The mode is chosen in Body › Calorie goal (`nutrition_goals.calorie_goal_mode`
 - `f` → [§3.2](#32-digestion-share-f)
 
 Rules:
+- **Rest-day floor.** Every derived mode (Burn, Rate, By date) is held at
+  that day's resting burn: `goal_d = max(formula, R_d)`. It only ever bites on
+  a loss plan with little active (about under 290 kcal for a −450 kcal plan),
+  since Burn is already above R. Strong days are untouched because active above
+  the usual still counts 1:1. The day's row carries `goal_floored` and the raw
+  figure (`goal_unfloored_calories`), and the goal line says "held at your
+  resting burn". The steady-A safety checks in §9 are not floored. Fixed is
+  unchanged. The date mode re-derives its rate daily, so the kcal given back
+  on a rest day is recovered in later days' rate, not lost.
 - Burn is Rate with `rate = 0`. The `÷ (1 − f)` grosses the goal up for the
   energy spent digesting it: the intake I solves `I = R + A + rate × k + f × I`.
 - Every mode except Fixed is derived on read and never stored as a calorie
@@ -296,7 +305,9 @@ goal at that steady A.
   trend weight per week (needs a trend weight).
 - **Deficit** `−rate × k`: ≤ 25% of total burn `(R + A) ÷ (1 − f)`, and ≤ 1,000 kcal.
 - **Intake floor** (loss goals): goal ≥ `max(R, 1,500 if male, else 1,200)`.
-  R is the calibrated baseline when it is applied.
+  R is the calibrated baseline when it is applied. This check stays advisory
+  and uses the steady A; the actual day's goal is separately held at `R_d` by
+  the rest-day floor in [§1](#1-calorie-goal-body--calorie-goal).
 - **Target**: weight ≥ BMI 18.5 (any rate or date goal with a target); no
   loss goal under 18.
 - **Date** (By date only): flagged when passed (≤ 0 days), too soon (< 21 days)

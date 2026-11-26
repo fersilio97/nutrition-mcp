@@ -6613,15 +6613,28 @@
                             : "BMR") +
                         ") + " +
                         (act.kcal ? act.text + " + " : "") +
-                        fmt(digestion) +
-                        // Digestion of eating the goal itself, not of what
-                        // was eaten so far (that one is in Est. burn).
-                        " digestion of the goal";
+                        (p.goal_floored
+                            ? ""
+                            : fmt(digestion) +
+                              // Digestion of eating the goal itself, not of what
+                              // was eaten so far (that one is in Est. burn).
+                              " digestion of the goal");
+                    const floorText = p.goal_floored
+                        ? "Held at your resting burn — the plan alone would give " +
+                          fmt(p.goal_unfloored_kcal) +
+                          " kcal today"
+                        : "";
                     if (p.mode !== "rate" && p.mode !== "date")
-                        return "estimated burn: " + burn;
+                        return (
+                            "estimated burn: " +
+                            burn +
+                            (floorText ? "<br>" + floorText : "")
+                        );
                     if (p.reached)
                         return (
-                            "Target reached · eating at break-even<br>" + burn
+                            "Target reached · eating at break-even<br>" +
+                            burn +
+                            (floorText ? "<br>" + floorText : "")
                         );
                     const u = data.weightUnit;
                     const w = round2(toUnit(p.rate_g_per_day * 7, u));
@@ -6646,13 +6659,15 @@
                         target +
                         "<br>" +
                         burn +
-                        (delta
-                            ? " " +
-                              (delta < 0 ? "−" : "+") +
-                              " " +
-                              fmt(Math.abs(delta)) +
-                              " for your plan"
-                            : "")
+                        (floorText
+                            ? "<br>" + floorText
+                            : delta
+                              ? " " +
+                                (delta < 0 ? "−" : "+") +
+                                " " +
+                                fmt(Math.abs(delta)) +
+                                " for your plan"
+                              : "")
                     );
                 }
                 // A red chip beside the goal when a plan breaks a rule of

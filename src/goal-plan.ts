@@ -722,6 +722,10 @@ export interface GoalPlanView extends RatePlan {
     resting_basis: "calibrated" | "formula";
     /** Today's goal, kcal (resting + active + rate, grossed up). */
     goal_kcal: number | null;
+    /** Whether today's derived goal was held at resting burn. */
+    goal_floored: boolean;
+    /** Raw derived goal before the resting-burn floor, when floored. */
+    goal_unfloored_kcal: number | null;
     /** Today's usual active kcal (the lookback mean), or null with too few
      *  days; the goal starts from it in the morning. */
     active_avg_kcal: number | null;
@@ -812,13 +816,16 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
     } else {
         for (const row of i.rows) {
             if (row.bmr_kcal == null) continue;
-            const total = goalKcal(
+            const raw = goalKcal(
                 row.bmr_kcal,
                 row.goal_active_kcal ?? row.active_kcal,
                 plan.rate_g_per_day,
                 k,
                 f,
             );
+            const total = Math.max(raw, row.bmr_kcal);
+            row.goal_floored = raw < row.bmr_kcal;
+            row.goal_unfloored_calories = row.goal_floored ? raw : null;
             const base = goalKcal(row.bmr_kcal, 0, plan.rate_g_per_day, k, f);
             const macros = scaleDerivedMacros(
                 {
@@ -884,6 +891,8 @@ export function applyDerivedGoals(i: DeriveInput): GoalPlanView {
         bmr_kcal: bmr,
         resting_basis: calibrated ? "calibrated" : "formula",
         goal_kcal: goalToday,
+        goal_floored: row?.goal_floored ?? false,
+        goal_unfloored_kcal: row?.goal_unfloored_calories ?? null,
         active_avg_kcal:
             row?.active_avg_kcal == null
                 ? null
