@@ -1912,7 +1912,7 @@ export function repeatFields(
     source: Meal,
     opts: { clientKey?: string; loggedAt?: string; mealType?: string },
 ): MealInput {
-    const meal: Record<string, string | number> = {
+    const meal: Record<string, string | number | MealItem[]> = {
         description: source.description,
         meal_type: opts.mealType ?? source.meal_type ?? "snack",
     };
@@ -1932,6 +1932,13 @@ export function repeatFields(
     ] as const) {
         const v = source[key];
         if (v != null) meal[key] = v;
+    }
+    // The per-food breakdown travels with the meal: without it the copy is a
+    // flat row the user can no longer adjust food by food. insertMeal derives
+    // the totals from the items, so they stay consistent with the copied ones.
+    if (source.items?.length) {
+        meal.items = source.items.map((item) => ({ ...item }));
+        if (source.items_label != null) meal.items_label = source.items_label;
     }
     if (opts.clientKey) meal.idempotency_key = opts.clientKey;
     return meal as unknown as MealInput;
