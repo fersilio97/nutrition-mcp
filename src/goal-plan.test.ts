@@ -521,12 +521,15 @@ describe("derived goals in the dashboard payload", () => {
         ).toBeGreaterThan(1);
         for (const r of p.daily.filter((r) => r.bmr_kcal != null))
             expect(r.goal_calories).toBe(
-                goalKcal(
+                Math.max(
                     r.bmr_kcal!,
-                    r.goal_active_kcal!,
-                    p.goalPlan.rate_g_per_day,
-                    p.goalPlan.kcal_per_gram,
-                    p.goalPlan.tef_share,
+                    goalKcal(
+                        r.bmr_kcal!,
+                        r.goal_active_kcal!,
+                        p.goalPlan.rate_g_per_day,
+                        p.goalPlan.kcal_per_gram,
+                        p.goalPlan.tef_share,
+                    ),
                 ),
             );
     });
@@ -599,7 +602,10 @@ describe("derived goals in the dashboard payload", () => {
         for (const r of rate.daily.filter((r) => r.bmr_kcal != null)) {
             const b = burn.daily.find((d) => d.date === r.date)!;
             expect(
-                Math.abs(b.goal_calories! - r.goal_calories! - want),
+                Math.abs(
+                    r.goal_calories! -
+                        Math.max(r.bmr_kcal!, b.goal_calories! - want),
+                ),
             ).toBeLessThanOrEqual(1);
         }
         expect(rate.goalPlan.mode).toBe("rate");
@@ -639,6 +645,12 @@ describe("derived goals in the dashboard payload", () => {
         });
         expect(p.goalPlan.flags.map((f) => f.code)).toContain("fast_loss");
         expect(p.goalPlan.goal_kcal).not.toBeNull();
+        expect(p.daily.some((r) => r.goal_floored)).toBe(true);
+        const floored = p.daily.find((r) => r.goal_floored)!;
+        expect(floored.goal_calories).toBe(floored.bmr_kcal);
+        expect(floored.goal_unfloored_calories).toBeLessThan(
+            floored.goal_calories!,
+        );
     });
 
     test("the intake floor follows the resting basis chosen in Body details", () => {

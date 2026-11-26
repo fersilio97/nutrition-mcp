@@ -86,6 +86,9 @@ export interface DashboardDay {
     /** Derived goals only: the same goal on a day with no active kcal, the
      *  figure the stored macro targets are written against. */
     goal_base_calories: number | null;
+    /** Derived goal held at resting burn, with raw goal when held. */
+    goal_floored: boolean;
+    goal_unfloored_calories: number | null;
     goal_protein_g: number | null;
     goal_carbs_g: number | null;
     goal_fat_g: number | null;
@@ -262,6 +265,8 @@ export function buildDashboardDays(
                     ? breakEvenKcal(bmr, active)
                     : g?.daily_calories || null,
             goal_base_calories: null,
+            goal_floored: false,
+            goal_unfloored_calories: null,
             goal_protein_g: g?.daily_protein_g || null,
             goal_carbs_g: g?.daily_carbs_g || null,
             goal_fat_g: g?.daily_fat_g || null,
