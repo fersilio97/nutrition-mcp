@@ -15,9 +15,17 @@ export interface MealItem {
     caffeine_mg?: number | null;
     sodium_mg?: number | null;
     source?: MealItemSource | null;
+    /** Loom recipe this line came from (a copy of its figures is kept here). */
+    recipe_id?: string | null;
+    /** Loom catalog food this line came from. */
+    food_id?: string | null;
+    store?: string | null;
+    /** A recipe's ingredients. One level only; the parent's figures are their sum. */
+    children?: MealItem[] | null;
 }
 
 export const MAX_MEAL_ITEMS = 20;
+export const MAX_CHILD_ITEMS = 50;
 const numeric = [
     "calories",
     "protein_g",
@@ -44,6 +52,7 @@ const sources = new Set(["label", "chain", "barcode", "estimate", "recipe"]);
 export function checkMealItems(
     raw: unknown,
     max = MAX_MEAL_ITEMS,
+    depth = 0,
 ): { ok: true; value: MealItem[] } | { ok: false; error: string } {
     if (!Array.isArray(raw) || raw.length < 1 || raw.length > max)
         return {
@@ -107,6 +116,33 @@ export function checkMealItems(
         )
             return { ok: false, error: `Item ${i + 1} has an invalid source.` };
         if (obj.source !== undefined) parsed.source = obj.source;
+        for (const key of ["recipe_id", "food_id", "store"] as const) {
+            const v = obj[key];
+            if (v == null) continue;
+            if (typeof v !== "string" || v.length > 200)
+                return {
+                    ok: false,
+                    error: `Item ${i + 1} has an invalid ${key}.`,
+                };
+            parsed[key] = v;
+        }
+        if (obj.children != null) {
+            if (depth > 0)
+                return {
+                    ok: false,
+                    error: `Item ${i + 1}: ingredients can't have ingredients of their own.`,
+                };
+            const kids = checkMealItems(obj.children, MAX_CHILD_ITEMS, 1);
+            if (!kids.ok)
+                return {
+                    ok: false,
+                    error: `Item ${i + 1} ingredients: ${kids.error}`,
+                };
+            parsed.children = kids.value;
+            // The ingredients win: a parent whose figures disagree with its
+            // rows would show one number and add up to another.
+            Object.assign(parsed, sumOfChildren(kids.value));
+        }
         value.push(parsed as unknown as MealItem);
     }
     return { ok: true, value };
@@ -174,7 +210,35 @@ export function scaleItemBy(
                     ? Math.round(n * factor * 10) / 10
                     : Math.round(n * factor * 100) / 100;
     }
+    if (item.children?.length) {
+        result.children = item.children.map((c) =>
+            scaleItemBy(c, factor, Math.round(c.amount * factor * 100) / 100),
+        );
+        Object.assign(result, sumOfChildren(result.children));
+    }
     return result;
+}
+
+/**
+ * A recipe line's figures from its ingredients: kcal to 1 dp, the rest to
+ * 2 dp (the same precision items are stored at); a nutrient none of them has
+ * stays null.
+ */
+export function sumOfChildren(
+    children: MealItem[],
+): Record<(typeof numeric)[number], number | null> & { calories: number } {
+    const out: Record<string, number | null> = {};
+    for (const key of numeric) {
+        const vals = children
+            .map((c) => c[key])
+            .filter((v): v is number => typeof v === "number");
+        const places = key === "calories" ? 10 : 100;
+        out[key] =
+            key !== "calories" && vals.length === 0
+                ? null
+                : Math.round(vals.reduce((a, b) => a + b, 0) * places) / places;
+    }
+    return out as never;
 }
 
 export function scaleItem(item: MealItem, newAmount: number): MealItem {
