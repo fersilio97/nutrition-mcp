@@ -194,8 +194,13 @@ export function formatCandidates(
                 : "";
         return `- food "${c.name}"${where ? ` (${where})` : ""} id=${c.id} (${fmt(p.kcal)} kcal per 100 g${portion}; match ${c.score})`;
     });
+    // A partial match is only a lead: "yogur" scores 0.73 against a chicken
+    // dish "…con salsa de yogur" by word similarity alone.
+    const exact = result.candidates[0]!.score >= 1;
     const head = result.ambiguous
         ? `Several Loom entries match "${q}". Ask the user which one they had before logging; don't pick one yourself.`
-        : `Loom matches for "${q}" (best first):`;
+        : exact
+          ? `Loom matches for "${q}" (best first; the first is an exact match):`
+          : `No exact Loom match for "${q}"; these only share words with it. Use one only if the user confirms it's the same dish or food; otherwise estimate it and log it with items.`;
     return `${head}\n${lines.join("\n")}\nLog with log_meal loom_items: {recipe: slug, servings} or {food: id, amount, unit}. A recipe without figures can't be logged from Loom.`;
 }
