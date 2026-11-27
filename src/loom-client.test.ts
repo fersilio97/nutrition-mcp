@@ -195,4 +195,23 @@ describe("formatCandidates", () => {
             formatCandidates("pizza", { ambiguous: false, candidates: [] }),
         ).toContain("Nothing in Loom matches");
     });
+
+    test("a non-exact top match must be confirmed by the user (live: 'yogur' vs a chicken dish)", () => {
+        const partial = formatCandidates("yogur", {
+            ambiguous: false,
+            candidates: [
+                {
+                    kind: "recipe",
+                    id: "r9",
+                    slug: "pollo-salsa-yogur",
+                    name: "Pollo con salsa de yogur",
+                    score: 0.726,
+                    servings: null,
+                    per_serving: { kcal: null },
+                },
+            ],
+        });
+        expect(partial).toContain('No exact Loom match for "yogur"');
+        expect(partial).toContain("only if the user confirms");
+    });
 });
