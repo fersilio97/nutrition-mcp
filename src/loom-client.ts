@@ -51,6 +51,7 @@ export interface LoomCandidate {
     /** What one serving is, e.g. "2 mitades de berenjena" (asked of loom#2). */
     serving_note?: string | null;
     per_serving?: Record<string, number | null>;
+    grams_per_serving?: number | null;
     brand?: string | null;
     store?: string | null;
     per_100g?: Record<string, number | null>;
@@ -188,9 +189,15 @@ export function formatCandidates(
                     : `${fmt(p.kcal)} kcal, P${fmt(p.protein_g)} C${fmt(p.carbs_g)} F${fmt(p.fat_g)} per serving`;
             // Replay case c14: "dos medias berenjenas" was 1 serving, logged
             // as 2, because nothing said what a serving is.
+            const grams =
+                c.grams_per_serving != null
+                    ? ` (about ${Math.round(c.grams_per_serving)} g)`
+                    : "";
             const serving = c.serving_note
-                ? `; 1 serving = ${c.serving_note}`
-                : "; what one serving is isn't recorded: if the user names pieces (halves, slices), ask how they map to servings";
+                ? `; 1 serving = ${c.serving_note}${grams}`
+                : grams
+                  ? `; 1 serving is${grams}`
+                  : "; what one serving is isn't recorded: if the user names pieces (halves, slices), ask how they map to servings";
             return `- recipe "${c.name}" slug=${c.slug} (makes ${c.servings ?? "?"} servings${serving}; ${figures}; match ${c.score})`;
         }
         const p = c.per_100g ?? {};

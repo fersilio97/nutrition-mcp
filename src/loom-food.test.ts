@@ -146,6 +146,23 @@ describe("Loom food → meal items", () => {
         });
     });
 
+    test("stored figures that aren't the ingredient sum are logged as one line (replay c14, berenjenas)", () => {
+        // Complete ingredients add up to 797.5/serving, but the row keeps the
+        // vault's 330: log what search shows, and no tree that disagrees.
+        const stored = {
+            ...tortilla,
+            kcal: "330",
+            protein_g: "20",
+            macros_source: "vault",
+        };
+        const item = itemForRecipe(stored, 1);
+        expect(item.children).toBeUndefined();
+        expect(item).toMatchObject({ amount: 1, calories: 330, protein_g: 20 });
+        // once a derive has run, the tree comes back
+        const derived = { ...stored, macros_source: "ingredients" };
+        expect(itemForRecipe(derived, 1).children).toHaveLength(4);
+    });
+
     test("the parent is always the sum of its ingredients", () => {
         const t = itemForRecipe(tortilla, 2);
         const sum = t.children!.reduce((a, c) => a + c.calories, 0);

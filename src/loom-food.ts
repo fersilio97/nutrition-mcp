@@ -94,6 +94,9 @@ export interface LoomRecipe extends LoomPer100 {
     title: string;
     servings?: unknown;
     ingredients: LoomRecipeLine[];
+    /** 'ingredients' once a derive has copied the ingredient sums onto the row. */
+    macros_source?: string | null;
+    serving_note?: string | null;
     derived?: {
         complete?: boolean;
         servings?: unknown;
@@ -212,7 +215,13 @@ export function itemForRecipe(recipe: LoomRecipe, servings: number): MealItem {
         source: "recipe" as const,
         recipe_id: recipe.id,
     };
-    if (recipe.derived?.complete && batch) {
+    // What gets logged is the recipe's stored figures when it has any (Loom's
+    // rule, loom#3). The ingredient tree is only shown when those ARE the
+    // ingredient sums, i.e. a derive has run or nothing is stored, so the
+    // parent always equals its rows (berenjenas: stored 330 vs derived 446).
+    const storedIsSum =
+        recipe.macros_source === "ingredients" || num(recipe.kcal) == null;
+    if (recipe.derived?.complete && batch && storedIsSum) {
         const factor = servings / batch;
         const children: MealItem[] = recipe.ingredients
             .filter((line) => !line.negligible)
