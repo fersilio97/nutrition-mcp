@@ -243,10 +243,10 @@ export function itemForRecipe(recipe: LoomRecipe, servings: number): MealItem {
         const sum = sumOfChildren(children);
         return { ...base, ...sum, calories: sum.calories, children };
     }
-    // Derived figures when the ingredients add up, else the stored ones.
-    const derivedPer = recipe.derived?.per_serving;
-    const per =
-        derivedPer && num(derivedPer.kcal) != null ? derivedPer : recipe;
+    // Not complete: use the recipe row's stored figures, never derived ones.
+    // A partly linked recipe derives partial sums (eggs counted, potatoes
+    // missing) that look like real figures but undercount.
+    const per = recipe;
     if (num(per.kcal) == null)
         throw new LoomFoodError(
             `${recipe.title} has no figures yet, so it can't be logged from Loom.`,

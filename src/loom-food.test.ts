@@ -230,17 +230,18 @@ describe("Loom food → meal items", () => {
     });
 
     test("an incomplete recipe is one serving line, never a half-filled tree", () => {
+        // Partly linked: eggs counted, potatoes missing. The partial sum
+        // (150 kcal) must never be used; the stored row figures (440) are.
         const partial: LoomRecipe = {
             ...tortilla,
+            kcal: "440",
+            protein_g: "30",
+            carbs_g: "20",
+            fat_g: "25",
             derived: {
                 complete: false,
                 servings: "4",
-                per_serving: {
-                    kcal: "440",
-                    protein_g: "30",
-                    carbs_g: "20",
-                    fat_g: "25",
-                },
+                per_serving: { kcal: "150", protein_g: "12" },
             },
         };
         const item = itemForRecipe(partial, 1.5);
