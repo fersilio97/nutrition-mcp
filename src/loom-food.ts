@@ -83,7 +83,12 @@ export interface LoomRecipeLine {
     alcohol_g?: unknown;
 }
 
-export interface LoomRecipe {
+/**
+ * The recipe row itself carries its stored per-serving figures (kcal,
+ * protein_g…, from the vault import or a past derive); `derived` is what the
+ * ingredients add up to right now, null while any line lacks figures.
+ */
+export interface LoomRecipe extends LoomPer100 {
     id: string;
     slug: string;
     title: string;
@@ -238,8 +243,11 @@ export function itemForRecipe(recipe: LoomRecipe, servings: number): MealItem {
         const sum = sumOfChildren(children);
         return { ...base, ...sum, calories: sum.calories, children };
     }
-    const per = recipe.derived?.per_serving;
-    if (!per || num(per.kcal) == null)
+    // Derived figures when the ingredients add up, else the stored ones.
+    const derivedPer = recipe.derived?.per_serving;
+    const per =
+        derivedPer && num(derivedPer.kcal) != null ? derivedPer : recipe;
+    if (num(per.kcal) == null)
         throw new LoomFoodError(
             `${recipe.title} has no figures yet, so it can't be logged from Loom.`,
         );

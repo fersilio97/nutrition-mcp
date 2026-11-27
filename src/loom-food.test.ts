@@ -165,6 +165,52 @@ describe("Loom food → meal items", () => {
         expect(setServings(one, 2).calories).toBe(1595);
     });
 
+    test("incomplete ingredients fall back to the recipe's stored per-serving figures (local Loom, chilindrón)", () => {
+        // Shape copied from the local Loom API: derived figures all null,
+        // the recipe row still carrying the vault's 440 kcal per serving.
+        const nulls = {
+            kcal: null,
+            protein_g: null,
+            carbs_g: null,
+            fat_g: null,
+            fiber_g: null,
+            sugar_g: null,
+            sodium_mg: null,
+            caffeine_mg: null,
+            alcohol_g: null,
+        };
+        const chilindron: LoomRecipe = {
+            id: "r-chil",
+            slug: "pollo-al-chilindron",
+            title: "Pollo al chilindrón",
+            servings: "6.00",
+            kcal: "440.0",
+            protein_g: "45.0",
+            carbs_g: "12.0",
+            fat_g: "22.0",
+            fiber_g: null,
+            sugar_g: null,
+            ingredients: [
+                {
+                    position: 1,
+                    name: "contramuslos de pollo sin piel",
+                    quantity: "1.50",
+                    unit: "kg",
+                    ...nulls,
+                },
+            ],
+            derived: { complete: false, servings: "6.00", per_serving: nulls },
+        };
+        expect(itemForRecipe(chilindron, 2)).toMatchObject({
+            name: "Pollo al chilindrón",
+            amount: 2,
+            unit: "serving",
+            calories: 880,
+            protein_g: 90,
+            fiber_g: null,
+        });
+    });
+
     test("editing one ingredient updates the recipe line", () => {
         const lessOil = setChildAmount(itemForRecipe(tortilla, 2), 1, 50);
         expect(lessOil.children![1]).toMatchObject({
