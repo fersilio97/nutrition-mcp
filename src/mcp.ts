@@ -16,6 +16,14 @@ import { getBaseUrl } from "./url.js";
 import { formatClientId } from "./client-id.js";
 import { z } from "zod";
 import { checkMealItems } from "./meal-items.js";
+import {
+    LoomUnavailableError,
+    formatCandidates,
+    loomApi,
+    loomConfigFor,
+    resolveLoomItems,
+    type LoomItemRef,
+} from "./loom-client.js";
 import type { Context } from "hono";
 import {
     insertMeal,
@@ -1819,6 +1827,48 @@ export function registerTools(
                   },
               }
             : {};
+    // Loom's shared food database (idea 208), on only for the users listed in
+    // LOOM_USER_IDS. Everyone else gets byte-identical tool definitions.
+    const loom = loomConfigFor(userId);
+    const loomItemsSchema = z
+        .array(
+            z.object({
+                recipe: z
+                    .string()
+                    .optional()
+                    .describe(
+                        "A Loom recipe's slug, from manage_recipes 'find'.",
+                    ),
+                servings: z.coerce
+                    .number()
+                    .positive()
+                    .optional()
+                    .describe("recipe: servings eaten (default 1)."),
+                food: z
+                    .string()
+                    .optional()
+                    .describe(
+                        "A Loom catalog food's id, from manage_recipes 'find'.",
+                    ),
+                amount: z.coerce
+                    .number()
+                    .positive()
+                    .optional()
+                    .describe(
+                        "food: amount eaten (default: the food's typical portion).",
+                    ),
+                unit: z.enum(["g", "ml", "piece"]).optional(),
+            }),
+        )
+        .min(1)
+        .max(20)
+        .optional()
+        .describe(
+            "Foods and recipes from the user's Loom food database. The server looks up each one and computes its figures, so send no nutrients for these. Combine with `items` for anything not in Loom.",
+        );
+    const LOOM_LOG_MEAL_TEXT = loom
+        ? "\n\nLoom food database: this user's recipes and regular foods live in Loom. Before estimating a homemade dish or a food they eat often, call manage_recipes action 'find' with its name. A match goes in `loom_items` ({recipe: slug, servings} or {food: id, amount, unit}), and the server computes the figures, ingredients included. If 'find' reports several matches, ask the user which one before logging. Anything with no match (a restaurant plate, a new product) goes in `items` with your own estimate, as usual. Both can be sent in one call."
+        : "";
 
     server.registerTool(
         "log_meal",
@@ -1831,7 +1881,8 @@ export function registerTools(
                 // surface only one of the two.
                 "Log a meal entry with nutritional information. If the user names one of their saved recipes (manage_recipes action 'list'), log it with manage_recipes action 'log' instead — the figures are already known. If the user doesn't specify the quantity or portion size, ask how much they ate before estimating calories and macros. When the user gives a barcode — typed, or read from a photo of the package (transcribe the digits printed under the barcode) — call lookup_barcode first to get the product's label data, then scale it to the amount eaten. Fall back to web search or estimation only when no product is found. Use web search for branded products when no barcode is available. When logging from a photo of a plated or prepared meal (no package/barcode): first identify each dish, then establish whether it is a restaurant/takeout meal or homemade before anything else. If it is from a restaurant, ask which restaurant and where, then search the web for its menu — chains publish per-item nutrition worth using directly, independent places usually publish ingredient lists that reveal the butter, cream, and oil the photo hides; if you cannot find the menu or cannot tell which dish it is, say so and put your assumption to the user as a question rather than presenting a guess as menu data. Either way, estimate portions in household measures the user can eyeball (a glass of, a handful of, a tablespoon of — NOT grams; for restaurant servings ask how much of it they actually ate), call search_meals to see how similar meals were logged before and to surface ingredients that may be invisible in the photo, then interview the user across multiple turns — one question per message, covering which variation each dish is, how much they ate, and photo-invisible ingredients (oil, sugar, sauce, what a drink was made with) — until nothing is left open. Do NOT call this tool after a single question-and-answer round; a lone confirmation is not enough. Only call it once every open question is resolved and the user has approved a full summary of the meal (or has told you to stop asking and just log it). Write the confirmed household-measure portions into the description itself (e.g. 'Oatmeal (1 glass raw oats, 2 glasses milk) with banana') so future searches are self-describing, and for a restaurant meal name the venue and city too (e.g. 'Pad thai with chicken (1 plate, finished) at Thai Basil, Podil, Kyiv').\n\n" +
                 NUTRIENT_COVERAGE +
-                "\nPutting '180 mg caffeine' or '6 g fiber' in notes or in the description instead of in the field leaves it out of every total, goal and chart.\n\nPer-food items: pass `items` on EVERY meal that has a measured amount, so the user can adjust it on the dashboard without asking you. One food with an amount ('sourdough bread 85 g') → ONE item (name, amount 85, unit g, its nutrients). A dish whose ingredients were not each measured (a stew, a pizza, a restaurant plate, a photo of one plate) → ONE item in the dish's own portion unit (1 plate, 2 slices, 1 serving) — never invent an ingredient breakdown. Separately measured foods that can be eaten on their own ('Greek yogurt 200 g with oats 35 g + a Clif bar') → one item each; a drink is its own item; oil or sauce on a plate of separate foods is its own item. Each item carries its own amount, unit, calories, protein, carbs, fat, fiber and sugar (plus caffeine/alcohol where they apply) and its own source; the meal totals are computed from the items, so do not send separate totals. Send fiber and sugar on every item: a missing one makes the meal's total a partial sum. State each amount in the form the nutrients describe (cooked weight with cooked figures, raw with raw), because the dashboard rescales all of an item's nutrients linearly. A saved recipe is never logged with items by hand — use manage_recipes log.",
+                "\nPutting '180 mg caffeine' or '6 g fiber' in notes or in the description instead of in the field leaves it out of every total, goal and chart.\n\nPer-food items: pass `items` on EVERY meal that has a measured amount, so the user can adjust it on the dashboard without asking you. One food with an amount ('sourdough bread 85 g') → ONE item (name, amount 85, unit g, its nutrients). A dish whose ingredients were not each measured (a stew, a pizza, a restaurant plate, a photo of one plate) → ONE item in the dish's own portion unit (1 plate, 2 slices, 1 serving) — never invent an ingredient breakdown. Separately measured foods that can be eaten on their own ('Greek yogurt 200 g with oats 35 g + a Clif bar') → one item each; a drink is its own item; oil or sauce on a plate of separate foods is its own item. Each item carries its own amount, unit, calories, protein, carbs, fat, fiber and sugar (plus caffeine/alcohol where they apply) and its own source; the meal totals are computed from the items, so do not send separate totals. Send fiber and sugar on every item: a missing one makes the meal's total a partial sum. State each amount in the form the nutrients describe (cooked weight with cooked figures, raw with raw), because the dashboard rescales all of an item's nutrients linearly. A saved recipe is never logged with items by hand — use manage_recipes log." +
+                LOOM_LOG_MEAL_TEXT,
             annotations: {
                 readOnlyHint: false,
                 destructiveHint: false,
@@ -1962,6 +2013,7 @@ export function registerTools(
                     .min(1)
                     .max(20)
                     .optional(),
+                ...(loom ? { loom_items: loomItemsSchema } : {}),
                 idempotency_key: z
                     .string()
                     .min(1)
@@ -1985,10 +2037,32 @@ export function registerTools(
                         userId,
                         args.logged_at,
                     );
+                    // Loom entries become items here, with server-side
+                    // figures, ahead of any hand-estimated ones.
+                    const loomRefs = (args as { loom_items?: LoomItemRef[] })
+                        .loom_items;
+                    let rawItems: unknown[] | undefined = args.items;
+                    if (loom && loomRefs?.length) {
+                        const resolved = await resolveLoomItems(
+                            loomApi(loom),
+                            loomRefs,
+                        );
+                        if (!resolved.ok)
+                            return {
+                                content: [
+                                    {
+                                        type: "text" as const,
+                                        text: `Error: ${resolved.error}`,
+                                    },
+                                ],
+                                isError: true,
+                            };
+                        rawItems = [...resolved.items, ...(args.items ?? [])];
+                    }
                     const checkedItems =
-                        args.items === undefined
+                        rawItems === undefined
                             ? undefined
-                            : checkMealItems(args.items);
+                            : checkMealItems(rawItems);
                     if (checkedItems && !checkedItems.ok)
                         return {
                             content: [
@@ -1999,8 +2073,10 @@ export function registerTools(
                             ],
                             isError: true,
                         };
+                    const { loom_items: _loomItems, ...mealArgs } =
+                        args as typeof args & { loom_items?: unknown };
                     const { meal, deduplicated } = await insertMeal(userId, {
-                        ...args,
+                        ...mealArgs,
                         items: checkedItems?.ok
                             ? checkedItems.value
                             : undefined,
@@ -4924,7 +5000,10 @@ export function registerTools(
                 "action 'save': name + servings the recipe makes + nutrients; when the recipe was written with measured amounts (e.g. 200 g of X, 2 carrots), give per-ingredient amounts, units and nutrients for the whole batch as ingredient_items; leave it out for an unmeasured dish like a stew. Ingredient amounts are RAW weights with raw figures, and every ingredient should carry fiber and sugar; a cooked portion is logged as servings, never as grams of an ingredient. Nutrients can be either per serving (per: 'serving', the default) or for the whole batch (per: 'batch', divided by servings for you); saving an existing name replaces it. Offer to save when the user logs the same home dish a second time. " +
                 "action 'list': all recipes with per-serving figures — check it before estimating a homemade dish. " +
                 "action 'delete': by recipe id. " +
-                "action 'log': log `servings` of a recipe (by exact name or id) as a meal now, or at logged_at; the meal is described as 'Name (N servings)' and marked source 'recipe'. Use it whenever the user names a saved recipe instead of calling log_meal.",
+                "action 'log': log `servings` of a recipe (by exact name or id) as a meal now, or at logged_at; the meal is described as 'Name (N servings)' and marked source 'recipe'. Use it whenever the user names a saved recipe instead of calling log_meal." +
+                (loom
+                    ? " action 'find': search the user's Loom food database (their recipe book and regular foods, with stores such as Costco) by `query`. Call it for every homemade dish or regular food before estimating, then log the matches with log_meal `loom_items`. 'list', 'save' and 'log' cover only the older saved recipes."
+                    : ""),
             annotations: {
                 readOnlyHint: false,
                 destructiveHint: true,
@@ -4932,7 +5011,21 @@ export function registerTools(
                 openWorldHint: false,
             },
             inputSchema: z.object({
-                action: z.enum(["save", "list", "delete", "log"]),
+                action: loom
+                    ? z.enum(["save", "list", "delete", "log", "find"])
+                    : z.enum(["save", "list", "delete", "log"]),
+                ...(loom
+                    ? {
+                          query: z
+                              .string()
+                              .min(1)
+                              .max(200)
+                              .optional()
+                              .describe(
+                                  "find: a dish or food name as the user said it, e.g. 'tortilla de patata' or 'yogur'.",
+                              ),
+                      }
+                    : {}),
                 name: z
                     .string()
                     .optional()
@@ -4996,6 +5089,30 @@ export function registerTools(
                     const text = (t: string) => ({
                         content: [{ type: "text" as const, text: t }],
                     });
+                    // `find` exists in the schema only for Loom users, so the
+                    // inferred union lacks it.
+                    if ((args.action as string) === "find") {
+                        const query = (args as { query?: string }).query;
+                        if (!loom)
+                            return text(
+                                "Loom isn't connected for this account.",
+                            );
+                        if (!query) return text("Not searched: give a query.");
+                        try {
+                            return text(
+                                formatCandidates(
+                                    query,
+                                    await loomApi(loom).search(query),
+                                ),
+                            );
+                        } catch (e) {
+                            if (e instanceof LoomUnavailableError)
+                                return text(
+                                    `${e.message} Estimate this meal and log it with items instead.`,
+                                );
+                            throw e;
+                        }
+                    }
                     if (args.action === "list") {
                         const list = await listRecipes(userId);
                         return text(
